@@ -1,0 +1,27 @@
+[book]
+title = "preader"
+authors = ["Erdoğan Yoksul <erdoganyoksul3@gmail.com>"]
+language = "en"
+src = "src"
+description = "A Python package that reads a file along with its read percentage"
+
+[rust]
+edition = "2024"
+
+[build]
+create-missing = false
+
+[output.html.search]
+limit-results = 15
+
+[output.html]
+default-theme = "ayu"
+git-repository-url = "https://github.com/eredotpkfr/preader"
+cname = "www.erdoganyoksul.com"
+
+[output.html.playground]
+runnable = false
+
+[preprocessor.index]
+
+[preprocessor.links]
