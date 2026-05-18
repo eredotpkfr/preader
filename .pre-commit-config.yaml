@@ -1,0 +1,91 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-added-large-files
+      - id: check-shebang-scripts-are-executable
+        # exclude: |
+        #   (?x)^(
+        #     src/lib.rs
+        #   )$
+      - id: check-case-conflict
+      - id: check-executables-have-shebangs
+      - id: check-merge-conflict
+      - id: check-symlinks
+      - id: check-toml
+      - id: check-xml
+      - id: check-yaml
+      - id: check-json
+      - id: pretty-format-json
+        args:
+          - "--autofix"
+          - "--indent=4"
+      - id: destroyed-symlinks
+      - id: detect-private-key
+
+  - repo: https://github.com/pre-commit/pre-commit
+    rev: v4.6.0
+    hooks:
+      - id: validate_manifest
+
+  - repo: https://github.com/doublify/pre-commit-rust
+    rev: v1.0
+    hooks:
+      - id: fmt
+        entry: cargo +nightly fmt --all
+      - id: clippy
+        args: ["--all-targets", "--all-features"]
+      - id: cargo-check
+
+  - repo: https://github.com/est31/cargo-udeps
+    rev: v0.1.61
+    hooks:
+    - id: udeps
+
+  - repo: https://github.com/EmbarkStudios/cargo-deny
+    rev: 0.19.6
+    hooks:
+      - id: cargo-deny
+        name: cargo-deny
+        args: ["--all-features", "--log-level", "error", "check"]
+
+  - repo: https://github.com/alessandrojcm/commitlint-pre-commit-hook
+    rev: v9.25.0
+    hooks:
+      - id: commitlint
+        stages: [commit-msg]
+        additional_dependencies: ['@commitlint/config-conventional']
+
+  - repo: https://github.com/crate-ci/typos
+    rev: v1
+    hooks:
+      - id: typos
+
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.2
+    hooks:
+      - id: codespell
+        exclude: |
+          (?x)^(
+            Cargo.lock
+          )$
+
+  - repo: https://github.com/markdownlint/markdownlint
+    rev: v0.15.0
+    hooks:
+      - id: markdownlint
+        name: markdownlint
+        exclude: |
+          (?x)^(
+            CHANGELOG.md
+          )$
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.0
+    hooks:
+      - id: gitleaks
+        name: gitleaks
