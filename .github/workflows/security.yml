@@ -1,0 +1,55 @@
+name: Security
+
+on:
+  pull_request:
+    branches:
+      - main
+
+env:
+  RUSTFLAGS: "-Dwarnings"
+  CARGO_TERM_COLOR: "always"
+
+jobs:
+  rust-cargo-deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+          log-level: error
+          arguments: --all-features
+
+  rust-cargo-udeps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+      - uses: aig787/cargo-udeps-action@v1
+        with:
+          version: "latest"
+          args: "--all-targets"
+        env:
+          RUSTFLAGS: ""
+
+  rust-cargo-machete:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: Swatinem/rust-cache@v2
+      - uses: bnjbvr/cargo-machete@v0.9.2
+
+  gitleaks-scan:
+    permissions:
+      contents: read
+      discussions: write
+      pull-requests: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
