@@ -9,11 +9,12 @@ on:
       - main
 
 jobs:
-  mdbook-tests:
+  mdbook:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v6
-
       - name: Setup mdBook
         uses: peaceiris/actions-mdbook@v2
         with:
@@ -21,19 +22,6 @@ jobs:
 
       - name: Run mdBook tests
         run: make book-test
-
-  mdbook-deploy:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    needs: mdbook-tests
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup mdBook
-        uses: peaceiris/actions-mdbook@v2
-        with:
-          mdbook-version: 'latest'
 
       - name: Build mdBook
         run: make book-build
