@@ -49,15 +49,16 @@ fn read_byte_by_byte(path: impl AsRef<Path>) -> io::Result<()> {
 }
 
 fn read_chunk_by_chunk(path: impl AsRef<Path>, chunk_size: usize) -> io::Result<()> {
-    let mut file = File::open(path)?;
+    let file = File::open(path)?;
     let total_bytes = file.metadata()?.len();
 
+    let mut reader = BufReader::new(file);
     let mut buffer = vec![0u8; chunk_size];
     let mut bytes_read: u64 = 0;
     let mut next_milestone: u64 = 1;
 
     loop {
-        let n = file.read(&mut buffer)?;
+        let n = reader.read(&mut buffer)?;
         if n == 0 {
             break;
         }

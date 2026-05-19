@@ -9,26 +9,28 @@ use crate::{enums::PReaderConfigFormat, exceptions::PReaderConfigError};
 // std::io::BufReader default = 8 KiB; we use 64 KiB to amortize syscalls on
 // large files where preader is typically used
 const DEFAULT_BUFFER_CAPACITY: usize = 64 * 1024;
-const DEFAULT_NEWLINE_DELIMITER: [u8; 1] = *b"\n";
 
-#[pyclass]
-#[derive(Deserialize)]
+#[pyclass(from_py_object)]
+#[derive(Clone, Deserialize)]
 pub struct PReaderConfig {
     #[pyo3(get)]
-    buffer_capacity: usize,
-    #[pyo3(get)]
-    newline_delimiter: Vec<u8>,
+    pub buffer_capacity: usize,
+}
+
+impl Default for PReaderConfig {
+    fn default() -> Self {
+        Self {
+            buffer_capacity: DEFAULT_BUFFER_CAPACITY,
+        }
+    }
 }
 
 #[pymethods]
 impl PReaderConfig {
     #[new]
-    #[pyo3(signature = (buffer_capacity=None, newline_delimiter=None))]
-    fn new(buffer_capacity: Option<usize>, newline_delimiter: Option<Vec<u8>>) -> Self {
-        Self {
-            buffer_capacity: buffer_capacity.unwrap_or(DEFAULT_BUFFER_CAPACITY),
-            newline_delimiter: newline_delimiter.unwrap_or(DEFAULT_NEWLINE_DELIMITER.into()),
-        }
+    #[pyo3(signature = (buffer_capacity = DEFAULT_BUFFER_CAPACITY))]
+    pub fn new(buffer_capacity: usize) -> Self {
+        Self { buffer_capacity }
     }
 
     #[classmethod]
