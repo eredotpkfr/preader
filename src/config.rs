@@ -9,7 +9,7 @@ use crate::{enums::PReaderConfigFormat, exceptions::PReaderConfigError};
 // std::io::BufReader default = 8 KiB; we use 64 KiB to amortize syscalls on
 // large files where preader is typically used
 const DEFAULT_BUFFER_CAPACITY: usize = 64 * 1024;
-const DEFAULT_NEWLINE_DELIMITER: [u8; 1] = [b'\n'];
+const DEFAULT_NEWLINE_DELIMITER: [u8; 1] = *b"\n";
 
 #[pyclass]
 #[derive(Deserialize)]
