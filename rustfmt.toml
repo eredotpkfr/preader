@@ -1,0 +1,10 @@
+# Configuration for https://rust-lang.github.io/rustfmt/
+
+edition = "2024"
+max_width = 100
+chain_width = 80
+use_field_init_shorthand = true
+use_try_shorthand = true
+unstable_features = true
+group_imports = "StdExternalCrate"
+imports_granularity = "Crate"

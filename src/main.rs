@@ -1,6 +1,8 @@
-use std::fs::File;
-use std::io::{self, BufRead, BufReader, Read};
-use std::path::Path;
+use std::{
+    fs::File,
+    io::{self, BufRead, BufReader, Read},
+    path::Path,
+};
 
 const DEFAULT_CHUNK_SIZE: usize = 5;
 

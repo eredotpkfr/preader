@@ -12,7 +12,7 @@ all:
 	cargo-doc-rs \
 	cargo-doc-test \
 	cargo-fix \
-	cargo-machete
+	cargo-machete \
 	cargo-nextest \
 	cargo-test \
 	cargo-udeps \
@@ -101,7 +101,7 @@ install-cargo-tools:
 	install-cargo-deny \
 	install-cargo-doc-rs \
 	install-cargo-llvm-cov \
-	install-cargo-machete
+	install-cargo-machete \
 	install-cargo-nextest \
 	install-cargo-udeps \
 	install-nightly-toolchain \

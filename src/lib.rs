@@ -8,7 +8,7 @@ pub use config::PReaderConfig;
 pub use enums::PReaderConfigFormat;
 pub use exceptions::PReaderConfigError;
 
-/// A Python module implemented in Rust
+/// A Python package for reading files with live read-percentage tracking
 #[pymodule]
 mod preader {
     #[pymodule_export]
