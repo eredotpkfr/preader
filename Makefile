@@ -2,7 +2,7 @@ SHELL=/bin/bash
 
 .PHONY: all
 
-all:
+all: \
 	book-build \
 	book-test \
 	cargo-build \
@@ -12,13 +12,14 @@ all:
 	cargo-doc-rs \
 	cargo-doc-test \
 	cargo-fix \
-	cargo-machete
+	cargo-machete \
 	cargo-nextest \
 	cargo-test \
 	cargo-udeps \
 	clippy \
 	coverage \
 	deny \
+	develop \
 	install-cargo-clippy \
 	install-cargo-deny \
 	install-cargo-doc-rs \
@@ -32,11 +33,15 @@ all:
 	install-pre-commit-hooks \
 	install-pre-commit-linux \
 	install-pre-commit-mac \
+	install-uv-linux \
+	install-uv-mac \
 	live-book \
 	rustfmt \
 	rustfmt-check \
 	rustup \
+	shell \
 	update-pre-commit-hooks \
+	uv-create-venv
 
 book-build:
 	@mdbook build book
@@ -75,6 +80,8 @@ coverage:
 		--open
 deny:
 	@cargo deny --all-features --log-level error check
+develop:
+	@uv run --no-sync --no-cache maturin develop
 install-cargo-clippy:
 	@rustup component add clippy
 install-cargo-deny:
@@ -89,15 +96,15 @@ install-cargo-mdbook:
 	@cargo install mdbook
 install-cargo-nextest:
 	@cargo install cargo-nextest --locked
-install-cargo-tools:
+install-cargo-tools: \
 	install-cargo-clippy \
 	install-cargo-deny \
 	install-cargo-doc-rs \
 	install-cargo-llvm-cov \
-	install-cargo-machete
+	install-cargo-machete \
 	install-cargo-nextest \
 	install-cargo-udeps \
-	install-nightly-toolchain \
+	install-nightly-toolchain
 install-cargo-udeps:
 	@cargo install cargo-udeps --locked
 install-nightly-toolchain:
@@ -109,6 +116,10 @@ install-pre-commit-linux:
 	@sudo apt install pre-commit
 install-pre-commit-mac:
 	@brew install pre-commit
+install-uv-linux:
+	@curl -LsSf https://astral.sh/uv/install.sh | sh
+install-uv-mac:
+	@brew install uv
 live-book: book-test
 	@mdbook serve book
 rustfmt: cargo-fix
@@ -118,5 +129,9 @@ rustfmt-check:
 rustup:
 	@rustup self update
 	@rustup update
+shell: develop
+	@uv run --no-sync --no-cache python3
 update-pre-commit-hooks:
 	@pre-commit autoupdate
+uv-create-venv:
+	@uv venv --python $(shell python3 --version | cut -d" " -f2)

@@ -4,6 +4,12 @@ build-backend = "maturin"
 
 [project]
 name = "preader"
+description = "A Python package for reading files with live read-percentage tracking"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Erdoğan YOKSUL", email = "erdoganyoksul3@gmail.com" },
+]
 requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Rust",
@@ -11,3 +17,13 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dynamic = ["version"]
+
+[project.urls]
+homepage = "https://www.erdoganyoksul.com/preader/"
+documentation = "https://www.erdoganyoksul.com/preader/"
+repository = "https://github.com/eredotpkfr/preader"
+changelog = "https://github.com/eredotpkfr/preader/blob/main/CHANGELOG.md"
+issues = "https://github.com/eredotpkfr/preader/issues"
+
+[tool.maturin]
+features = ["pyo3/extension-module"]

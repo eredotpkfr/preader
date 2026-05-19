@@ -1,0 +1,44 @@
+name: Linters
+
+on:
+  pull_request:
+    branches:
+      - main
+
+env:
+  RUSTDOCFLAGS: "-Dwarnings"
+  RUSTFLAGS: "-Dwarnings"
+  CARGO_TERM_COLOR: "always"
+
+jobs:
+  rust-lint-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run rustfmt
+        run: make rustfmt-check
+
+      - name: Run clippy
+        run: make clippy
+
+  rust-lint-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+      - uses: dtolnay/install@cargo-docs-rs
+
+      - name: Run doc-rs
+        run: make cargo-doc-rs
+
+  typos:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: crate-ci/typos@master
