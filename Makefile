@@ -2,7 +2,7 @@ SHELL=/bin/bash
 
 .PHONY: all
 
-all:
+all: \
 	book-build \
 	book-test \
 	cargo-build \
@@ -41,7 +41,7 @@ all:
 	rustup \
 	shell \
 	update-pre-commit-hooks \
-	uv-create-venv \
+	uv-create-venv
 
 book-build:
 	@mdbook build book
@@ -96,7 +96,7 @@ install-cargo-mdbook:
 	@cargo install mdbook
 install-cargo-nextest:
 	@cargo install cargo-nextest --locked
-install-cargo-tools:
+install-cargo-tools: \
 	install-cargo-clippy \
 	install-cargo-deny \
 	install-cargo-doc-rs \
@@ -104,7 +104,7 @@ install-cargo-tools:
 	install-cargo-machete \
 	install-cargo-nextest \
 	install-cargo-udeps \
-	install-nightly-toolchain \
+	install-nightly-toolchain
 install-cargo-udeps:
 	@cargo install cargo-udeps --locked
 install-nightly-toolchain:
