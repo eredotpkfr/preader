@@ -3,10 +3,10 @@ use std::{fs::File, io::BufReader, path::PathBuf};
 use pyo3::{exceptions::PyValueError, prelude::*};
 
 use crate::{
-    config::PReaderConfig,
     iterators::{
         PReaderByteIterator, PReaderChunkIterator, PReaderDelimiterIterator, PReaderLineIterator,
     },
+    types::PReaderConfig,
 };
 
 const DEFAULT_CHUNK_SIZE: usize = 1024;
@@ -28,8 +28,9 @@ impl PReader {
     fn bytes(&self, py: Python<'_>, path: PathBuf) -> PyResult<Py<PReaderByteIterator>> {
         let file = File::open(path)?;
         let reader = BufReader::with_capacity(self.config.buffer_capacity, file);
+        let iterator = PReaderByteIterator::new(reader)?;
 
-        Py::new(py, PReaderByteIterator::new(reader)?)
+        Py::new(py, iterator)
     }
 
     #[pyo3(signature = (path, chunk_size = DEFAULT_CHUNK_SIZE))]
@@ -41,15 +42,17 @@ impl PReader {
     ) -> PyResult<Py<PReaderChunkIterator>> {
         let file = File::open(path)?;
         let reader = BufReader::with_capacity(self.config.buffer_capacity, file);
+        let iterator = PReaderChunkIterator::new(reader, chunk_size)?;
 
-        Py::new(py, PReaderChunkIterator::new(reader, chunk_size)?)
+        Py::new(py, iterator)
     }
 
     fn lines(&self, py: Python<'_>, path: PathBuf) -> PyResult<Py<PReaderLineIterator>> {
         let file = File::open(path)?;
         let reader = BufReader::with_capacity(self.config.buffer_capacity, file);
+        let iterator = PReaderLineIterator::new(reader)?;
 
-        Py::new(py, PReaderLineIterator::new(reader)?)
+        Py::new(py, iterator)
     }
 
     fn delimiter(
@@ -66,7 +69,8 @@ impl PReader {
 
         let file = File::open(path)?;
         let reader = BufReader::with_capacity(self.config.buffer_capacity, file);
+        let iterator = PReaderDelimiterIterator::new(reader, delimiter_byte)?;
 
-        Py::new(py, PReaderDelimiterIterator::new(reader, delimiter_byte)?)
+        Py::new(py, iterator)
     }
 }

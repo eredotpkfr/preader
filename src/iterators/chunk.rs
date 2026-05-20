@@ -1,35 +1,31 @@
 use std::{
     fs::File,
-    io::{BufReader, Read},
+    io::{BufReader, Read, Result},
 };
 
 use pyo3::{prelude::*, types::PyBytes};
 
-use crate::iterators::base::PReaderBaseFileIterator;
+use crate::types::{PReaderItem, progress::ProgressState};
 
-#[pyclass(extends = PReaderBaseFileIterator)]
+#[pyclass]
 pub struct PReaderChunkIterator {
+    progress: ProgressState,
     reader: BufReader<File>,
     buffer: Vec<u8>,
 }
 
 impl PReaderChunkIterator {
-    pub fn new(
-        reader: BufReader<File>,
-        chunk_size: usize,
-    ) -> std::io::Result<PyClassInitializer<Self>> {
-        let base = PReaderBaseFileIterator::try_from(reader.get_ref())?;
-        let this = Self {
+    pub fn new(reader: BufReader<File>, chunk_size: usize) -> Result<Self> {
+        Ok(Self {
+            progress: ProgressState::try_from(reader.get_ref())?,
             reader,
             buffer: vec![0u8; chunk_size],
-        };
-        let class = PyClassInitializer::from(base).add_subclass(this);
-
-        Ok(class)
+        })
     }
 
-    fn read_chunk(&mut self) -> std::io::Result<Option<usize>> {
+    fn read_chunk(&mut self) -> Result<Option<usize>> {
         let read_count = self.reader.read(&mut self.buffer)?;
+
         Ok((read_count > 0).then_some(read_count))
     }
 }
@@ -40,12 +36,12 @@ impl PReaderChunkIterator {
         slf
     }
 
-    fn __next__<'py>(mut slf: PyRefMut<'py, Self>) -> PyResult<Option<Bound<'py, PyBytes>>> {
+    fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<PReaderItem>> {
         let Some(read_count) = slf.read_chunk()? else {
             return Ok(None);
         };
-        slf.as_super().bytes_read += read_count;
+        let value = PyBytes::new(slf.py(), &slf.buffer[..read_count]).unbind();
 
-        Ok(Some(PyBytes::new(slf.py(), &slf.buffer[..read_count])))
+        Ok(Some(slf.progress.yield_item(value, read_count)))
     }
 }

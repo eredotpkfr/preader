@@ -1,34 +1,27 @@
 use std::{
     fs::File,
-    io::{BufReader, Bytes, Read},
+    io::{BufReader, Bytes, Read, Result},
 };
 
 use pyo3::{prelude::*, types::PyBytes};
 
-use crate::iterators::base::PReaderBaseFileIterator;
+use crate::types::{PReaderItem, progress::ProgressState};
 
-#[pyclass(extends = PReaderBaseFileIterator)]
+#[pyclass]
 pub struct PReaderByteIterator {
+    progress: ProgressState,
     bytes: Bytes<BufReader<File>>,
 }
 
-impl From<BufReader<File>> for PReaderByteIterator {
-    fn from(reader: BufReader<File>) -> Self {
-        Self {
-            bytes: reader.bytes(),
-        }
-    }
-}
-
 impl PReaderByteIterator {
-    pub fn new(reader: BufReader<File>) -> std::io::Result<PyClassInitializer<Self>> {
-        let base = PReaderBaseFileIterator::try_from(reader.get_ref())?;
-        let class = PyClassInitializer::from(base).add_subclass(reader.into());
-
-        Ok(class)
+    pub fn new(reader: BufReader<File>) -> Result<Self> {
+        Ok(Self {
+            progress: ProgressState::try_from(reader.get_ref())?,
+            bytes: reader.bytes(),
+        })
     }
 
-    fn read_byte(&mut self) -> std::io::Result<Option<u8>> {
+    fn read_byte(&mut self) -> Result<Option<u8>> {
         self.bytes.next().transpose()
     }
 }
@@ -39,12 +32,12 @@ impl PReaderByteIterator {
         slf
     }
 
-    fn __next__<'py>(mut slf: PyRefMut<'py, Self>) -> PyResult<Option<Bound<'py, PyBytes>>> {
+    fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<PReaderItem>> {
         let Some(byte) = slf.read_byte()? else {
             return Ok(None);
         };
-        slf.as_super().bytes_read += 1;
+        let value = PyBytes::new(slf.py(), &[byte]).unbind();
 
-        Ok(Some(PyBytes::new(slf.py(), &[byte])))
+        Ok(Some(slf.progress.yield_item(value, 1)))
     }
 }
