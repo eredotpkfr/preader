@@ -24,9 +24,6 @@ impl TryFrom<&File> for PReaderBaseFileIterator {
 #[pymethods]
 impl PReaderBaseFileIterator {
     fn percentage(&self) -> f64 {
-        if self.total_bytes == 0 {
-            return 0.0;
-        }
-        (self.bytes_read as f64 / self.total_bytes as f64) * 100.0
+        self.bytes_read as f64 * 100.0 / self.total_bytes.max(1) as f64
     }
 }
