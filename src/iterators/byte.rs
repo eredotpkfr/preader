@@ -5,31 +5,31 @@ use std::{
 
 use pyo3::{prelude::*, types::PyBytes};
 
-#[pyclass]
+use crate::iterators::base::PReaderBaseFileIterator;
+
+#[pyclass(extends = PReaderBaseFileIterator)]
 pub struct PReaderByteIterator {
     bytes: Bytes<BufReader<File>>,
-    #[pyo3(get)]
-    pub bytes_read: usize,
-    #[pyo3(get)]
-    pub total_bytes: usize,
+}
+
+impl From<BufReader<File>> for PReaderByteIterator {
+    fn from(reader: BufReader<File>) -> Self {
+        Self {
+            bytes: reader.bytes(),
+        }
+    }
 }
 
 impl PReaderByteIterator {
-    pub fn new(file: File, buffer_capacity: usize) -> std::io::Result<Self> {
-        let total_bytes = file.metadata()?.len() as usize;
-        Ok(Self {
-            bytes: BufReader::with_capacity(buffer_capacity, file).bytes(),
-            bytes_read: 0,
-            total_bytes,
-        })
+    pub fn new(reader: BufReader<File>) -> std::io::Result<PyClassInitializer<Self>> {
+        let base = PReaderBaseFileIterator::try_from(reader.get_ref())?;
+        let class = PyClassInitializer::from(base).add_subclass(reader.into());
+
+        Ok(class)
     }
 
     fn read_byte(&mut self) -> std::io::Result<Option<u8>> {
-        let Some(byte) = self.bytes.next().transpose()? else {
-            return Ok(None);
-        };
-        self.bytes_read += 1;
-        Ok(Some(byte))
+        self.bytes.next().transpose()
     }
 }
 
@@ -40,6 +40,11 @@ impl PReaderByteIterator {
     }
 
     fn __next__<'py>(mut slf: PyRefMut<'py, Self>) -> PyResult<Option<Bound<'py, PyBytes>>> {
-        Ok(slf.read_byte()?.map(|byte| PyBytes::new(slf.py(), &[byte])))
+        let Some(byte) = slf.read_byte()? else {
+            return Ok(None);
+        };
+        slf.as_super().bytes_read += 1;
+
+        Ok(Some(PyBytes::new(slf.py(), &[byte])))
     }
 }

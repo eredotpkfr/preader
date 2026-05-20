@@ -5,34 +5,36 @@ use std::{
 
 use pyo3::{prelude::*, types::PyBytes};
 
-#[pyclass]
+use crate::iterators::base::PReaderBaseFileIterator;
+
+#[pyclass(extends = PReaderBaseFileIterator)]
 pub struct PReaderDelimiterIterator {
     reader: BufReader<File>,
     delimiter: u8,
     buffer: Vec<u8>,
-    #[pyo3(get)]
-    pub bytes_read: usize,
-    #[pyo3(get)]
-    pub total_bytes: usize,
 }
 
 impl PReaderDelimiterIterator {
-    pub fn new(file: File, buffer_capacity: usize, delimiter: u8) -> std::io::Result<Self> {
-        let total_bytes = file.metadata()?.len() as usize;
-        Ok(Self {
-            reader: BufReader::with_capacity(buffer_capacity, file),
+    pub fn new(
+        reader: BufReader<File>,
+        delimiter: u8,
+    ) -> std::io::Result<PyClassInitializer<Self>> {
+        let base = PReaderBaseFileIterator::try_from(reader.get_ref())?;
+        let this = Self {
+            reader,
             delimiter,
             buffer: Vec::new(),
-            bytes_read: 0,
-            total_bytes,
-        })
+        };
+        let class = PyClassInitializer::from(base).add_subclass(this);
+
+        Ok(class)
     }
 
-    fn read_segment(&mut self) -> std::io::Result<usize> {
+    fn read_segment(&mut self) -> std::io::Result<Option<usize>> {
         self.buffer.clear();
         let read_count = self.reader.read_until(self.delimiter, &mut self.buffer)?;
-        self.bytes_read += read_count;
-        Ok(read_count)
+
+        Ok((read_count > 0).then_some(read_count))
     }
 }
 
@@ -43,9 +45,11 @@ impl PReaderDelimiterIterator {
     }
 
     fn __next__<'py>(mut slf: PyRefMut<'py, Self>) -> PyResult<Option<Bound<'py, PyBytes>>> {
-        match slf.read_segment()? {
-            0 => Ok(None),
-            _ => Ok(Some(PyBytes::new(slf.py(), &slf.buffer))),
-        }
+        let Some(read_count) = slf.read_segment()? else {
+            return Ok(None);
+        };
+        slf.as_super().bytes_read += read_count;
+
+        Ok(Some(PyBytes::new(slf.py(), &slf.buffer)))
     }
 }

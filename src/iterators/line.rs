@@ -5,31 +5,31 @@ use std::{
 
 use pyo3::{prelude::*, types::PyString};
 
-#[pyclass]
+use crate::iterators::base::PReaderBaseFileIterator;
+
+#[pyclass(extends = PReaderBaseFileIterator)]
 pub struct PReaderLineIterator {
     lines: Lines<BufReader<File>>,
-    #[pyo3(get)]
-    pub bytes_read: usize,
-    #[pyo3(get)]
-    pub total_bytes: usize,
+}
+
+impl From<BufReader<File>> for PReaderLineIterator {
+    fn from(reader: BufReader<File>) -> Self {
+        Self {
+            lines: reader.lines(),
+        }
+    }
 }
 
 impl PReaderLineIterator {
-    pub fn new(file: File, buffer_capacity: usize) -> std::io::Result<Self> {
-        let total_bytes = file.metadata()?.len() as usize;
-        Ok(Self {
-            lines: BufReader::with_capacity(buffer_capacity, file).lines(),
-            bytes_read: 0,
-            total_bytes,
-        })
+    pub fn new(reader: BufReader<File>) -> std::io::Result<PyClassInitializer<Self>> {
+        let base = PReaderBaseFileIterator::try_from(reader.get_ref())?;
+        let class = PyClassInitializer::from(base).add_subclass(reader.into());
+
+        Ok(class)
     }
 
     fn read_line(&mut self) -> std::io::Result<Option<String>> {
-        let Some(line) = self.lines.next().transpose()? else {
-            return Ok(None);
-        };
-        self.bytes_read += line.len() + 1;
-        Ok(Some(line))
+        self.lines.next().transpose()
     }
 }
 
@@ -40,6 +40,11 @@ impl PReaderLineIterator {
     }
 
     fn __next__<'py>(mut slf: PyRefMut<'py, Self>) -> PyResult<Option<Bound<'py, PyString>>> {
-        Ok(slf.read_line()?.map(|line| PyString::new(slf.py(), &line)))
+        let Some(line) = slf.read_line()? else {
+            return Ok(None);
+        };
+        slf.as_super().bytes_read += line.len() + 1;
+
+        Ok(Some(PyString::new(slf.py(), &line)))
     }
 }

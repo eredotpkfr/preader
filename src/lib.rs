@@ -10,7 +10,8 @@ pub use config::PReaderConfig;
 pub use enums::PReaderConfigFormat;
 pub use exceptions::PReaderConfigError;
 pub use iterators::{
-    PReaderByteIterator, PReaderChunkIterator, PReaderDelimiterIterator, PReaderLineIterator,
+    PReaderBaseFileIterator, PReaderByteIterator, PReaderChunkIterator, PReaderDelimiterIterator,
+    PReaderLineIterator,
 };
 pub use reader::PReader;
 
@@ -18,5 +19,7 @@ pub use reader::PReader;
 #[pymodule]
 mod preader {
     #[pymodule_export]
-    use super::{PReader, PReaderConfig, PReaderConfigError, PReaderConfigFormat};
+    use super::{
+        PReader, PReaderBaseFileIterator, PReaderConfig, PReaderConfigError, PReaderConfigFormat,
+    };
 }

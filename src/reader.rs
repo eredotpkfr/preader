@@ -1,4 +1,4 @@
-use std::{fs::File, path::PathBuf};
+use std::{fs::File, io::BufReader, path::PathBuf};
 
 use pyo3::{exceptions::PyValueError, prelude::*};
 
@@ -26,10 +26,10 @@ impl PReader {
     }
 
     fn bytes(&self, py: Python<'_>, path: PathBuf) -> PyResult<Py<PReaderByteIterator>> {
-        Py::new(
-            py,
-            PReaderByteIterator::new(File::open(&path)?, self.config.buffer_capacity)?,
-        )
+        let file = File::open(path)?;
+        let reader = BufReader::with_capacity(self.config.buffer_capacity, file);
+
+        Py::new(py, PReaderByteIterator::new(reader)?)
     }
 
     #[pyo3(signature = (path, chunk_size = DEFAULT_CHUNK_SIZE))]
@@ -39,17 +39,17 @@ impl PReader {
         path: PathBuf,
         chunk_size: usize,
     ) -> PyResult<Py<PReaderChunkIterator>> {
-        Py::new(
-            py,
-            PReaderChunkIterator::new(File::open(&path)?, self.config.buffer_capacity, chunk_size)?,
-        )
+        let file = File::open(path)?;
+        let reader = BufReader::with_capacity(self.config.buffer_capacity, file);
+
+        Py::new(py, PReaderChunkIterator::new(reader, chunk_size)?)
     }
 
     fn lines(&self, py: Python<'_>, path: PathBuf) -> PyResult<Py<PReaderLineIterator>> {
-        Py::new(
-            py,
-            PReaderLineIterator::new(File::open(&path)?, self.config.buffer_capacity)?,
-        )
+        let file = File::open(path)?;
+        let reader = BufReader::with_capacity(self.config.buffer_capacity, file);
+
+        Py::new(py, PReaderLineIterator::new(reader)?)
     }
 
     fn delimiter(
@@ -64,13 +64,9 @@ impl PReader {
             ));
         };
 
-        Py::new(
-            py,
-            PReaderDelimiterIterator::new(
-                File::open(&path)?,
-                self.config.buffer_capacity,
-                delimiter_byte,
-            )?,
-        )
+        let file = File::open(path)?;
+        let reader = BufReader::with_capacity(self.config.buffer_capacity, file);
+
+        Py::new(py, PReaderDelimiterIterator::new(reader, delimiter_byte)?)
     }
 }
