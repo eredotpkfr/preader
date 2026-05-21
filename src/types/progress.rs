@@ -3,10 +3,6 @@ use std::{
     io::{Error, Result},
 };
 
-use pyo3::prelude::*;
-
-use crate::types::PReaderItem;
-
 pub struct ProgressState {
     pub bytes_read: u64,
     pub total_bytes: u64,
@@ -24,9 +20,7 @@ impl TryFrom<&File> for ProgressState {
 }
 
 impl ProgressState {
-    pub fn yield_item<T>(&mut self, value: Py<T>, consumed: usize) -> PReaderItem {
+    pub fn advance(&mut self, consumed: usize) {
         self.bytes_read += consumed as u64;
-
-        (self, value).into()
     }
 }

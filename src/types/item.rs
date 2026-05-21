@@ -12,8 +12,8 @@ pub struct PReaderItem {
     pub total_bytes: u64,
 }
 
-impl<T> From<(&mut ProgressState, Py<T>)> for PReaderItem {
-    fn from(tuple: (&mut ProgressState, Py<T>)) -> Self {
+impl<T> From<(&ProgressState, Py<T>)> for PReaderItem {
+    fn from(tuple: (&ProgressState, Py<T>)) -> Self {
         Self {
             value: tuple.1.into_any(),
             bytes_read: tuple.0.bytes_read,

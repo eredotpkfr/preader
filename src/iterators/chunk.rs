@@ -46,6 +46,8 @@ impl PReaderChunkIterator {
         let value = PyBytes::new(py, chunk).unbind();
         let consumed = chunk.len();
 
-        Ok(Some(slf.progress.yield_item(value, consumed)))
+        slf.progress.advance(consumed);
+
+        Ok(Some((&slf.progress, value).into()))
     }
 }

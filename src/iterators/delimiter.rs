@@ -49,6 +49,8 @@ impl PReaderDelimiterIterator {
         let value = PyBytes::new(py, segment).unbind();
         let consumed = segment.len();
 
-        Ok(Some(slf.progress.yield_item(value, consumed)))
+        slf.progress.advance(consumed);
+
+        Ok(Some((&slf.progress, value).into()))
     }
 }

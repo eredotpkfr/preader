@@ -41,6 +41,8 @@ impl PReaderByteIterator {
 
         let value = PyBytes::new(py, &[byte]).unbind();
 
-        Ok(Some(slf.progress.yield_item(value, 1)))
+        slf.progress.advance(1);
+
+        Ok(Some((&slf.progress, value).into()))
     }
 }

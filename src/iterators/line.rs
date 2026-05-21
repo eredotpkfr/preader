@@ -42,6 +42,8 @@ impl PReaderLineIterator {
         let value = PyString::new(py, &line).unbind();
         let consumed = line.len() + 1;
 
-        Ok(Some(slf.progress.yield_item(value, consumed)))
+        slf.progress.advance(consumed);
+
+        Ok(Some((&slf.progress, value).into()))
     }
 }
