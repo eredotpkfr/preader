@@ -25,12 +25,11 @@ impl PReaderDelimiterIterator {
         })
     }
 
-    fn read_segment(&mut self) -> Result<Option<usize>> {
+    fn read_segment(&mut self) -> Result<Option<&[u8]>> {
         self.buffer.clear();
+        self.reader.read_until(self.delimiter, &mut self.buffer)?;
 
-        let read_count = self.reader.read_until(self.delimiter, &mut self.buffer)?;
-
-        Ok((read_count > 0).then_some(read_count))
+        Ok((!self.buffer.is_empty()).then_some(self.buffer.as_slice()))
     }
 }
 
@@ -41,11 +40,15 @@ impl PReaderDelimiterIterator {
     }
 
     fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<PReaderItem>> {
-        let Some(read_count) = slf.read_segment()? else {
+        let py = slf.py();
+
+        let Some(segment) = slf.read_segment()? else {
             return Ok(None);
         };
-        let value = PyBytes::new(slf.py(), &slf.buffer).unbind();
 
-        Ok(Some(slf.progress.yield_item(value, read_count)))
+        let value = PyBytes::new(py, segment).unbind();
+        let consumed = segment.len();
+
+        Ok(Some(slf.progress.yield_item(value, consumed)))
     }
 }

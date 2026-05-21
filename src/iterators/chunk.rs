@@ -23,10 +23,10 @@ impl PReaderChunkIterator {
         })
     }
 
-    fn read_chunk(&mut self) -> Result<Option<usize>> {
+    fn read_chunk(&mut self) -> Result<Option<&[u8]>> {
         let read_count = self.reader.read(&mut self.buffer)?;
 
-        Ok((read_count > 0).then_some(read_count))
+        Ok((read_count > 0).then_some(&self.buffer[..read_count]))
     }
 }
 
@@ -37,11 +37,15 @@ impl PReaderChunkIterator {
     }
 
     fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<PReaderItem>> {
-        let Some(read_count) = slf.read_chunk()? else {
+        let py = slf.py();
+
+        let Some(chunk) = slf.read_chunk()? else {
             return Ok(None);
         };
-        let value = PyBytes::new(slf.py(), &slf.buffer[..read_count]).unbind();
 
-        Ok(Some(slf.progress.yield_item(value, read_count)))
+        let value = PyBytes::new(py, chunk).unbind();
+        let consumed = chunk.len();
+
+        Ok(Some(slf.progress.yield_item(value, consumed)))
     }
 }

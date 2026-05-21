@@ -7,9 +7,9 @@ pub struct PReaderItem {
     #[pyo3(get)]
     pub value: Py<PyAny>,
     #[pyo3(get)]
-    pub bytes_read: usize,
+    pub bytes_read: u64,
     #[pyo3(get)]
-    pub total_bytes: usize,
+    pub total_bytes: u64,
 }
 
 impl<T> From<(&mut ProgressState, Py<T>)> for PReaderItem {

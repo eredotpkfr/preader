@@ -33,10 +33,13 @@ impl PReaderByteIterator {
     }
 
     fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<PReaderItem>> {
+        let py = slf.py();
+
         let Some(byte) = slf.read_byte()? else {
             return Ok(None);
         };
-        let value = PyBytes::new(slf.py(), &[byte]).unbind();
+
+        let value = PyBytes::new(py, &[byte]).unbind();
 
         Ok(Some(slf.progress.yield_item(value, 1)))
     }

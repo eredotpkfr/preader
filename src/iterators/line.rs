@@ -33,11 +33,15 @@ impl PReaderLineIterator {
     }
 
     fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<PReaderItem>> {
+        let py = slf.py();
+
         let Some(line) = slf.read_line()? else {
             return Ok(None);
         };
-        let value = PyString::new(slf.py(), &line).unbind();
 
-        Ok(Some(slf.progress.yield_item(value, line.len() + 1)))
+        let value = PyString::new(py, &line).unbind();
+        let consumed = line.len() + 1;
+
+        Ok(Some(slf.progress.yield_item(value, consumed)))
     }
 }

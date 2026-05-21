@@ -8,8 +8,8 @@ use pyo3::prelude::*;
 use crate::types::PReaderItem;
 
 pub struct ProgressState {
-    pub bytes_read: usize,
-    pub total_bytes: usize,
+    pub bytes_read: u64,
+    pub total_bytes: u64,
 }
 
 impl TryFrom<&File> for ProgressState {
@@ -18,14 +18,14 @@ impl TryFrom<&File> for ProgressState {
     fn try_from(file: &File) -> Result<Self> {
         Ok(Self {
             bytes_read: 0,
-            total_bytes: file.metadata()?.len() as usize,
+            total_bytes: file.metadata()?.len(),
         })
     }
 }
 
 impl ProgressState {
-    pub fn yield_item<T>(&mut self, value: Py<T>, advance: usize) -> PReaderItem {
-        self.bytes_read += advance;
+    pub fn yield_item<T>(&mut self, value: Py<T>, consumed: usize) -> PReaderItem {
+        self.bytes_read += consumed as u64;
 
         (self, value).into()
     }
