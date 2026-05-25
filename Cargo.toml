@@ -9,6 +9,7 @@ name = "preader"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+anyhow = "1.0.102"
 chrono = "0.4.44"
 dirs = "5.0.1"
 hex = "0.4.3"

@@ -27,7 +27,7 @@ impl PReaderDelimiterIterator {
         let buffer = Vec::new();
 
         if state.position > 0 {
-            reader.seek(SeekFrom::Start(state.position)).unwrap();
+            reader.seek(SeekFrom::Start(state.position));
         }
 
         Ok(Self {

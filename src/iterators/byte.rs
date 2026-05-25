@@ -23,7 +23,7 @@ impl PReaderByteIterator {
         let mut reader = BufReader::with_capacity(config.buffer_capacity, file);
 
         if state.position > 0 {
-            reader.seek(SeekFrom::Start(state.position)).unwrap();
+            reader.seek(SeekFrom::Start(state.position))?;
         }
 
         Ok(Self {

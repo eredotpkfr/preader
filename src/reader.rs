@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use pyo3::{exceptions::PyValueError, prelude::*};
 
 use crate::{
-    PReaderState,
+    PReaderState, PReaderStateError,
     iterators::{
         PReaderByteIterator, PReaderChunkIterator, PReaderDelimiterIterator, PReaderLineIterator,
     },
@@ -106,6 +106,6 @@ impl PReader {
             }
         }
 
-        Ok(PReaderState::try_from(path)?)
+        Ok(PReaderState::try_from(path).map_err(PReaderStateError::from_anyhow)?)
     }
 }

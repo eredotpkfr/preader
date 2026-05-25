@@ -22,7 +22,7 @@ impl PReaderLineIterator {
         let buffer = String::new();
 
         if state.position > 0 {
-            reader.seek(SeekFrom::Start(state.position)).unwrap();
+            reader.seek(SeekFrom::Start(state.position));
         }
 
         Ok(Self {

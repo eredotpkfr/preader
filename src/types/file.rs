@@ -1,9 +1,10 @@
 use std::{fs, os::unix::fs::MetadataExt, path::PathBuf};
 
+use anyhow::Error;
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::types::identity::compute_first_4kib_hash;
+use crate::utils::fingerprint;
 
 #[pyclass(from_py_object)]
 #[derive(Clone, Serialize, Deserialize)]
@@ -15,11 +16,11 @@ pub struct FileMetadata {
     #[pyo3(get)]
     pub mtime: i64,
     #[pyo3(get)]
-    pub sha256_first_4kib: String,
+    pub fingerprint: String,
 }
 
 impl TryFrom<&PathBuf> for FileMetadata {
-    type Error = PyErr;
+    type Error = Error;
 
     fn try_from(path: &PathBuf) -> Result<Self, Self::Error> {
         let metadata = fs::metadata(path)?;
@@ -28,7 +29,7 @@ impl TryFrom<&PathBuf> for FileMetadata {
             path: path.to_path_buf(),
             size: metadata.len(),
             mtime: metadata.mtime(),
-            sha256_first_4kib: compute_first_4kib_hash(path)?,
+            fingerprint: fingerprint(path)?,
         })
     }
 }

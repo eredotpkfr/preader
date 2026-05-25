@@ -1,7 +1,6 @@
 pub(crate) mod checksum;
 pub mod config;
 pub mod file;
-pub(crate) mod identity;
 pub mod item;
 pub mod manager;
 pub mod state;

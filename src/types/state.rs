@@ -1,14 +1,13 @@
 use std::{fs, path::PathBuf};
 
+use anyhow::Error;
 use pyo3::{exceptions::PyIOError, prelude::*};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     exceptions::PReaderStateError,
-    types::{
-        checksum::ChecksumBody, file::FileMetadata, identity::compute_first_4kib_hash,
-        time::Timestamps,
-    },
+    types::{checksum::ChecksumBody, file::FileMetadata, time::Timestamps},
+    utils::fingerprint,
 };
 
 #[pyclass(from_py_object)]
@@ -25,8 +24,10 @@ pub struct PReaderState {
     pub checksum: String,
 }
 
-impl From<FileMetadata> for PReaderState {
-    fn from(file: FileMetadata) -> Self {
+impl TryFrom<FileMetadata> for PReaderState {
+    type Error = Error;
+
+    fn try_from(file: FileMetadata) -> Result<Self, Self::Error> {
         let position = 0;
         let timestamps = Timestamps::now();
         let checksum = ChecksumBody {
@@ -34,22 +35,22 @@ impl From<FileMetadata> for PReaderState {
             position,
             timestamps: &timestamps,
         }
-        .compute();
+        .compute()?;
 
-        Self {
+        Ok(Self {
             file,
             position,
             timestamps,
             checksum,
-        }
+        })
     }
 }
 
 impl TryFrom<&PathBuf> for PReaderState {
-    type Error = PyErr;
+    type Error = Error;
 
     fn try_from(path: &PathBuf) -> Result<Self, Self::Error> {
-        Ok(FileMetadata::try_from(path)?.into())
+        Ok(Self::try_from(FileMetadata::try_from(path)?)?)
     }
 }
 
@@ -63,14 +64,17 @@ impl PReaderState {
         self.checksum = self.checksum();
     }
 
+    pub(crate) fn body(&self) -> ChecksumBody<'_> {
+        self.into()
+    }
+
     pub(crate) fn checksum(&self) -> String {
-        ChecksumBody::from(self).compute()
+        self.body().compute().unwrap()
     }
 }
 
 #[pymethods]
 impl PReaderState {
-    #[getter]
     pub fn percent(&self) -> f64 {
         self.position as f64 * 100.0 / self.file.size.max(1) as f64
     }
@@ -79,28 +83,29 @@ impl PReaderState {
         let metadata = fs::metadata(&path).map_err(|e| PyIOError::new_err(e.to_string()))?;
 
         if self.file.size != metadata.len() {
-            return Err(PReaderStateError::size_mismatch(
+            return Err(PReaderStateError::from_anyhow(Error::msg(format!(
+                "size mismatch: expected {}, got {}",
                 self.file.size,
-                metadata.len(),
-            ));
+                metadata.len()
+            ))));
         }
 
         use std::os::unix::fs::MetadataExt;
         let current_mtime = metadata.mtime();
         if self.file.mtime != current_mtime {
-            return Err(PReaderStateError::mtime_mismatch(
-                self.file.mtime as u128,
-                current_mtime as u128,
-            ));
+            return Err(PReaderStateError::from_anyhow(Error::msg(format!(
+                "mtime mismatch: expected {}, got {}",
+                self.file.mtime, current_mtime
+            ))));
         }
 
-        let current_hash =
-            compute_first_4kib_hash(&path).map_err(|e| PyIOError::new_err(e.to_string()))?;
-        if self.file.sha256_first_4kib != current_hash {
-            return Err(PReaderStateError::hash_mismatch(
-                &self.file.sha256_first_4kib,
-                &current_hash,
-            ));
+        let current_fingerprint =
+            fingerprint(&path).map_err(|e| PyIOError::new_err(e.to_string()))?;
+        if self.file.fingerprint != current_fingerprint {
+            return Err(PReaderStateError::from_anyhow(Error::msg(format!(
+                "fingerprint mismatch: expected {}, got {}",
+                self.file.fingerprint, current_fingerprint
+            ))));
         }
 
         Ok(())

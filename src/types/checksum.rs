@@ -1,3 +1,4 @@
+use anyhow::Error;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
@@ -24,9 +25,7 @@ impl<'a> From<&'a PReaderState> for ChecksumBody<'a> {
 }
 
 impl ChecksumBody<'_> {
-    pub fn compute(&self) -> String {
-        hex::encode(Sha256::digest(
-            serde_json::to_string(self).unwrap().as_bytes(),
-        ))
+    pub fn compute(&self) -> Result<String, Error> {
+        Ok(hex::encode(Sha256::digest(serde_json::to_string(self)?)))
     }
 }

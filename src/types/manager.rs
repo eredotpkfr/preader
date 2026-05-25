@@ -1,6 +1,7 @@
 use std::{fs, path::PathBuf};
 
-use pyo3::{exceptions::PyValueError, prelude::*};
+use anyhow::{Error, anyhow};
+use pyo3::prelude::*;
 use sha2::{Digest, Sha256};
 
 use crate::{
@@ -30,17 +31,15 @@ impl PReaderStateManager {
         self.config.state_dir.join(name)
     }
 
-    pub(crate) fn load(&self, name: String) -> PyResult<PReaderState> {
+    pub(crate) fn load(&self, name: String) -> Result<PReaderState, Error> {
         let path = self.path(name);
 
         if !path.exists() {
-            return Err(PyValueError::new_err("state not found"));
+            return Err(anyhow!("state not found"));
         }
 
-        let content =
-            fs::read_to_string(&path).map_err(|e| PyValueError::new_err(e.to_string()))?;
-        let state: PReaderState =
-            serde_json::from_str(&content).map_err(|_| PyValueError::new_err("state not found"))?;
+        let content = fs::read_to_string(&path)?;
+        let state: PReaderState = serde_json::from_str(&content)?;
 
         // if verify {
         //     let computed = state.compute_checksum();

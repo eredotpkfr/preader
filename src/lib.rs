@@ -4,6 +4,7 @@ mod exceptions;
 mod iterators;
 mod reader;
 mod types;
+mod utils;
 
 pub use exceptions::PReaderStateError;
 pub use reader::PReader;
