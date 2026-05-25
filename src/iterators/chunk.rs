@@ -5,7 +5,10 @@ use std::{
 
 use pyo3::{prelude::*, types::PyBytes};
 
-use crate::types::{PReaderItem, PReaderState, config::PReaderIteratorConfig};
+use crate::{
+    iterators::reader::PReaderIterator,
+    types::{PReaderItem, PReaderState, config::PReaderIteratorConfig},
+};
 
 #[pyclass]
 pub struct PReaderChunkIterator {
@@ -13,6 +16,16 @@ pub struct PReaderChunkIterator {
     state: PReaderState,
     reader: BufReader<File>,
     buffer: Vec<u8>,
+}
+
+impl PReaderIterator for PReaderChunkIterator {
+    fn config(&self) -> &PReaderIteratorConfig {
+        &self.config
+    }
+
+    fn state(&self) -> PReaderState {
+        self.state.clone()
+    }
 }
 
 impl PReaderChunkIterator {
@@ -59,7 +72,7 @@ impl PReaderChunkIterator {
         let consumed = chunk.len() as u64;
         let value = PyBytes::new(py, chunk).unbind().into_any();
 
-        slf.state.advance(consumed);
+        slf.state().advance(consumed);
 
         Ok(Some(value))
     }

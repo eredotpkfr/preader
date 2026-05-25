@@ -5,7 +5,10 @@ use std::{
 
 use pyo3::{prelude::*, types::PyString};
 
-use crate::types::{PReaderItem, PReaderState, config::PReaderIteratorConfig};
+use crate::{
+    iterators::reader::PReaderIterator,
+    types::{PReaderItem, PReaderState, config::PReaderIteratorConfig},
+};
 
 #[pyclass]
 pub struct PReaderLineIterator {
@@ -13,6 +16,16 @@ pub struct PReaderLineIterator {
     state: PReaderState,
     reader: BufReader<File>,
     buffer: String,
+}
+
+impl PReaderIterator for PReaderLineIterator {
+    fn config(&self) -> &PReaderIteratorConfig {
+        &self.config
+    }
+
+    fn state(&self) -> PReaderState {
+        self.state.clone()
+    }
 }
 
 impl PReaderLineIterator {
@@ -63,7 +76,7 @@ impl PReaderLineIterator {
 
         let value = PyString::new(py, &line).unbind().into_any();
 
-        slf.state.advance(read_count);
+        slf.state().advance(read_count);
 
         Ok(Some(value))
     }
