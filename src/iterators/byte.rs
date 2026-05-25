@@ -1,22 +1,34 @@
 use std::{
     fs::File,
-    io::{BufReader, Bytes, Read, Result},
+    io::{BufReader, Bytes, Read, Result, Seek, SeekFrom},
 };
 
 use pyo3::{prelude::*, types::PyBytes};
 
-use crate::types::{PReaderItem, progress::ProgressState};
+use crate::{
+    PReaderState,
+    types::{PReaderItem, config::PReaderIteratorConfig},
+};
 
 #[pyclass]
 pub struct PReaderByteIterator {
-    progress: ProgressState,
+    config: PReaderIteratorConfig,
+    state: PReaderState,
     bytes: Bytes<BufReader<File>>,
 }
 
 impl PReaderByteIterator {
-    pub fn new(reader: BufReader<File>) -> Result<Self> {
+    pub(crate) fn new(config: PReaderIteratorConfig, state: PReaderState) -> PyResult<Self> {
+        let file = File::open(state.file.path.clone())?;
+        let mut reader = BufReader::with_capacity(config.buffer_capacity, file);
+
+        if state.position > 0 {
+            reader.seek(SeekFrom::Start(state.position)).unwrap();
+        }
+
         Ok(Self {
-            progress: ProgressState::try_from(reader.get_ref())?,
+            config,
+            state,
             bytes: reader.bytes(),
         })
     }
@@ -41,8 +53,6 @@ impl PReaderByteIterator {
 
         let value = PyBytes::new(py, &[byte]).unbind();
 
-        slf.progress.advance(1);
-
-        Ok(Some((&slf.progress, value).into()))
+        Ok(Some(value.into_any()))
     }
 }

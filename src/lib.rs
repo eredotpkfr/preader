@@ -1,19 +1,21 @@
 use pyo3::prelude::*;
 
-mod enums;
 mod exceptions;
 mod iterators;
 mod reader;
 mod types;
 
-pub use enums::PReaderConfigFormat;
-pub use exceptions::PReaderConfigError;
+pub use exceptions::PReaderStateError;
 pub use reader::PReader;
-pub use types::{PReaderConfig, PReaderItem};
+pub use types::{
+    FileMetadata, PReaderState, PReaderStateManager, Timestamps, config::PReaderConfig,
+};
 
-/// A Python package for reading files with live read-percentage tracking
 #[pymodule]
 mod preader {
     #[pymodule_export]
-    use super::{PReader, PReaderConfig, PReaderConfigError, PReaderConfigFormat, PReaderItem};
+    use super::{
+        FileMetadata, PReader, PReaderConfig, PReaderState, PReaderStateError, PReaderStateManager,
+        Timestamps,
+    };
 }

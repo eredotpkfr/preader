@@ -1,64 +1,79 @@
-use std::{fs::File, io::BufReader, path::PathBuf};
+use std::path::PathBuf;
 
 use pyo3::{exceptions::PyValueError, prelude::*};
 
 use crate::{
+    PReaderState,
     iterators::{
         PReaderByteIterator, PReaderChunkIterator, PReaderDelimiterIterator, PReaderLineIterator,
     },
-    types::PReaderConfig,
+    types::{PReaderStateManager, config::PReaderConfig},
 };
 
-const DEFAULT_CHUNK_SIZE: usize = 1024;
+pub const DEFAULT_CHUNK_SIZE: usize = 1024;
 
 #[pyclass]
 pub struct PReader {
     #[pyo3(get)]
     pub config: PReaderConfig,
+    pub manager: PReaderStateManager,
+    pub file: PathBuf,
 }
 
 #[pymethods]
 impl PReader {
     #[new]
-    #[pyo3(signature = (config=PReaderConfig::default()))]
-    fn new(config: PReaderConfig) -> Self {
-        Self { config }
+    #[pyo3(signature = (file, *, config=PReaderConfig::default()))]
+    fn new(file: PathBuf, config: PReaderConfig) -> Self {
+        Self {
+            config: config.clone(),
+            manager: config.into(),
+            file: file.canonicalize().unwrap(),
+        }
     }
 
-    fn bytes(&self, py: Python<'_>, path: PathBuf) -> PyResult<Py<PReaderByteIterator>> {
-        let file = File::open(path)?;
-        let reader = BufReader::with_capacity(self.config.buffer_capacity, file);
-        let iterator = PReaderByteIterator::new(reader)?;
+    #[pyo3(signature = (*, state=None))]
+    fn bytes(
+        &self,
+        py: Python<'_>,
+        state: Option<PReaderState>,
+    ) -> PyResult<Py<PReaderByteIterator>> {
+        let state = self.resolve_state(state, &self.file)?;
 
-        Py::new(py, iterator)
+        Py::new(py, PReaderByteIterator::new((&self.config).into(), state)?)
     }
 
-    #[pyo3(signature = (path, chunk_size = DEFAULT_CHUNK_SIZE))]
+    #[pyo3(signature = (*, state=None, chunk_size=DEFAULT_CHUNK_SIZE))]
     fn chunks(
         &self,
         py: Python<'_>,
-        path: PathBuf,
+        state: Option<PReaderState>,
         chunk_size: usize,
     ) -> PyResult<Py<PReaderChunkIterator>> {
-        let file = File::open(path)?;
-        let reader = BufReader::with_capacity(self.config.buffer_capacity, file);
-        let iterator = PReaderChunkIterator::new(reader, chunk_size)?;
+        let state = self.resolve_state(state, &self.file)?;
 
-        Py::new(py, iterator)
+        Py::new(
+            py,
+            PReaderChunkIterator::new((&self.config).into(), state, chunk_size)?,
+        )
     }
 
-    fn lines(&self, py: Python<'_>, path: PathBuf) -> PyResult<Py<PReaderLineIterator>> {
-        let file = File::open(path)?;
-        let reader = BufReader::with_capacity(self.config.buffer_capacity, file);
-        let iterator = PReaderLineIterator::new(reader)?;
+    #[pyo3(signature = (*, state=None))]
+    fn lines(
+        &self,
+        py: Python<'_>,
+        state: Option<PReaderState>,
+    ) -> PyResult<Py<PReaderLineIterator>> {
+        let state = self.resolve_state(state, &self.file)?;
 
-        Py::new(py, iterator)
+        Py::new(py, PReaderLineIterator::new((&self.config).into(), state)?)
     }
 
+    #[pyo3(signature = (*, state=None, delimiter))]
     fn delimiter(
         &self,
         py: Python<'_>,
-        path: PathBuf,
+        state: Option<PReaderState>,
         delimiter: char,
     ) -> PyResult<Py<PReaderDelimiterIterator>> {
         let Ok(delimiter_byte) = u8::try_from(delimiter) else {
@@ -66,11 +81,31 @@ impl PReader {
                 "delimiter must fit in a single byte (0-255)",
             ));
         };
+        let state = self.resolve_state(state, &self.file)?;
 
-        let file = File::open(path)?;
-        let reader = BufReader::with_capacity(self.config.buffer_capacity, file);
-        let iterator = PReaderDelimiterIterator::new(reader, delimiter_byte)?;
+        Py::new(
+            py,
+            PReaderDelimiterIterator::new((&self.config).into(), state, delimiter_byte)?,
+        )
+    }
+}
 
-        Py::new(py, iterator)
+impl PReader {
+    fn resolve_state(
+        &self,
+        explicit: Option<PReaderState>,
+        path: &PathBuf,
+    ) -> PyResult<PReaderState> {
+        if let Some(state) = explicit {
+            return Ok(state);
+        }
+
+        if self.config.auto_load_state {
+            if let Ok(state) = self.manager.load(self.manager.name(path)) {
+                return Ok(state);
+            }
+        }
+
+        Ok(PReaderState::try_from(path)?)
     }
 }

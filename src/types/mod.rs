@@ -1,6 +1,15 @@
+pub(crate) mod checksum;
 pub mod config;
+pub mod file;
+pub(crate) mod identity;
 pub mod item;
-pub(crate) mod progress;
+pub mod manager;
+pub mod state;
+pub(crate) mod state_io;
+pub mod time;
 
-pub use config::PReaderConfig;
+pub use file::FileMetadata;
 pub use item::PReaderItem;
+pub use manager::PReaderStateManager;
+pub use state::PReaderState;
+pub use time::Timestamps;

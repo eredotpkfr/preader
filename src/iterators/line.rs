@@ -1,28 +1,50 @@
 use std::{
     fs::File,
-    io::{BufRead, BufReader, Lines, Result},
+    io::{BufRead, BufReader, Seek, SeekFrom},
 };
 
 use pyo3::{prelude::*, types::PyString};
 
-use crate::types::{PReaderItem, progress::ProgressState};
+use crate::types::{PReaderItem, PReaderState, config::PReaderIteratorConfig};
 
 #[pyclass]
 pub struct PReaderLineIterator {
-    progress: ProgressState,
-    lines: Lines<BufReader<File>>,
+    config: PReaderIteratorConfig,
+    state: PReaderState,
+    reader: BufReader<File>,
+    buffer: String,
 }
 
 impl PReaderLineIterator {
-    pub fn new(reader: BufReader<File>) -> Result<Self> {
+    pub(crate) fn new(config: PReaderIteratorConfig, state: PReaderState) -> PyResult<Self> {
+        let file = File::open(state.file.path.clone())?;
+        let mut reader = BufReader::with_capacity(config.buffer_capacity, file);
+        let buffer = String::new();
+
+        if state.position > 0 {
+            reader.seek(SeekFrom::Start(state.position)).unwrap();
+        }
+
         Ok(Self {
-            progress: ProgressState::try_from(reader.get_ref())?,
-            lines: reader.lines(),
+            config,
+            state,
+            reader,
+            buffer,
         })
     }
 
-    fn read_line(&mut self) -> Result<Option<String>> {
-        self.lines.next().transpose()
+    fn read_line(&mut self) -> std::io::Result<Option<(String, u64)>> {
+        self.buffer.clear();
+
+        let read_count = self.reader.read_line(&mut self.buffer)?;
+
+        if read_count == 0 {
+            return Ok(None);
+        }
+
+        let trimmed = self.buffer.trim_end_matches('\n').trim_end_matches('\r').to_owned();
+
+        Ok(Some((trimmed, read_count as u64)))
     }
 }
 
@@ -35,15 +57,14 @@ impl PReaderLineIterator {
     fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<PReaderItem>> {
         let py = slf.py();
 
-        let Some(line) = slf.read_line()? else {
+        let Some((line, read_count)) = slf.read_line()? else {
             return Ok(None);
         };
 
-        let value = PyString::new(py, &line).unbind();
-        let consumed = line.len() + 1;
+        let value = PyString::new(py, &line).unbind().into_any();
 
-        slf.progress.advance(consumed);
+        slf.state.advance(read_count);
 
-        Ok(Some((&slf.progress, value).into()))
+        Ok(Some(value))
     }
 }

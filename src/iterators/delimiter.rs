@@ -1,31 +1,45 @@
 use std::{
     fs::File,
-    io::{BufRead, BufReader, Result},
+    io::{BufRead, BufReader, Seek, SeekFrom},
 };
 
 use pyo3::{prelude::*, types::PyBytes};
 
-use crate::types::{PReaderItem, progress::ProgressState};
+use crate::types::{PReaderItem, PReaderState, config::PReaderIteratorConfig};
 
 #[pyclass]
 pub struct PReaderDelimiterIterator {
-    progress: ProgressState,
+    config: PReaderIteratorConfig,
+    state: PReaderState,
     reader: BufReader<File>,
     delimiter: u8,
     buffer: Vec<u8>,
 }
 
 impl PReaderDelimiterIterator {
-    pub fn new(reader: BufReader<File>, delimiter: u8) -> Result<Self> {
+    pub(crate) fn new(
+        config: PReaderIteratorConfig,
+        state: PReaderState,
+        delimiter: u8,
+    ) -> PyResult<Self> {
+        let file = File::open(state.file.path.clone())?;
+        let mut reader = BufReader::with_capacity(config.buffer_capacity, file);
+        let buffer = Vec::new();
+
+        if state.position > 0 {
+            reader.seek(SeekFrom::Start(state.position)).unwrap();
+        }
+
         Ok(Self {
-            progress: ProgressState::try_from(reader.get_ref())?,
+            config,
+            state,
             reader,
             delimiter,
-            buffer: Vec::new(),
+            buffer,
         })
     }
 
-    fn read_segment(&mut self) -> Result<Option<&[u8]>> {
+    fn read_segment(&mut self) -> std::io::Result<Option<&[u8]>> {
         self.buffer.clear();
         self.reader.read_until(self.delimiter, &mut self.buffer)?;
 
@@ -46,11 +60,11 @@ impl PReaderDelimiterIterator {
             return Ok(None);
         };
 
-        let value = PyBytes::new(py, segment).unbind();
-        let consumed = segment.len();
+        let consumed = segment.len() as u64;
+        let value = PyBytes::new(py, segment).unbind().into_any();
 
-        slf.progress.advance(consumed);
+        slf.state.advance(consumed);
 
-        Ok(Some((&slf.progress, value).into()))
+        Ok(Some(value))
     }
 }
