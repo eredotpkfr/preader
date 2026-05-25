@@ -38,7 +38,7 @@ impl PReader {
         py: Python<'_>,
         state: Option<PReaderState>,
     ) -> PyResult<Py<PReaderByteIterator>> {
-        let state = self.resolve_state(state, &self.file)?;
+        let state = self.resolve_state(state)?;
 
         Py::new(py, PReaderByteIterator::new((&self.config).into(), state)?)
     }
@@ -50,7 +50,7 @@ impl PReader {
         state: Option<PReaderState>,
         chunk_size: usize,
     ) -> PyResult<Py<PReaderChunkIterator>> {
-        let state = self.resolve_state(state, &self.file)?;
+        let state = self.resolve_state(state)?;
 
         Py::new(
             py,
@@ -64,7 +64,7 @@ impl PReader {
         py: Python<'_>,
         state: Option<PReaderState>,
     ) -> PyResult<Py<PReaderLineIterator>> {
-        let state = self.resolve_state(state, &self.file)?;
+        let state = self.resolve_state(state)?;
 
         Py::new(py, PReaderLineIterator::new((&self.config).into(), state)?)
     }
@@ -76,36 +76,32 @@ impl PReader {
         state: Option<PReaderState>,
         delimiter: char,
     ) -> PyResult<Py<PReaderDelimiterIterator>> {
-        let Ok(delimiter_byte) = u8::try_from(delimiter) else {
+        let Ok(delimiter) = u8::try_from(delimiter) else {
             return Err(PyValueError::new_err(
                 "delimiter must fit in a single byte (0-255)",
             ));
         };
-        let state = self.resolve_state(state, &self.file)?;
+        let state = self.resolve_state(state)?;
 
         Py::new(
             py,
-            PReaderDelimiterIterator::new((&self.config).into(), state, delimiter_byte)?,
+            PReaderDelimiterIterator::new((&self.config).into(), state, delimiter)?,
         )
     }
 }
 
 impl PReader {
-    fn resolve_state(
-        &self,
-        explicit: Option<PReaderState>,
-        path: &PathBuf,
-    ) -> PyResult<PReaderState> {
+    fn resolve_state(&self, explicit: Option<PReaderState>) -> PyResult<PReaderState> {
         if let Some(state) = explicit {
             return Ok(state);
         }
 
         if self.config.auto_load_state {
-            if let Ok(state) = self.manager.load(self.manager.name(path)) {
+            if let Ok(state) = self.manager.load(self.manager.name(&self.file)) {
                 return Ok(state);
             }
         }
 
-        Ok(PReaderState::try_from(path).map_err(PReaderStateError::from_anyhow)?)
+        Ok(PReaderState::try_from(&self.file).map_err(PReaderStateError::from_anyhow)?)
     }
 }
