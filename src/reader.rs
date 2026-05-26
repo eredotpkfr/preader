@@ -88,6 +88,9 @@ impl PReader {
 impl PReader {
     fn resolve_state(&self, explicit: Option<PReaderState>) -> PyResult<PReaderState> {
         if let Some(state) = explicit {
+            if self.config.verify_state {
+                state.verify()?;
+            }
             return Ok(state);
         }
 

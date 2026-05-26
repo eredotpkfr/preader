@@ -98,6 +98,6 @@ impl Drop for PReaderChunkIterator {
             return;
         }
 
-        Python::try_attach(|_| { self.state.save().unwrap() });
+        Python::try_attach(|_| self.state.save().unwrap());
     }
 }

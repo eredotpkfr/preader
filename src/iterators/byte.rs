@@ -70,7 +70,7 @@ impl PReaderByteIterator {
 
         if slf.config.auto_save_state {
             let delta = slf.state.position - slf.state.manager.last_saved_position;
-            
+
             if delta >= slf.config.auto_save_state_bytes {
                 slf.state().save()?;
             }
@@ -89,7 +89,7 @@ impl Drop for PReaderByteIterator {
         if self.state.position <= self.state.manager.last_saved_position {
             return;
         }
-        
-        Python::try_attach(|_| {self.state.save().unwrap()});
+
+        Python::try_attach(|_| self.state.save().unwrap());
     }
 }

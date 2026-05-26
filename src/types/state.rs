@@ -1,13 +1,15 @@
-use std::{fs, path::PathBuf};
+use std::{fs, os::unix::fs::MetadataExt, path::PathBuf};
 
-use anyhow::Error;
+use anyhow::{Error, anyhow};
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
+use serde_json::to_string_pretty;
 
 use crate::{
     PReaderConfig, PReaderStateManager,
     exceptions::PReaderStateError,
     types::{checksum::ChecksumBody, file::FileMetadata, time::Timestamps},
+    utils::fingerprint,
 };
 
 const TMP_EXTENSION: &str = "tmp";
@@ -97,7 +99,7 @@ impl PReaderState {
             fs::create_dir_all(parent)?;
         }
 
-        let serialized = serde_json::to_string_pretty(self).map_err(PReaderStateError::from_serde)?;
+        let serialized = to_string_pretty(self).map_err(PReaderStateError::from_serde)?;
         let tmp = path.with_extension(TMP_EXTENSION);
 
         fs::write(&tmp, &serialized)?;
@@ -108,35 +110,44 @@ impl PReaderState {
         Ok(())
     }
 
-    // pub fn verify_file(&self, path: PathBuf) -> PyResult<()> {
-    //     let metadata = fs::metadata(&path).map_err(|e| PyIOError::new_err(e.to_string()))?;
+    pub fn verify(&self) -> PyResult<()> {
+        let computed = self.checksum();
+        let metadata = fs::metadata(&self.file.path)?;
+        let current_mtime = metadata.mtime();
+        let current_fingerprint = fingerprint(&self.file.path)?;
 
-    //     if self.file.size != metadata.len() {
-    //         return Err(PReaderStateError::from_anyhow(Error::msg(format!(
-    //             "size mismatch: expected {}, got {}",
-    //             self.file.size,
-    //             metadata.len()
-    //         ))));
-    //     }
+        if computed != self.checksum {
+            return Err(PReaderStateError::from_anyhow(anyhow!(
+                "state checksum mismatch (saved: {}, computed: {})",
+                self.checksum,
+                computed
+            )));
+        }
 
-    //     use std::os::unix::fs::MetadataExt;
-    //     let current_mtime = metadata.mtime();
-    //     if self.file.mtime != current_mtime {
-    //         return Err(PReaderStateError::from_anyhow(Error::msg(format!(
-    //             "mtime mismatch: expected {}, got {}",
-    //             self.file.mtime, current_mtime
-    //         ))));
-    //     }
+        if self.file.size != metadata.len() {
+            return Err(PReaderStateError::from_anyhow(anyhow!(
+                "file size mismatch (saved: {}, current: {})",
+                self.file.size,
+                metadata.len(),
+            )));
+        }
 
-    //     let current_fingerprint =
-    //         fingerprint(&path).map_err(|e| PyIOError::new_err(e.to_string()))?;
-    //     if self.file.fingerprint != current_fingerprint {
-    //         return Err(PReaderStateError::from_anyhow(Error::msg(format!(
-    //             "fingerprint mismatch: expected {}, got {}",
-    //             self.file.fingerprint, current_fingerprint
-    //         ))));
-    //     }
+        if self.file.mtime != current_mtime {
+            return Err(PReaderStateError::from_anyhow(anyhow!(
+                "file mtime mismatch (saved: {}, current: {})",
+                self.file.mtime,
+                current_mtime,
+            )));
+        }
 
-    //     Ok(())
-    // }
+        if self.file.fingerprint != current_fingerprint {
+            return Err(PReaderStateError::from_anyhow(anyhow!(
+                "file fingerprint mismatch (saved: {}, current: {})",
+                self.file.fingerprint,
+                current_fingerprint,
+            )));
+        }
+
+        Ok(())
+    }
 }

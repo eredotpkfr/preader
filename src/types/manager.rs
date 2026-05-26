@@ -52,7 +52,13 @@ impl PReaderStateManager {
         }
 
         let content = fs::read_to_string(&path)?;
-        let state: PReaderState = serde_json::from_str(&content)?;
+        let mut state: PReaderState = serde_json::from_str(&content)?;
+
+        state.manager = self.clone();
+
+        if self.config.verify_state {
+            state.verify()?;
+        }
 
         Ok(state)
     }
