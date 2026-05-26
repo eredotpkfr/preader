@@ -2,6 +2,7 @@ use std::{fs, path::PathBuf};
 
 use anyhow::{Error, anyhow};
 use pyo3::prelude::*;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::{
@@ -9,30 +10,42 @@ use crate::{
     types::config::{PReaderConfig, PReaderStateManagerConfig},
 };
 
-#[pyclass]
+#[pyclass(from_py_object)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct PReaderStateManager {
     pub config: PReaderStateManagerConfig,
+    pub last_saved_position: u64,
+}
+
+impl Default for PReaderStateManager {
+    fn default() -> Self {
+        Self {
+            config: PReaderStateManagerConfig::default(),
+            last_saved_position: 0,
+        }
+    }
 }
 
 impl From<PReaderConfig> for PReaderStateManager {
     fn from(config: PReaderConfig) -> Self {
         Self {
             config: config.into(),
+            last_saved_position: 0,
         }
     }
 }
 
 impl PReaderStateManager {
-    pub(crate) fn name(&self, path: &PathBuf) -> String {
-        hex::encode(&Sha256::digest(path.as_os_str().as_encoded_bytes()))
+    pub(crate) fn name(&self, file: &PathBuf) -> String {
+        hex::encode(&Sha256::digest(file.as_os_str().as_encoded_bytes()))
     }
 
     pub(crate) fn path(&self, name: String) -> PathBuf {
         self.config.state_dir.join(name)
     }
 
-    pub(crate) fn load(&self, name: String) -> Result<PReaderState, Error> {
-        let path = self.path(name);
+    pub(crate) fn load(&self, file: &PathBuf) -> Result<PReaderState, Error> {
+        let path = self.path(self.name(file));
 
         if !path.exists() {
             return Err(anyhow!("state not found"));
@@ -41,12 +54,6 @@ impl PReaderStateManager {
         let content = fs::read_to_string(&path)?;
         let state: PReaderState = serde_json::from_str(&content)?;
 
-        // if verify {
-        //     let computed = state.compute_checksum();
-        //     if computed != state.checksum {
-        //         return Err(PyValueError::new_err("state not found"));
-        //     }
-        // }
         Ok(state)
     }
 }

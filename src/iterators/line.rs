@@ -23,13 +23,13 @@ impl PReaderIterator for PReaderLineIterator {
         &self.config
     }
 
-    fn state(&self) -> PReaderState {
-        self.state.clone()
+    fn state(&mut self) -> &mut PReaderState {
+        &mut self.state
     }
 }
 
 impl PReaderLineIterator {
-    pub(crate) fn new(config: PReaderIteratorConfig, state: PReaderState) -> PyResult<Self> {
+    pub(crate) fn new(config: PReaderIteratorConfig, mut state: PReaderState) -> PyResult<Self> {
         let file = File::open(state.file.path.clone())?;
         let mut reader = BufReader::with_capacity(config.buffer_capacity, file);
         let buffer = String::new();
@@ -37,6 +37,8 @@ impl PReaderLineIterator {
         if state.position > 0 {
             reader.seek(SeekFrom::Start(state.position))?;
         }
+
+        state.manager.last_saved_position = state.position;
 
         Ok(Self {
             config,
@@ -78,6 +80,28 @@ impl PReaderLineIterator {
 
         slf.state().advance(read_count);
 
+        if slf.config.auto_save_state {
+            let delta = slf.state.position - slf.state.manager.last_saved_position;
+
+            if delta >= slf.config.auto_save_state_bytes {
+                slf.state().save()?;
+            }
+        }
+
         Ok(Some(value))
+    }
+}
+
+impl Drop for PReaderLineIterator {
+    fn drop(&mut self) {
+        if !self.config.auto_save_state {
+            return;
+        }
+
+        if self.state.position <= self.state.manager.last_saved_position {
+            return;
+        }
+
+        Python::try_attach(|_| { self.state.save().unwrap() });
     }
 }

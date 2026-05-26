@@ -16,7 +16,7 @@ pub const DEFAULT_CHUNK_SIZE: usize = 1024;
 pub struct PReader {
     #[pyo3(get)]
     pub config: PReaderConfig,
-    pub manager: PReaderStateManager,
+    #[pyo3(get)]
     pub file: PathBuf,
 }
 
@@ -27,7 +27,6 @@ impl PReader {
     fn new(file: PathBuf, config: PReaderConfig) -> Self {
         Self {
             config: config.clone(),
-            manager: config.into(),
             file: file.canonicalize().unwrap(),
         }
     }
@@ -51,11 +50,9 @@ impl PReader {
         chunk_size: usize,
     ) -> PyResult<Py<PReaderChunkIterator>> {
         let state = self.resolve_state(state)?;
+        let config = (&self.config).into();
 
-        Py::new(
-            py,
-            PReaderChunkIterator::new((&self.config).into(), state, chunk_size)?,
-        )
+        Py::new(py, PReaderChunkIterator::new(config, state, chunk_size)?)
     }
 
     #[pyo3(signature = (*, state=None))]
@@ -82,11 +79,9 @@ impl PReader {
             ));
         };
         let state = self.resolve_state(state)?;
+        let config = (&self.config).into();
 
-        Py::new(
-            py,
-            PReaderDelimiterIterator::new((&self.config).into(), state, delimiter)?,
-        )
+        Py::new(py, PReaderDelimiterIterator::new(config, state, delimiter)?)
     }
 }
 
@@ -97,11 +92,13 @@ impl PReader {
         }
 
         if self.config.auto_load_state {
-            if let Ok(state) = self.manager.load(self.manager.name(&self.file)) {
+            if let Ok(state) = PReaderStateManager::load(&self.config.clone().into(), &self.file) {
                 return Ok(state);
             }
         }
 
-        Ok(PReaderState::try_from(&self.file).map_err(PReaderStateError::from_anyhow)?)
+        let state = PReaderState::try_from((self.config.clone(), &self.file));
+
+        Ok(state.map_err(PReaderStateError::from_anyhow)?)
     }
 }

@@ -4,6 +4,7 @@ use crate::types::config::reader::PReaderConfig;
 pub struct PReaderIteratorConfig {
     pub buffer_capacity: usize,
     pub auto_save_state: bool,
+    pub auto_save_state_bytes: u64,
     pub auto_load_state: bool,
 }
 
@@ -12,6 +13,7 @@ impl From<&PReaderConfig> for PReaderIteratorConfig {
         Self {
             buffer_capacity: config.buffer_capacity,
             auto_save_state: config.auto_save_state,
+            auto_save_state_bytes: config.auto_save_state_bytes,
             auto_load_state: config.auto_load_state,
         }
     }

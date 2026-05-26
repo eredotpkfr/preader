@@ -23,15 +23,15 @@ impl PReaderIterator for PReaderChunkIterator {
         &self.config
     }
 
-    fn state(&self) -> PReaderState {
-        self.state.clone()
+    fn state(&mut self) -> &mut PReaderState {
+        &mut self.state
     }
 }
 
 impl PReaderChunkIterator {
     pub(crate) fn new(
         config: PReaderIteratorConfig,
-        state: PReaderState,
+        mut state: PReaderState,
         chunk_size: usize,
     ) -> PyResult<Self> {
         let file = File::open(state.file.path.clone())?;
@@ -40,6 +40,8 @@ impl PReaderChunkIterator {
         if state.position > 0 {
             reader.seek(SeekFrom::Start(state.position))?;
         }
+
+        state.manager.last_saved_position = state.position;
 
         Ok(Self {
             config,
@@ -74,6 +76,28 @@ impl PReaderChunkIterator {
 
         slf.state().advance(consumed);
 
+        if slf.config.auto_save_state {
+            let delta = slf.state.position - slf.state.manager.last_saved_position;
+
+            if delta >= slf.config.auto_save_state_bytes {
+                slf.state().save()?;
+            }
+        }
+
         Ok(Some(value))
+    }
+}
+
+impl Drop for PReaderChunkIterator {
+    fn drop(&mut self) {
+        if !self.config.auto_save_state {
+            return;
+        }
+
+        if self.state.position <= self.state.manager.last_saved_position {
+            return;
+        }
+
+        Python::try_attach(|_| { self.state.save().unwrap() });
     }
 }
