@@ -4,7 +4,7 @@ use anyhow::Error;
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::{PReaderConfig, utils::fingerprint};
+use crate::utils::fingerprint;
 
 #[pyclass(from_py_object)]
 #[derive(Clone, Serialize, Deserialize)]
@@ -19,10 +19,10 @@ pub struct FileMetadata {
     pub fingerprint: String,
 }
 
-impl TryFrom<(PReaderConfig, &PathBuf)> for FileMetadata {
+impl TryFrom<&PathBuf> for FileMetadata {
     type Error = Error;
 
-    fn try_from((_, path): (PReaderConfig, &PathBuf)) -> Result<Self, Self::Error> {
+    fn try_from(path: &PathBuf) -> Result<Self, Self::Error> {
         let metadata = fs::metadata(path)?;
 
         Ok(Self {

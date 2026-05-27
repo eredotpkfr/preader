@@ -64,6 +64,14 @@ impl PReaderDelimiterIterator {
 
 #[pymethods]
 impl PReaderDelimiterIterator {
+    fn state(&self) -> PReaderState {
+        self.state.clone()
+    }
+
+    fn percent(&self) -> f64 {
+        self.state.percent()
+    }
+
     fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
@@ -102,6 +110,8 @@ impl Drop for PReaderDelimiterIterator {
             return;
         }
 
-        Python::try_attach(|_| self.state.save().unwrap());
+        Python::try_attach(|_| {
+            self.state.save().ok();
+        });
     }
 }

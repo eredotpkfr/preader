@@ -9,6 +9,7 @@ use crate::{
 
 #[derive(Serialize)]
 pub(crate) struct ChecksumBody<'a> {
+    pub name: &'a str,
     pub file: &'a FileMetadata,
     pub position: u64,
     pub timestamps: &'a Timestamps,
@@ -17,6 +18,7 @@ pub(crate) struct ChecksumBody<'a> {
 impl<'a> From<&'a PReaderState> for ChecksumBody<'a> {
     fn from(state: &'a PReaderState) -> Self {
         Self {
+            name: &state.name,
             file: &state.file,
             position: state.position,
             timestamps: &state.timestamps,

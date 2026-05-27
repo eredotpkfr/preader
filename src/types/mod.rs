@@ -4,7 +4,6 @@ pub mod file;
 pub mod item;
 pub mod manager;
 pub mod state;
-pub(crate) mod state_io;
 pub mod time;
 
 pub use file::FileMetadata;

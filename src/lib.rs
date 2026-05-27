@@ -16,7 +16,6 @@ pub use types::{
 mod preader {
     #[pymodule_export]
     use super::{
-        FileMetadata, PReader, PReaderConfig, PReaderState, PReaderStateError, PReaderStateManager,
-        Timestamps,
+        FileMetadata, PReader, PReaderConfig, PReaderState, PReaderStateError, Timestamps,
     };
 }

@@ -1,4 +1,9 @@
-use std::{fs, os::unix::fs::MetadataExt, path::PathBuf};
+use std::{
+    fs,
+    ops::{Deref, DerefMut},
+    os::unix::fs::MetadataExt,
+    path::PathBuf,
+};
 
 use anyhow::{Error, anyhow};
 use pyo3::prelude::*;
@@ -12,60 +17,72 @@ use crate::{
     utils::fingerprint,
 };
 
-const TMP_EXTENSION: &str = "tmp";
-
-#[pyclass(from_py_object)]
 #[derive(Clone, Serialize, Deserialize)]
-pub struct PReaderState {
-    #[serde(skip)]
-    pub manager: PReaderStateManager,
-    #[pyo3(get)]
+pub struct PReaderStateData {
+    pub name: String,
     pub file: FileMetadata,
-    #[pyo3(get)]
     pub position: u64,
-    #[pyo3(get)]
     pub timestamps: Timestamps,
-    #[pyo3(get)]
     #[serde(rename = "_checksum")]
     pub checksum: String,
 }
 
-impl TryFrom<(PReaderConfig, FileMetadata)> for PReaderState {
-    type Error = Error;
+#[pyclass(from_py_object)]
+#[derive(Clone)]
+pub struct PReaderState {
+    pub data: PReaderStateData,
+    pub manager: PReaderStateManager,
+}
 
-    fn try_from((config, file): (PReaderConfig, FileMetadata)) -> Result<Self, Self::Error> {
+impl Deref for PReaderState {
+    type Target = PReaderStateData;
+
+    fn deref(&self) -> &Self::Target {
+        &self.data
+    }
+}
+
+impl DerefMut for PReaderState {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.data
+    }
+}
+
+impl From<(PReaderStateData, PReaderStateManager)> for PReaderState {
+    fn from((data, manager): (PReaderStateData, PReaderStateManager)) -> Self {
+        Self { data, manager }
+    }
+}
+
+impl PReaderState {
+    pub(crate) fn new(
+        config: PReaderConfig,
+        path: &PathBuf,
+        name: Option<String>,
+    ) -> Result<Self, Error> {
+        let file = FileMetadata::try_from(path)?;
         let position = 0;
         let timestamps = Timestamps::now();
+        let manager = PReaderStateManager::from(config);
+        let name = name.unwrap_or(manager.name(path));
         let checksum = ChecksumBody {
+            name: &name,
             file: &file,
             position,
             timestamps: &timestamps,
         }
         .compute()?;
-        let manager = PReaderStateManager::from(config);
-
-        Ok(Self {
-            manager,
+        let data = PReaderStateData {
+            name,
             file,
             position,
             timestamps,
             checksum,
-        })
+        };
+
+        Ok(Self { data, manager })
     }
-}
 
-impl TryFrom<(PReaderConfig, &PathBuf)> for PReaderState {
-    type Error = Error;
-
-    fn try_from(tuple: (PReaderConfig, &PathBuf)) -> Result<Self, Self::Error> {
-        Ok(Self::try_from((
-            tuple.0.clone(),
-            FileMetadata::try_from(tuple)?,
-        ))?)
-    }
-}
-
-impl PReaderState {
     pub(crate) fn advance(&mut self, bytes: u64) {
         self.position += bytes
     }
@@ -78,14 +95,35 @@ impl PReaderState {
     pub(crate) fn body(&self) -> ChecksumBody<'_> {
         self.into()
     }
-
-    pub(crate) fn checksum(&self) -> String {
-        self.body().compute().unwrap()
-    }
 }
 
 #[pymethods]
 impl PReaderState {
+    #[getter]
+    fn name(&self) -> String {
+        self.name.clone()
+    }
+
+    #[getter]
+    fn file(&self) -> FileMetadata {
+        self.file.clone()
+    }
+
+    #[getter]
+    fn position(&self) -> u64 {
+        self.position
+    }
+
+    #[getter]
+    fn timestamps(&self) -> Timestamps {
+        self.timestamps.clone()
+    }
+
+    #[getter]
+    fn checksum(&self) -> String {
+        self.body().compute().unwrap()
+    }
+
     pub fn percent(&self) -> f64 {
         self.position as f64 * 100.0 / self.file.size.max(1) as f64
     }
@@ -93,14 +131,14 @@ impl PReaderState {
     pub fn save(&mut self) -> PyResult<()> {
         self.refresh();
 
-        let path = self.manager.path(self.manager.name(&self.file.path));
+        let path = self.manager.path(self.name.clone());
+        let tmp = self.manager.tmp(self.name.clone());
 
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
 
-        let serialized = to_string_pretty(self).map_err(PReaderStateError::from_serde)?;
-        let tmp = path.with_extension(TMP_EXTENSION);
+        let serialized = to_string_pretty(&self.data).map_err(PReaderStateError::from_serde)?;
 
         fs::write(&tmp, &serialized)?;
         fs::rename(&tmp, &path)?;

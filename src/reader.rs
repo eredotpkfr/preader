@@ -16,61 +16,69 @@ pub const DEFAULT_CHUNK_SIZE: usize = 1024;
 pub struct PReader {
     #[pyo3(get)]
     pub config: PReaderConfig,
-    #[pyo3(get)]
-    pub file: PathBuf,
 }
 
 #[pymethods]
 impl PReader {
     #[new]
-    #[pyo3(signature = (file, *, config=PReaderConfig::default()))]
-    fn new(file: PathBuf, config: PReaderConfig) -> Self {
+    #[pyo3(signature = (*, config=PReaderConfig::default()))]
+    fn new(config: PReaderConfig) -> Self {
         Self {
             config: config.clone(),
-            file: file.canonicalize().unwrap(),
         }
     }
 
-    #[pyo3(signature = (*, state=None))]
+    #[pyo3(signature = (file, *, state=None, state_name=None))]
     fn bytes(
         &self,
         py: Python<'_>,
+        file: PathBuf,
         state: Option<PReaderState>,
+        state_name: Option<String>,
     ) -> PyResult<Py<PReaderByteIterator>> {
-        let state = self.resolve_state(state)?;
+        let file = file.canonicalize()?;
+        let state = self.resolve_state(&file, state, state_name)?;
 
         Py::new(py, PReaderByteIterator::new((&self.config).into(), state)?)
     }
 
-    #[pyo3(signature = (*, state=None, chunk_size=DEFAULT_CHUNK_SIZE))]
+    #[pyo3(signature = (file, *, state=None, state_name=None, chunk_size=DEFAULT_CHUNK_SIZE))]
     fn chunks(
         &self,
         py: Python<'_>,
+        file: PathBuf,
         state: Option<PReaderState>,
+        state_name: Option<String>,
         chunk_size: usize,
     ) -> PyResult<Py<PReaderChunkIterator>> {
-        let state = self.resolve_state(state)?;
+        let file = file.canonicalize()?;
+        let state = self.resolve_state(&file, state, state_name)?;
         let config = (&self.config).into();
 
         Py::new(py, PReaderChunkIterator::new(config, state, chunk_size)?)
     }
 
-    #[pyo3(signature = (*, state=None))]
+    #[pyo3(signature = (file, *, state=None, state_name=None))]
     fn lines(
         &self,
         py: Python<'_>,
+        file: PathBuf,
         state: Option<PReaderState>,
+        state_name: Option<String>,
     ) -> PyResult<Py<PReaderLineIterator>> {
-        let state = self.resolve_state(state)?;
+        let file = file.canonicalize()?;
+        let state = self.resolve_state(&file, state, state_name)?;
 
         Py::new(py, PReaderLineIterator::new((&self.config).into(), state)?)
     }
 
-    #[pyo3(signature = (*, state=None, delimiter))]
+    #[pyo3(signature = (file, *, state=None, state_name=None, delimiter))]
     fn delimiter(
         &self,
         py: Python<'_>,
+        file: PathBuf,
         state: Option<PReaderState>,
+        state_name: Option<String>,
         delimiter: char,
     ) -> PyResult<Py<PReaderDelimiterIterator>> {
         let Ok(delimiter) = u8::try_from(delimiter) else {
@@ -78,7 +86,8 @@ impl PReader {
                 "delimiter must fit in a single byte (0-255)",
             ));
         };
-        let state = self.resolve_state(state)?;
+        let file = file.canonicalize()?;
+        let state = self.resolve_state(&file, state, state_name)?;
         let config = (&self.config).into();
 
         Py::new(py, PReaderDelimiterIterator::new(config, state, delimiter)?)
@@ -86,7 +95,12 @@ impl PReader {
 }
 
 impl PReader {
-    fn resolve_state(&self, explicit: Option<PReaderState>) -> PyResult<PReaderState> {
+    fn resolve_state(
+        &self,
+        file: &PathBuf,
+        explicit: Option<PReaderState>,
+        state_name: Option<String>,
+    ) -> PyResult<PReaderState> {
         if let Some(state) = explicit {
             if self.config.verify_state {
                 state.verify()?;
@@ -94,14 +108,17 @@ impl PReader {
             return Ok(state);
         }
 
+        let manager = PReaderStateManager::from(self.config.clone());
+        let name = state_name.unwrap_or(manager.name(file));
+
         if self.config.auto_load_state {
-            if let Ok(state) = PReaderStateManager::load(&self.config.clone().into(), &self.file) {
+            if let Ok(state) = manager.load(&name) {
                 return Ok(state);
             }
         }
 
-        let state = PReaderState::try_from((self.config.clone(), &self.file));
+        let state = PReaderState::new(self.config.clone(), file, Some(name));
 
-        Ok(state.map_err(PReaderStateError::from_anyhow)?)
+        state.map_err(PReaderStateError::from_anyhow)
     }
 }
