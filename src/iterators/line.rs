@@ -86,13 +86,13 @@ impl PReaderLineIterator {
 
         let value = PyString::new(py, &line).unbind().into_any();
 
-        slf.state().advance(read_count);
+        slf.state.advance(read_count);
 
         if slf.config.auto_save_state {
             let delta = slf.state.position - slf.state.manager.last_saved_position;
 
             if delta >= slf.config.auto_save_state_bytes {
-                slf.state().save()?;
+                slf.state.save()?;
             }
         }
 

@@ -74,13 +74,13 @@ impl PReaderByteIterator {
 
         let value = PyBytes::new(py, &[byte]).unbind();
 
-        slf.state().advance(1);
+        slf.state.advance(1);
 
         if slf.config.auto_save_state {
             let delta = slf.state.position - slf.state.manager.last_saved_position;
 
             if delta >= slf.config.auto_save_state_bytes {
-                slf.state().save()?;
+                slf.state.save()?;
             }
         }
 

@@ -86,13 +86,13 @@ impl PReaderDelimiterIterator {
         let consumed = segment.len() as u64;
         let value = PyBytes::new(py, segment).unbind().into_any();
 
-        slf.state().advance(consumed);
+        slf.state.advance(consumed);
 
         if slf.config.auto_save_state {
             let delta = slf.state.position - slf.state.manager.last_saved_position;
 
             if delta >= slf.config.auto_save_state_bytes {
-                slf.state().save()?;
+                slf.state.save()?;
             }
         }
 
