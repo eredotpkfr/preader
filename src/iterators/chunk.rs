@@ -34,7 +34,7 @@ impl PReaderChunkIterator {
         mut state: PReaderState,
         chunk_size: usize,
     ) -> PyResult<Self> {
-        let file = File::open(state.file.path.clone())?;
+        let file = File::open(&state.file.path)?;
         let mut reader = BufReader::with_capacity(config.buffer_capacity, file);
         let buffer = vec![0u8; chunk_size];
 

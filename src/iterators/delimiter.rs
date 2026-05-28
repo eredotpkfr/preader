@@ -35,7 +35,7 @@ impl PReaderDelimiterIterator {
         mut state: PReaderState,
         delimiter: u8,
     ) -> PyResult<Self> {
-        let file = File::open(state.file.path.clone())?;
+        let file = File::open(&state.file.path)?;
         let mut reader = BufReader::with_capacity(config.buffer_capacity, file);
         let buffer = Vec::new();
 

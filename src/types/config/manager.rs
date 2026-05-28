@@ -22,10 +22,10 @@ impl Default for PReaderStateManagerConfig {
     }
 }
 
-impl From<PReaderConfig> for PReaderStateManagerConfig {
-    fn from(config: PReaderConfig) -> Self {
+impl From<&PReaderConfig> for PReaderStateManagerConfig {
+    fn from(config: &PReaderConfig) -> Self {
         Self {
-            state_dir: config.state_dir,
+            state_dir: config.state_dir.clone(),
             verify_state: config.verify_state,
         }
     }

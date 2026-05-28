@@ -23,9 +23,7 @@ impl PReader {
     #[new]
     #[pyo3(signature = (*, config=PReaderConfig::default()))]
     fn new(config: PReaderConfig) -> Self {
-        Self {
-            config: config.clone(),
-        }
+        Self { config }
     }
 
     #[pyo3(signature = (file, *, state=None, state_name=None))]
@@ -108,8 +106,8 @@ impl PReader {
             return Ok(state);
         }
 
-        let manager = PReaderStateManager::from(self.config.clone());
-        let name = state_name.unwrap_or(manager.name(file));
+        let manager = PReaderStateManager::from(&self.config);
+        let name = state_name.unwrap_or_else(|| manager.name(file));
 
         if self.config.auto_load_state {
             if let Ok(state) = manager.load(&name) {
@@ -117,7 +115,7 @@ impl PReader {
             }
         }
 
-        let state = PReaderState::new(self.config.clone(), file, Some(name));
+        let state = PReaderState::new(&self.config, file, Some(name));
 
         state.map_err(PReaderStateError::from_anyhow)
     }

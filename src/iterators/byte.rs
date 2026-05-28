@@ -30,7 +30,7 @@ impl PReaderIterator for PReaderByteIterator {
 
 impl PReaderByteIterator {
     pub(crate) fn new(config: PReaderIteratorConfig, mut state: PReaderState) -> PyResult<Self> {
-        let file = File::open(state.file.path.clone())?;
+        let file = File::open(&state.file.path)?;
         let mut reader = BufReader::with_capacity(config.buffer_capacity, file);
 
         if state.position > 0 {

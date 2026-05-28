@@ -56,7 +56,7 @@ impl From<(PReaderStateData, PReaderStateManager)> for PReaderState {
 
 impl PReaderState {
     pub(crate) fn new(
-        config: PReaderConfig,
+        config: &PReaderConfig,
         path: &PathBuf,
         name: Option<String>,
     ) -> Result<Self, Error> {
@@ -64,7 +64,7 @@ impl PReaderState {
         let position = 0;
         let timestamps = Timestamps::now();
         let manager = PReaderStateManager::from(config);
-        let name = name.unwrap_or(manager.name(path));
+        let name = name.unwrap_or_else(|| manager.name(path));
         let checksum = ChecksumBody {
             name: &name,
             file: &file,
@@ -128,11 +128,11 @@ impl PReaderState {
         self.position as f64 * 100.0 / self.file.size.max(1) as f64
     }
 
-    pub fn save(&mut self) -> PyResult<()> {
+    pub fn save(&mut self) -> PyResult<PathBuf> {
         self.refresh();
 
-        let path = self.manager.path(self.name.clone());
-        let tmp = self.manager.tmp(self.name.clone());
+        let path = self.manager.path(&self.name);
+        let tmp = self.manager.tmp(&self.name);
 
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
@@ -145,7 +145,7 @@ impl PReaderState {
 
         self.manager.last_saved_position = self.position;
 
-        Ok(())
+        Ok(path)
     }
 
     pub fn verify(&self) -> PyResult<()> {

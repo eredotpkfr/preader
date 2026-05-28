@@ -31,8 +31,8 @@ impl Default for PReaderStateManager {
     }
 }
 
-impl From<PReaderConfig> for PReaderStateManager {
-    fn from(config: PReaderConfig) -> Self {
+impl From<&PReaderConfig> for PReaderStateManager {
+    fn from(config: &PReaderConfig) -> Self {
         Self {
             config: config.into(),
             last_saved_position: 0,
@@ -45,11 +45,11 @@ impl PReaderStateManager {
         hex::encode(&Sha256::digest(file.as_os_str().as_encoded_bytes()))
     }
 
-    pub(crate) fn path(&self, name: String) -> PathBuf {
+    pub(crate) fn path(&self, name: &str) -> PathBuf {
         self.config.state_dir.join(name).with_added_extension(STATE_FILE_SUFFIX)
     }
 
-    pub(crate) fn tmp(&self, name: String) -> PathBuf {
+    pub(crate) fn tmp(&self, name: &str) -> PathBuf {
         self.config
             .state_dir
             .join(name)
@@ -59,7 +59,7 @@ impl PReaderStateManager {
     }
 
     pub(crate) fn load(&self, name: &str) -> Result<PReaderState, Error> {
-        let path = self.path(name.to_string());
+        let path = self.path(name);
 
         if !path.exists() {
             return Err(anyhow!("state not found: {name}"));
