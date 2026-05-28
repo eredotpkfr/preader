@@ -79,7 +79,7 @@ impl PReaderByteIterator {
         let threshold = slf.config.auto_save_state_bytes;
 
         slf.state.advance(1);
-        (saver)(&mut slf.state.clone(), threshold)?;
+        (saver)(&mut slf.state, threshold)?;
 
         Ok(Some(value.into_any()))
     }
@@ -88,7 +88,9 @@ impl PReaderByteIterator {
 impl Drop for PReaderByteIterator {
     fn drop(&mut self) {
         Python::try_attach(|_| {
-            (self.saver())(&mut self.state, 0).unwrap();
+            if let Err(e) = (self.saver())(&mut self.state, 0) {
+                eprintln!("preader: save failed: {e}");
+            }
         });
     }
 }

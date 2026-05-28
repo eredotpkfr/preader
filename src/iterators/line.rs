@@ -100,7 +100,9 @@ impl PReaderLineIterator {
 impl Drop for PReaderLineIterator {
     fn drop(&mut self) {
         Python::try_attach(|_| {
-            (self.saver())(&mut self.state, 0).unwrap();
+            if let Err(e) = (self.saver())(&mut self.state, 0) {
+                eprintln!("preader: save failed: {e}");
+            }
         });
     }
 }
