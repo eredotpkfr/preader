@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::{BufReader, Read, Seek, SeekFrom},
+    io::{BufReader, Read, Result, Seek, SeekFrom},
 };
 
 use pyo3::{prelude::*, types::PyBytes};
@@ -36,6 +36,7 @@ impl PReaderChunkIterator {
     ) -> PyResult<Self> {
         let file = File::open(state.file.path.clone())?;
         let mut reader = BufReader::with_capacity(config.buffer_capacity, file);
+        let buffer = vec![0u8; chunk_size];
 
         if state.position > 0 {
             reader.seek(SeekFrom::Start(state.position))?;
@@ -47,11 +48,11 @@ impl PReaderChunkIterator {
             config,
             state,
             reader,
-            buffer: vec![0u8; chunk_size],
+            buffer,
         })
     }
 
-    fn read_chunk(&mut self) -> std::io::Result<Option<&[u8]>> {
+    fn read_chunk(&mut self) -> Result<Option<&[u8]>> {
         let read_count = self.reader.read(&mut self.buffer)?;
 
         Ok((read_count > 0).then_some(&self.buffer[..read_count]))

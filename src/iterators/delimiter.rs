@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::{BufRead, BufReader, Seek, SeekFrom},
+    io::{BufRead, BufReader, Result, Seek, SeekFrom},
 };
 
 use pyo3::{prelude::*, types::PyBytes};
@@ -54,7 +54,7 @@ impl PReaderDelimiterIterator {
         })
     }
 
-    fn read_segment(&mut self) -> std::io::Result<Option<&[u8]>> {
+    fn read_segment(&mut self) -> Result<Option<&[u8]>> {
         self.buffer.clear();
         self.reader.read_until(self.delimiter, &mut self.buffer)?;
 

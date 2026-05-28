@@ -14,9 +14,9 @@ pub fn default_state_dir() -> PathBuf {
 }
 
 pub fn fingerprint(path: &Path) -> Result<String> {
-    let mut file = File::open(path)?;
-    let mut buffer = [0u8; FINGERPRINT_BYTES];
-    let read_count = file.read(&mut buffer)?;
+    let mut buffer = Vec::with_capacity(FINGERPRINT_BYTES);
 
-    Ok(hex::encode(Sha256::digest(&buffer[..read_count])))
+    File::open(path)?.take(FINGERPRINT_BYTES as u64).read_to_end(&mut buffer)?;
+
+    Ok(hex::encode(Sha256::digest(&buffer)))
 }

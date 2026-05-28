@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::{BufRead, BufReader, Seek, SeekFrom},
+    io::{BufRead, BufReader, Result, Seek, SeekFrom},
 };
 
 use pyo3::{prelude::*, types::PyString};
@@ -48,7 +48,7 @@ impl PReaderLineIterator {
         })
     }
 
-    fn read_line(&mut self) -> std::io::Result<Option<(String, u64)>> {
+    fn read_line(&mut self) -> Result<Option<(String, u64)>> {
         self.buffer.clear();
 
         let read_count = self.reader.read_line(&mut self.buffer)?;
