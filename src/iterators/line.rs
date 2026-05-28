@@ -79,22 +79,19 @@ impl PReaderLineIterator {
 
     fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<PReaderItem>> {
         let py = slf.py();
+        let saver = slf.saver();
 
         let Some((line, read_count)) = slf.read_line()? else {
+            (saver)(&mut slf.state, 0)?;
+
             return Ok(None);
         };
 
         let value = PyString::new(py, &line).unbind().into_any();
+        let threshold = slf.config.auto_save_state_bytes;
 
         slf.state.advance(read_count);
-
-        if slf.config.auto_save_state {
-            let delta = slf.state.position - slf.state.manager.last_saved_position;
-
-            if delta >= slf.config.auto_save_state_bytes {
-                slf.state.save()?;
-            }
-        }
+        (saver)(&mut slf.state, threshold)?;
 
         Ok(Some(value))
     }
@@ -102,16 +99,8 @@ impl PReaderLineIterator {
 
 impl Drop for PReaderLineIterator {
     fn drop(&mut self) {
-        if !self.config.auto_save_state {
-            return;
-        }
-
-        if self.state.position <= self.state.manager.last_saved_position {
-            return;
-        }
-
         Python::try_attach(|_| {
-            self.state.save().ok();
+            (self.saver())(&mut self.state, 0).unwrap();
         });
     }
 }

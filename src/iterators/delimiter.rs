@@ -78,23 +78,20 @@ impl PReaderDelimiterIterator {
 
     fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<PReaderItem>> {
         let py = slf.py();
+        let saver = slf.saver();
 
         let Some(segment) = slf.read_segment()? else {
+            (saver)(&mut slf.state, 0)?;
+
             return Ok(None);
         };
 
         let consumed = segment.len() as u64;
         let value = PyBytes::new(py, segment).unbind().into_any();
+        let threshold = slf.config.auto_save_state_bytes;
 
         slf.state.advance(consumed);
-
-        if slf.config.auto_save_state {
-            let delta = slf.state.position - slf.state.manager.last_saved_position;
-
-            if delta >= slf.config.auto_save_state_bytes {
-                slf.state.save()?;
-            }
-        }
+        (saver)(&mut slf.state, threshold)?;
 
         Ok(Some(value))
     }
@@ -102,16 +99,8 @@ impl PReaderDelimiterIterator {
 
 impl Drop for PReaderDelimiterIterator {
     fn drop(&mut self) {
-        if !self.config.auto_save_state {
-            return;
-        }
-
-        if self.state.position <= self.state.manager.last_saved_position {
-            return;
-        }
-
         Python::try_attach(|_| {
-            self.state.save().ok();
+            (self.saver())(&mut self.state, 0).unwrap();
         });
     }
 }

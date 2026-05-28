@@ -67,22 +67,19 @@ impl PReaderByteIterator {
 
     fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<PReaderItem>> {
         let py = slf.py();
+        let saver = slf.saver();
 
         let Some(byte) = slf.read_byte()? else {
+            (saver)(&mut slf.state, 0)?;
+
             return Ok(None);
         };
 
         let value = PyBytes::new(py, &[byte]).unbind();
+        let threshold = slf.config.auto_save_state_bytes;
 
         slf.state.advance(1);
-
-        if slf.config.auto_save_state {
-            let delta = slf.state.position - slf.state.manager.last_saved_position;
-
-            if delta >= slf.config.auto_save_state_bytes {
-                slf.state.save()?;
-            }
-        }
+        (saver)(&mut slf.state.clone(), threshold)?;
 
         Ok(Some(value.into_any()))
     }
@@ -90,16 +87,8 @@ impl PReaderByteIterator {
 
 impl Drop for PReaderByteIterator {
     fn drop(&mut self) {
-        if !self.config.auto_save_state {
-            return;
-        }
-
-        if self.state.position <= self.state.manager.last_saved_position {
-            return;
-        }
-
         Python::try_attach(|_| {
-            self.state.save().ok();
+            (self.saver())(&mut self.state, 0).unwrap();
         });
     }
 }
