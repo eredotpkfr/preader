@@ -13,8 +13,8 @@ use crate::{
 #[pyclass(extends = PReaderIteratorBase)]
 pub struct PReaderDelimiterIterator {
     reader: BufReader<File>,
-    delimiter: u8,
     buffer: Vec<u8>,
+    delimiter: u8,
 }
 
 impl PReaderDelimiterIterator {

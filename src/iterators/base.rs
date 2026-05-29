@@ -51,8 +51,8 @@ impl PReaderIteratorBase {
 impl Drop for PReaderIteratorBase {
     fn drop(&mut self) {
         Python::try_attach(|_| {
-            if let Err(e) = (self.saver)(&mut self.state, 0) {
-                eprintln!("preader: save failed: {e}");
+            if let Err(err) = (self.saver)(&mut self.state, 0) {
+                eprintln!("preader: save failed: {err}");
             }
         });
     }
