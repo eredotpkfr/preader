@@ -1,16 +1,21 @@
 use pyo3::prelude::*;
 
-use crate::{PReaderState, types::config::PReaderIteratorConfig};
+use crate::{
+    PReaderState,
+    types::{config::PReaderIteratorConfig, core::AutoSaveStateFn},
+};
 
 #[pyclass(subclass)]
 pub struct PReaderIteratorBase {
     pub config: PReaderIteratorConfig,
     pub state: PReaderState,
+    pub saver: AutoSaveStateFn,
 }
 
 impl PReaderIteratorBase {
     pub(crate) fn new(config: PReaderIteratorConfig, mut state: PReaderState) -> Self {
         let threshold = config.auto_save_state_bytes;
+        let saver = config.saver();
 
         state.manager.last_saved_position = if threshold > 0 {
             (state.position / threshold) * threshold
@@ -18,17 +23,17 @@ impl PReaderIteratorBase {
             state.position
         };
 
-        Self { config, state }
+        Self { config, state, saver }
     }
 
     pub(crate) fn advance(&mut self, bytes: u64) -> PyResult<()> {
         self.state.advance(bytes);
 
-        (self.config.saver())(&mut self.state, self.config.auto_save_state_bytes)
+        (self.saver)(&mut self.state, self.config.auto_save_state_bytes)
     }
 
     pub(crate) fn finalize(&mut self) -> PyResult<()> {
-        (self.config.saver())(&mut self.state, 0)
+        (self.saver)(&mut self.state, 0)
     }
 }
 
@@ -46,7 +51,7 @@ impl PReaderIteratorBase {
 impl Drop for PReaderIteratorBase {
     fn drop(&mut self) {
         Python::try_attach(|_| {
-            if let Err(e) = (self.config.saver())(&mut self.state, 0) {
+            if let Err(e) = (self.saver)(&mut self.state, 0) {
                 eprintln!("preader: save failed: {e}");
             }
         });
