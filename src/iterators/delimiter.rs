@@ -78,7 +78,7 @@ impl PReaderDelimiterIterator {
 
     fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<PReaderItem>> {
         let py = slf.py();
-        let saver = slf.saver();
+        let saver = slf.config().saver();
 
         let Some(segment) = slf.read_segment()? else {
             (saver)(&mut slf.state, 0)?;
@@ -100,7 +100,7 @@ impl PReaderDelimiterIterator {
 impl Drop for PReaderDelimiterIterator {
     fn drop(&mut self) {
         Python::try_attach(|_| {
-            if let Err(e) = (self.saver())(&mut self.state, 0) {
+            if let Err(e) = (self.config().saver())(&mut self.state, 0) {
                 eprintln!("preader: save failed: {e}");
             }
         });

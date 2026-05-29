@@ -67,7 +67,7 @@ impl PReaderByteIterator {
 
     fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<PReaderItem>> {
         let py = slf.py();
-        let saver = slf.saver();
+        let saver = slf.config().saver();
 
         let Some(byte) = slf.read_byte()? else {
             (saver)(&mut slf.state, 0)?;
@@ -88,7 +88,7 @@ impl PReaderByteIterator {
 impl Drop for PReaderByteIterator {
     fn drop(&mut self) {
         Python::try_attach(|_| {
-            if let Err(e) = (self.saver())(&mut self.state, 0) {
+            if let Err(e) = (self.config().saver())(&mut self.state, 0) {
                 eprintln!("preader: save failed: {e}");
             }
         });

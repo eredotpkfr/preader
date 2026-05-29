@@ -75,7 +75,7 @@ impl PReaderChunkIterator {
 
     fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<PReaderItem>> {
         let py = slf.py();
-        let saver = slf.saver();
+        let saver = slf.config().saver();
 
         let Some(chunk) = slf.read_chunk()? else {
             (saver)(&mut slf.state, 0)?;
@@ -97,7 +97,7 @@ impl PReaderChunkIterator {
 impl Drop for PReaderChunkIterator {
     fn drop(&mut self) {
         Python::try_attach(|_| {
-            if let Err(e) = (self.saver())(&mut self.state, 0) {
+            if let Err(e) = (self.config().saver())(&mut self.state, 0) {
                 eprintln!("preader: save failed: {e}");
             }
         });
