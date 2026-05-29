@@ -17,6 +17,13 @@ use crate::{
     utils::fingerprint,
 };
 
+#[pyclass(from_py_object)]
+#[derive(Clone)]
+pub struct PReaderState {
+    pub data: PReaderStateData,
+    pub manager: PReaderStateManager,
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PReaderStateData {
     pub name: String,
@@ -25,13 +32,6 @@ pub struct PReaderStateData {
     pub timestamps: Timestamps,
     #[serde(rename = "_checksum")]
     pub checksum: String,
-}
-
-#[pyclass(from_py_object)]
-#[derive(Clone)]
-pub struct PReaderState {
-    pub data: PReaderStateData,
-    pub manager: PReaderStateManager,
 }
 
 impl Deref for PReaderState {
@@ -119,7 +119,6 @@ impl PReaderState {
         self.timestamps.clone()
     }
 
-    #[getter]
     fn checksum(&self) -> String {
         self.body().compute().unwrap()
     }

@@ -6,34 +6,22 @@ use std::{
 use pyo3::{prelude::*, types::PyBytes};
 
 use crate::{
-    iterators::reader::PReaderIterator,
+    iterators::base::PReaderIteratorBase,
     types::{PReaderItem, PReaderState, config::PReaderIteratorConfig},
 };
 
-#[pyclass]
+#[pyclass(extends = PReaderIteratorBase)]
 pub struct PReaderChunkIterator {
-    config: PReaderIteratorConfig,
-    state: PReaderState,
     reader: BufReader<File>,
     buffer: Vec<u8>,
-}
-
-impl PReaderIterator for PReaderChunkIterator {
-    fn config(&self) -> &PReaderIteratorConfig {
-        &self.config
-    }
-
-    fn state(&mut self) -> &mut PReaderState {
-        &mut self.state
-    }
 }
 
 impl PReaderChunkIterator {
     pub(crate) fn new(
         config: PReaderIteratorConfig,
-        mut state: PReaderState,
+        state: PReaderState,
         chunk_size: usize,
-    ) -> PyResult<Self> {
+    ) -> PyResult<PyClassInitializer<Self>> {
         let file = File::open(&state.file.path)?;
         let mut reader = BufReader::with_capacity(config.buffer_capacity, file);
         let buffer = vec![0u8; chunk_size];
@@ -42,14 +30,10 @@ impl PReaderChunkIterator {
             reader.seek(SeekFrom::Start(state.position))?;
         }
 
-        state.manager.last_saved_position = state.position;
+        let base = PReaderIteratorBase::new(config, state);
+        let sub = Self { reader, buffer };
 
-        Ok(Self {
-            config,
-            state,
-            reader,
-            buffer,
-        })
+        Ok(PyClassInitializer::from(base).add_subclass(sub))
     }
 
     fn read_chunk(&mut self) -> std::io::Result<Option<&[u8]>> {
@@ -61,45 +45,24 @@ impl PReaderChunkIterator {
 
 #[pymethods]
 impl PReaderChunkIterator {
-    fn state(&self) -> PReaderState {
-        self.state.clone()
-    }
-
-    fn percent(&self) -> f64 {
-        self.state.percent()
-    }
-
     fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
 
     fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<PReaderItem>> {
         let py = slf.py();
-        let saver = slf.config().saver();
 
         let Some(chunk) = slf.read_chunk()? else {
-            (saver)(&mut slf.state, 0)?;
+            slf.as_super().finalize()?;
 
             return Ok(None);
         };
 
         let consumed = chunk.len() as u64;
         let value = PyBytes::new(py, chunk).unbind().into_any();
-        let threshold = slf.config.auto_save_state_bytes;
 
-        slf.state.advance(consumed);
-        (saver)(&mut slf.state, threshold)?;
+        slf.as_super().advance(consumed)?;
 
         Ok(Some(value))
-    }
-}
-
-impl Drop for PReaderChunkIterator {
-    fn drop(&mut self) {
-        Python::try_attach(|_| {
-            if let Err(e) = (self.config().saver())(&mut self.state, 0) {
-                eprintln!("preader: save failed: {e}");
-            }
-        });
     }
 }

@@ -7,29 +7,20 @@ use pyo3::{prelude::*, types::PyBytes};
 
 use crate::{
     PReaderState,
-    iterators::reader::PReaderIterator,
+    iterators::base::PReaderIteratorBase,
     types::{PReaderItem, config::PReaderIteratorConfig},
 };
 
-#[pyclass]
+#[pyclass(extends = PReaderIteratorBase)]
 pub struct PReaderByteIterator {
-    config: PReaderIteratorConfig,
-    state: PReaderState,
     bytes: Bytes<BufReader<File>>,
 }
 
-impl PReaderIterator for PReaderByteIterator {
-    fn config(&self) -> &PReaderIteratorConfig {
-        &self.config
-    }
-
-    fn state(&mut self) -> &mut PReaderState {
-        &mut self.state
-    }
-}
-
 impl PReaderByteIterator {
-    pub(crate) fn new(config: PReaderIteratorConfig, mut state: PReaderState) -> PyResult<Self> {
+    pub(crate) fn new(
+        config: PReaderIteratorConfig,
+        state: PReaderState,
+    ) -> PyResult<PyClassInitializer<Self>> {
         let file = File::open(&state.file.path)?;
         let mut reader = BufReader::with_capacity(config.buffer_capacity, file);
 
@@ -37,13 +28,12 @@ impl PReaderByteIterator {
             reader.seek(SeekFrom::Start(state.position))?;
         }
 
-        state.manager.last_saved_position = state.position;
-
-        Ok(Self {
-            config,
-            state,
+        let base = PReaderIteratorBase::new(config, state);
+        let sub = Self {
             bytes: reader.bytes(),
-        })
+        };
+
+        Ok(PyClassInitializer::from(base).add_subclass(sub))
     }
 
     fn read_byte(&mut self) -> Result<Option<u8>> {
@@ -53,44 +43,23 @@ impl PReaderByteIterator {
 
 #[pymethods]
 impl PReaderByteIterator {
-    fn state(&self) -> PReaderState {
-        self.state.clone()
-    }
-
-    fn percent(&self) -> f64 {
-        self.state.percent()
-    }
-
     fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
 
     fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<PReaderItem>> {
         let py = slf.py();
-        let saver = slf.config().saver();
 
         let Some(byte) = slf.read_byte()? else {
-            (saver)(&mut slf.state, 0)?;
+            slf.as_super().finalize()?;
 
             return Ok(None);
         };
 
-        let value = PyBytes::new(py, &[byte]).unbind();
-        let threshold = slf.config.auto_save_state_bytes;
+        let value = PyBytes::new(py, &[byte]).unbind().into_any();
 
-        slf.state.advance(1);
-        (saver)(&mut slf.state, threshold)?;
+        slf.as_super().advance(1)?;
 
-        Ok(Some(value.into_any()))
-    }
-}
-
-impl Drop for PReaderByteIterator {
-    fn drop(&mut self) {
-        Python::try_attach(|_| {
-            if let Err(e) = (self.config().saver())(&mut self.state, 0) {
-                eprintln!("preader: save failed: {e}");
-            }
-        });
+        Ok(Some(value))
     }
 }

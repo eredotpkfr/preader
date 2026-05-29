@@ -7,6 +7,7 @@ mod types;
 mod utils;
 
 pub use exceptions::PReaderStateError;
+pub use iterators::PReaderIteratorBase;
 pub use reader::PReader;
 pub use types::{
     FileMetadata, PReaderState, PReaderStateManager, Timestamps, config::PReaderConfig,
@@ -16,6 +17,7 @@ pub use types::{
 mod preader {
     #[pymodule_export]
     use super::{
-        FileMetadata, PReader, PReaderConfig, PReaderState, PReaderStateError, Timestamps,
+        FileMetadata, PReader, PReaderConfig, PReaderIteratorBase, PReaderState, PReaderStateError,
+        Timestamps,
     };
 }
