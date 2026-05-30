@@ -56,21 +56,22 @@ impl PReader {
         Py::new(py, PReaderChunkIterator::new(config, state, chunk_size)?)
     }
 
-    #[pyo3(signature = (file, *, state=None, state_name=None))]
+    #[pyo3(signature = (file, *, state=None, state_name=None, keepends=false))]
     fn lines(
         &self,
         py: Python<'_>,
         file: PathBuf,
         state: Option<PReaderState>,
         state_name: Option<String>,
+        keepends: bool,
     ) -> PyResult<Py<PReaderLineIterator>> {
         let file = file.canonicalize()?;
         let state = self.resolve_state(&file, state, state_name)?;
 
-        Py::new(py, PReaderLineIterator::new((&self.config).into(), state)?)
+        Py::new(py, PReaderLineIterator::new((&self.config).into(), state, keepends)?)
     }
 
-    #[pyo3(signature = (file, *, state=None, state_name=None, delimiter))]
+    #[pyo3(signature = (file, *, state=None, state_name=None, delimiter, keep_delimiter=false))]
     fn delimiter(
         &self,
         py: Python<'_>,
@@ -78,6 +79,7 @@ impl PReader {
         state: Option<PReaderState>,
         state_name: Option<String>,
         delimiter: char,
+        keep_delimiter: bool,
     ) -> PyResult<Py<PReaderDelimiterIterator>> {
         let Ok(delimiter) = u8::try_from(delimiter) else {
             return Err(PyValueError::new_err(
@@ -88,7 +90,7 @@ impl PReader {
         let state = self.resolve_state(&file, state, state_name)?;
         let config = (&self.config).into();
 
-        Py::new(py, PReaderDelimiterIterator::new(config, state, delimiter)?)
+        Py::new(py, PReaderDelimiterIterator::new(config, state, delimiter, keep_delimiter)?)
     }
 }
 

@@ -1,6 +1,3 @@
-use pyo3::{Py, prelude::*, types::PyAny};
-
-use crate::types::state::PReaderState;
+use pyo3::{Py, types::PyAny};
 
 pub type PReaderItem = Py<PyAny>;
-pub(crate) type AutoSaveStateFn = fn(&mut PReaderState, u64) -> PyResult<()>;

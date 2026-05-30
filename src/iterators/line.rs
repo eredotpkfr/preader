@@ -14,12 +14,14 @@ use crate::{
 pub struct PReaderLineIterator {
     reader: BufReader<File>,
     buffer: String,
+    keepends: bool,
 }
 
 impl PReaderLineIterator {
     pub(crate) fn new(
         config: PReaderIteratorConfig,
         state: PReaderState,
+        keepends: bool,
     ) -> PyResult<PyClassInitializer<Self>> {
         let file = File::open(&state.file.path)?;
         let mut reader = BufReader::with_capacity(config.buffer_capacity, file);
@@ -30,12 +32,13 @@ impl PReaderLineIterator {
         }
 
         let base = PReaderIteratorBase::new(config, state);
-        let sub = Self { reader, buffer };
+        let sub = Self { reader, buffer, keepends };
 
         Ok(PyClassInitializer::from(base).add_subclass(sub))
     }
 
-    fn read_line(&mut self) -> Result<Option<(String, u64)>> {
+    #[inline]
+    fn read_line(&mut self) -> Result<Option<(&str, u64)>> {
         self.buffer.clear();
 
         let read_count = self.reader.read_line(&mut self.buffer)?;
@@ -44,9 +47,13 @@ impl PReaderLineIterator {
             return Ok(None);
         }
 
-        let trimmed = self.buffer.trim_end_matches('\n').trim_end_matches('\r').to_owned();
+        let line = if self.keepends {
+            self.buffer.as_str()
+        } else {
+            self.buffer.trim_end_matches('\n').trim_end_matches('\r')
+        };
 
-        Ok(Some((trimmed, read_count as u64)))
+        Ok(Some((line, read_count as u64)))
     }
 }
 
@@ -65,7 +72,7 @@ impl PReaderLineIterator {
             return Ok(None);
         };
 
-        let value = PyString::new(py, &line).unbind().into_any();
+        let value = PyString::new(py, line).unbind().into_any();
 
         slf.as_super().advance(read_count)?;
 

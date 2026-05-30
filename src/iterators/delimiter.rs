@@ -15,6 +15,7 @@ pub struct PReaderDelimiterIterator {
     reader: BufReader<File>,
     buffer: Vec<u8>,
     delimiter: u8,
+    keep_delimiter: bool,
 }
 
 impl PReaderDelimiterIterator {
@@ -22,6 +23,7 @@ impl PReaderDelimiterIterator {
         config: PReaderIteratorConfig,
         state: PReaderState,
         delimiter: u8,
+        keep_delimiter: bool,
     ) -> PyResult<PyClassInitializer<Self>> {
         let file = File::open(&state.file.path)?;
         let mut reader = BufReader::with_capacity(config.buffer_capacity, file);
@@ -36,16 +38,29 @@ impl PReaderDelimiterIterator {
             reader,
             delimiter,
             buffer,
+            keep_delimiter,
         };
 
         Ok(PyClassInitializer::from(base).add_subclass(sub))
     }
 
-    fn read_segment(&mut self) -> Result<Option<&[u8]>> {
+    #[inline]
+    fn read_segment(&mut self) -> Result<Option<(&[u8], u64)>> {
         self.buffer.clear();
-        self.reader.read_until(self.delimiter, &mut self.buffer)?;
 
-        Ok((!self.buffer.is_empty()).then_some(self.buffer.as_slice()))
+        let read_count = self.reader.read_until(self.delimiter, &mut self.buffer)?;
+
+        if read_count == 0 {
+            return Ok(None);
+        }
+
+        let slice = if self.keep_delimiter {
+            self.buffer.as_slice()
+        } else {
+            self.buffer.strip_suffix(&[self.delimiter]).unwrap_or(&self.buffer)
+        };
+
+        Ok(Some((slice, read_count as u64)))
     }
 }
 
@@ -58,16 +73,15 @@ impl PReaderDelimiterIterator {
     fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<PReaderItem>> {
         let py = slf.py();
 
-        let Some(segment) = slf.read_segment()? else {
+        let Some((segment, read_count)) = slf.read_segment()? else {
             slf.as_super().finalize()?;
 
             return Ok(None);
         };
 
-        let consumed = segment.len() as u64;
         let value = PyBytes::new(py, segment).unbind().into_any();
 
-        slf.as_super().advance(consumed)?;
+        slf.as_super().advance(read_count)?;
 
         Ok(Some(value))
     }

@@ -36,6 +36,7 @@ impl PReaderByteIterator {
         Ok(PyClassInitializer::from(base).add_subclass(sub))
     }
 
+    #[inline]
     fn read_byte(&mut self) -> Result<Option<u8>> {
         self.bytes.next().transpose()
     }

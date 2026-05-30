@@ -36,6 +36,7 @@ impl PReaderChunkIterator {
         Ok(PyClassInitializer::from(base).add_subclass(sub))
     }
 
+    #[inline]
     fn read_chunk(&mut self) -> std::io::Result<Option<&[u8]>> {
         let read_count = self.reader.read(&mut self.buffer)?;
 
