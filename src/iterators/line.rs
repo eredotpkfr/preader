@@ -32,7 +32,11 @@ impl PReaderLineIterator {
         }
 
         let base = PReaderIteratorBase::new(config, state);
-        let sub = Self { reader, buffer, keepends };
+        let sub = Self {
+            reader,
+            buffer,
+            keepends,
+        };
 
         Ok(PyClassInitializer::from(base).add_subclass(sub))
     }

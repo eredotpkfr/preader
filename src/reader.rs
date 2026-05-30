@@ -68,7 +68,10 @@ impl PReader {
         let file = file.canonicalize()?;
         let state = self.resolve_state(&file, state, state_name)?;
 
-        Py::new(py, PReaderLineIterator::new((&self.config).into(), state, keepends)?)
+        Py::new(
+            py,
+            PReaderLineIterator::new((&self.config).into(), state, keepends)?,
+        )
     }
 
     #[pyo3(signature = (file, *, state=None, state_name=None, delimiter, keep_delimiter=false))]
@@ -89,8 +92,9 @@ impl PReader {
         let file = file.canonicalize()?;
         let state = self.resolve_state(&file, state, state_name)?;
         let config = (&self.config).into();
+        let iterator = PReaderDelimiterIterator::new(config, state, delimiter, keep_delimiter)?;
 
-        Py::new(py, PReaderDelimiterIterator::new(config, state, delimiter, keep_delimiter)?)
+        Py::new(py, iterator)
     }
 }
 
