@@ -3,32 +3,43 @@ use std::{
     io::{BufReader, Bytes, Read, Result, Seek, SeekFrom},
 };
 
-use pyo3::{prelude::*, types::PyBytes};
+use pyo3::{exceptions::PyValueError, prelude::*, types::PyBytes};
 
 use crate::{
-    PReaderState,
-    iterators::base::PReaderIteratorBase,
-    types::{PReaderItem, config::PReaderIteratorConfig},
+    State,
+    iterators::base::IteratorBase,
+    types::{Item, IteratorOptions, config::IteratorConfig},
 };
 
-#[pyclass(extends = PReaderIteratorBase)]
-pub struct PReaderByteIterator {
+#[pyclass(extends = IteratorBase)]
+pub struct ByteIterator {
     bytes: Bytes<BufReader<File>>,
 }
 
-impl PReaderByteIterator {
+impl ByteIterator {
     pub(crate) fn new(
-        config: PReaderIteratorConfig,
-        state: PReaderState,
+        config: IteratorConfig,
+        mut state: State,
+        opts: IteratorOptions,
     ) -> PyResult<PyClassInitializer<Self>> {
+        if opts.start > opts.end {
+            return Err(PyValueError::new_err(format!(
+                "start ({}) must be <= end ({})",
+                opts.start, opts.end
+            )));
+        }
+
+        let end = opts.end.min(state.file.size);
+        let initial_position = state.position.max(opts.start.saturating_add(opts.skip)).min(end);
+
+        state.position = initial_position;
+
         let file = File::open(&state.file.path)?;
         let mut reader = BufReader::with_capacity(config.buffer_capacity, file);
 
-        if state.position > 0 {
-            reader.seek(SeekFrom::Start(state.position))?;
-        }
+        reader.seek(SeekFrom::Start(initial_position))?;
 
-        let base = PReaderIteratorBase::new(config, state);
+        let base = IteratorBase::new(config, state, end, opts.limit);
         let sub = Self {
             bytes: reader.bytes(),
         };
@@ -43,13 +54,19 @@ impl PReaderByteIterator {
 }
 
 #[pymethods]
-impl PReaderByteIterator {
+impl ByteIterator {
     fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
 
-    fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<PReaderItem>> {
+    fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<Item>> {
         let py = slf.py();
+
+        if slf.as_super().should_stop() {
+            slf.as_super().finalize()?;
+
+            return Ok(None);
+        }
 
         let Some(byte) = slf.read_byte()? else {
             slf.as_super().finalize()?;
@@ -59,6 +76,7 @@ impl PReaderByteIterator {
 
         let value = PyBytes::new(py, &[byte]).unbind().into_any();
 
+        slf.as_super().count_yield();
         slf.as_super().advance(1)?;
 
         Ok(Some(value))

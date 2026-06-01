@@ -3,17 +3,17 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    types::config::reader::{DEFAULT_VERIFY_STATE, PReaderConfig},
+    types::config::reader::{Config, DEFAULT_VERIFY_STATE},
     utils::default_state_dir,
 };
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct PReaderStateManagerConfig {
+pub struct StateManagerConfig {
     pub state_dir: PathBuf,
     pub verify_state: bool,
 }
 
-impl Default for PReaderStateManagerConfig {
+impl Default for StateManagerConfig {
     fn default() -> Self {
         Self {
             state_dir: default_state_dir(),
@@ -22,8 +22,8 @@ impl Default for PReaderStateManagerConfig {
     }
 }
 
-impl From<&PReaderConfig> for PReaderStateManagerConfig {
-    fn from(config: &PReaderConfig) -> Self {
+impl From<&Config> for StateManagerConfig {
+    fn from(config: &Config) -> Self {
         Self {
             state_dir: config.state_dir.clone(),
             verify_state: config.verify_state,

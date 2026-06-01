@@ -1,15 +1,18 @@
 use pyo3::prelude::*;
 
-use crate::{PReaderState, types::config::PReaderIteratorConfig};
+use crate::{State, types::config::IteratorConfig};
 
 #[pyclass(subclass)]
-pub struct PReaderIteratorBase {
-    pub config: PReaderIteratorConfig,
-    pub state: PReaderState,
+pub struct IteratorBase {
+    pub config: IteratorConfig,
+    pub state: State,
+    pub end: u64,
+    pub limit: u64,
+    pub yielded: u64,
 }
 
-impl PReaderIteratorBase {
-    pub(crate) fn new(config: PReaderIteratorConfig, mut state: PReaderState) -> Self {
+impl IteratorBase {
+    pub(crate) fn new(config: IteratorConfig, mut state: State, end: u64, limit: u64) -> Self {
         let threshold = config.auto_save_state_bytes;
 
         state.manager.last_saved_position = if threshold > 0 {
@@ -18,7 +21,23 @@ impl PReaderIteratorBase {
             state.position
         };
 
-        Self { config, state }
+        Self {
+            config,
+            state,
+            end,
+            limit,
+            yielded: 0,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn should_stop(&self) -> bool {
+        self.state.position >= self.end || self.yielded >= self.limit
+    }
+
+    #[inline]
+    pub(crate) fn count_yield(&mut self) {
+        self.yielded += 1;
     }
 
     #[inline]
@@ -49,8 +68,8 @@ impl PReaderIteratorBase {
 }
 
 #[pymethods]
-impl PReaderIteratorBase {
-    fn state(&self) -> PReaderState {
+impl IteratorBase {
+    fn state(&self) -> State {
         self.state.clone()
     }
 
@@ -59,7 +78,7 @@ impl PReaderIteratorBase {
     }
 }
 
-impl Drop for PReaderIteratorBase {
+impl Drop for IteratorBase {
     fn drop(&mut self) {
         Python::try_attach(|_| {
             if let Err(err) = self.finalize() {

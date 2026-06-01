@@ -4,8 +4,8 @@ pub mod chunk;
 pub mod delimiter;
 pub mod line;
 
-pub use base::PReaderIteratorBase;
-pub use byte::PReaderByteIterator;
-pub use chunk::PReaderChunkIterator;
-pub use delimiter::PReaderDelimiterIterator;
-pub use line::PReaderLineIterator;
+pub use base::IteratorBase;
+pub use byte::ByteIterator;
+pub use chunk::ChunkIterator;
+pub use delimiter::DelimiterIterator;
+pub use line::LineIterator;

@@ -11,21 +11,21 @@ use serde::{Deserialize, Serialize};
 use serde_json::to_string_pretty;
 
 use crate::{
-    PReaderConfig, PReaderStateManager,
-    exceptions::PReaderStateError,
+    Config, StateManager,
+    exceptions::StateError,
     types::{checksum::ChecksumBody, file::FileMetadata, time::Timestamps},
     utils::fingerprint,
 };
 
 #[pyclass(from_py_object)]
 #[derive(Clone)]
-pub struct PReaderState {
-    pub data: PReaderStateData,
-    pub manager: PReaderStateManager,
+pub struct State {
+    pub data: StateData,
+    pub manager: StateManager,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct PReaderStateData {
+pub struct StateData {
     pub name: String,
     pub file: FileMetadata,
     pub position: u64,
@@ -34,37 +34,32 @@ pub struct PReaderStateData {
     pub checksum: String,
 }
 
-impl Deref for PReaderState {
-    type Target = PReaderStateData;
+impl Deref for State {
+    type Target = StateData;
 
     fn deref(&self) -> &Self::Target {
         &self.data
     }
 }
 
-impl DerefMut for PReaderState {
+impl DerefMut for State {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.data
     }
 }
 
-impl From<(PReaderStateData, PReaderStateManager)> for PReaderState {
-    fn from((data, manager): (PReaderStateData, PReaderStateManager)) -> Self {
+impl From<(StateData, StateManager)> for State {
+    fn from((data, manager): (StateData, StateManager)) -> Self {
         Self { data, manager }
     }
 }
 
-impl PReaderState {
-    pub(crate) fn new(
-        config: &PReaderConfig,
-        path: &PathBuf,
-        name: Option<String>,
-    ) -> Result<Self, Error> {
+impl State {
+    pub(crate) fn new(config: &Config, path: &PathBuf, name: String) -> Result<Self, Error> {
         let file = FileMetadata::try_from(path)?;
         let position = 0;
         let timestamps = Timestamps::now();
-        let manager = PReaderStateManager::from(config);
-        let name = name.unwrap_or_else(|| manager.name(path));
+        let manager = StateManager::from(config);
         let checksum = ChecksumBody {
             name: &name,
             file: &file,
@@ -72,7 +67,7 @@ impl PReaderState {
             timestamps: &timestamps,
         }
         .compute()?;
-        let data = PReaderStateData {
+        let data = StateData {
             name,
             file,
             position,
@@ -98,7 +93,7 @@ impl PReaderState {
 }
 
 #[pymethods]
-impl PReaderState {
+impl State {
     #[getter]
     fn name(&self) -> String {
         self.name.clone()
@@ -137,7 +132,7 @@ impl PReaderState {
             fs::create_dir_all(parent)?;
         }
 
-        let serialized = to_string_pretty(&self.data).map_err(PReaderStateError::from_serde)?;
+        let serialized = to_string_pretty(&self.data).map_err(StateError::from_serde)?;
 
         fs::write(&tmp, &serialized)?;
         fs::rename(&tmp, &path)?;
@@ -154,7 +149,7 @@ impl PReaderState {
         let current_fingerprint = fingerprint(&self.file.path)?;
 
         if computed != self.checksum {
-            return Err(PReaderStateError::from_anyhow(anyhow!(
+            return Err(StateError::from_anyhow(anyhow!(
                 "state checksum mismatch (saved: {}, computed: {})",
                 self.checksum,
                 computed
@@ -162,7 +157,7 @@ impl PReaderState {
         }
 
         if self.file.size != metadata.len() {
-            return Err(PReaderStateError::from_anyhow(anyhow!(
+            return Err(StateError::from_anyhow(anyhow!(
                 "file size mismatch (saved: {}, current: {})",
                 self.file.size,
                 metadata.len(),
@@ -170,7 +165,7 @@ impl PReaderState {
         }
 
         if self.file.mtime != current_mtime {
-            return Err(PReaderStateError::from_anyhow(anyhow!(
+            return Err(StateError::from_anyhow(anyhow!(
                 "file mtime mismatch (saved: {}, current: {})",
                 self.file.mtime,
                 current_mtime,
@@ -178,7 +173,7 @@ impl PReaderState {
         }
 
         if self.file.fingerprint != current_fingerprint {
-            return Err(PReaderStateError::from_anyhow(anyhow!(
+            return Err(StateError::from_anyhow(anyhow!(
                 "file fingerprint mismatch (saved: {}, current: {})",
                 self.file.fingerprint,
                 current_fingerprint,

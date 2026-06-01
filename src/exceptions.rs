@@ -1,8 +1,8 @@
 use pyo3::{PyErr, create_exception, exceptions::PyException};
 
-create_exception!(preader, PReaderStateError, PyException);
+create_exception!(preader, StateError, PyException);
 
-impl PReaderStateError {
+impl StateError {
     pub fn from_anyhow(error: anyhow::Error) -> PyErr {
         Self::new_err(format!("{error:#}"))
     }

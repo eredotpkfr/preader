@@ -15,7 +15,7 @@ pub const DEFAULT_VERIFY_STATE: bool = true;
 
 #[pyclass(from_py_object)]
 #[derive(Clone, Deserialize)]
-pub struct PReaderConfig {
+pub struct Config {
     #[pyo3(get)]
     pub buffer_capacity: usize,
     #[pyo3(get)]
@@ -30,7 +30,7 @@ pub struct PReaderConfig {
     pub verify_state: bool,
 }
 
-impl Default for PReaderConfig {
+impl Default for Config {
     fn default() -> Self {
         Self {
             buffer_capacity: DEFAULT_BUFFER_CAPACITY,
@@ -44,7 +44,7 @@ impl Default for PReaderConfig {
 }
 
 #[pymethods]
-impl PReaderConfig {
+impl Config {
     #[new]
     #[pyo3(signature = (
         buffer_capacity = DEFAULT_BUFFER_CAPACITY,

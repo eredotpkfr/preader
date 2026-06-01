@@ -3,7 +3,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use crate::{
-    PReaderState,
+    State,
     types::{FileMetadata, Timestamps},
 };
 
@@ -15,8 +15,8 @@ pub(crate) struct ChecksumBody<'a> {
     pub timestamps: &'a Timestamps,
 }
 
-impl<'a> From<&'a PReaderState> for ChecksumBody<'a> {
-    fn from(state: &'a PReaderState) -> Self {
+impl<'a> From<&'a State> for ChecksumBody<'a> {
+    fn from(state: &'a State) -> Self {
         Self {
             name: &state.name,
             file: &state.file,

@@ -6,10 +6,10 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::{
-    PReaderState,
+    State,
     types::{
-        config::{PReaderConfig, PReaderStateManagerConfig},
-        state::PReaderStateData,
+        config::{Config, StateManagerConfig},
+        state::StateData,
     },
 };
 
@@ -17,22 +17,22 @@ pub(crate) const STATE_FILE_SUFFIX: &str = "state.json";
 pub(crate) const TMP_STATE_FILE_SUFFIX: &str = "tmp";
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct PReaderStateManager {
-    pub config: PReaderStateManagerConfig,
+pub struct StateManager {
+    pub config: StateManagerConfig,
     pub last_saved_position: u64,
 }
 
-impl Default for PReaderStateManager {
+impl Default for StateManager {
     fn default() -> Self {
         Self {
-            config: PReaderStateManagerConfig::default(),
+            config: StateManagerConfig::default(),
             last_saved_position: 0,
         }
     }
 }
 
-impl From<&PReaderConfig> for PReaderStateManager {
-    fn from(config: &PReaderConfig) -> Self {
+impl From<&Config> for StateManager {
+    fn from(config: &Config) -> Self {
         Self {
             config: config.into(),
             last_saved_position: 0,
@@ -40,7 +40,7 @@ impl From<&PReaderConfig> for PReaderStateManager {
     }
 }
 
-impl PReaderStateManager {
+impl StateManager {
     pub(crate) fn name(&self, file: &PathBuf) -> String {
         hex::encode(&Sha256::digest(file.as_os_str().as_encoded_bytes()))
     }
@@ -58,7 +58,7 @@ impl PReaderStateManager {
             .with_added_extension(TMP_STATE_FILE_SUFFIX)
     }
 
-    pub(crate) fn load(&self, name: &str) -> Result<PReaderState, Error> {
+    pub(crate) fn load(&self, name: &str) -> Result<State, Error> {
         let path = self.path(name);
 
         if !path.exists() {
@@ -66,8 +66,8 @@ impl PReaderStateManager {
         }
 
         let content = fs::read_to_string(&path)?;
-        let data: PReaderStateData = serde_json::from_str(&content)?;
-        let state = PReaderState::from((data, self.clone()));
+        let data: StateData = serde_json::from_str(&content)?;
+        let state = State::from((data, self.clone()));
 
         if self.config.verify_state {
             state.verify()?;
