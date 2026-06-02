@@ -29,12 +29,14 @@ impl<'a, 'py> FromPyObject<'a, 'py> for StateInput {
             return Ok(Self::Name(name));
         }
 
-        Err(PyTypeError::new_err("state must be None, a name (str), or a preader.State object"))
+        Err(PyTypeError::new_err(
+            "state must be None, a name (str), or a preader.State object",
+        ))
     }
 }
 
 impl StateInput {
-    pub(crate) fn resolve(self, file: &PathBuf, config: &Config) -> PyResult<State> {
+    pub(crate) fn resolve(self, config: &Config, file: &PathBuf) -> PyResult<State> {
         let manager = StateManager::from(config);
 
         let name = match self {

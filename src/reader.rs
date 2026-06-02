@@ -24,61 +24,78 @@ impl PReader {
         Self { config }
     }
 
-    #[pyo3(signature = (file, *, state=StateInput::Default, options=None))]
+    #[pyo3(signature = (file, *, state=StateInput::Default, options=IteratorOptions::default()))]
     fn bytes(
         &self,
         py: Python<'_>,
         file: PathBuf,
         state: StateInput,
-        options: Option<IteratorOptions>,
+        options: IteratorOptions,
     ) -> PyResult<Py<ByteIterator>> {
         let file = file.canonicalize()?;
-        let state = state.resolve(&file, &self.config)?;
-        let opts = options.unwrap_or_default();
-        let iterator = ByteIterator::new((&self.config).into(), state, opts)?;
+        let state = state.resolve(&self.config, &file)?;
+        let iterator = ByteIterator::new((&self.config).into(), state, options)?;
 
         Py::new(py, iterator)
     }
 
-    #[pyo3(signature = (file, *, state=StateInput::Default, options=None, chunk_size=DEFAULT_CHUNK_SIZE, drop_partial=false))]
+    #[pyo3(signature = (
+        file,
+        *,
+        state = StateInput::Default,
+        options = IteratorOptions::default(),
+        chunk_size = DEFAULT_CHUNK_SIZE,
+        drop_partial = false,
+    ))]
     fn chunks(
         &self,
         py: Python<'_>,
         file: PathBuf,
         state: StateInput,
-        options: Option<IteratorOptions>,
+        options: IteratorOptions,
         chunk_size: usize,
         drop_partial: bool,
     ) -> PyResult<Py<ChunkIterator>> {
         let file = file.canonicalize()?;
-        let state = state.resolve(&file, &self.config)?;
-        let opts = options.unwrap_or_default();
-        let iterator =
-            ChunkIterator::new((&self.config).into(), state, chunk_size, opts, drop_partial)?;
+        let state = state.resolve(&self.config, &file)?;
+        let iterator = ChunkIterator::new(
+            (&self.config).into(),
+            state,
+            chunk_size,
+            options,
+            drop_partial,
+        )?;
 
         Py::new(py, iterator)
     }
 
-    #[pyo3(signature = (file, *, state=StateInput::Default, options=None, keepends=false, align_start=false, skip_empty=false))]
+    #[pyo3(signature = (
+        file,
+        *,
+        state = StateInput::Default,
+        options = IteratorOptions::default(),
+        keepends = false,
+        align_start = false,
+        skip_empty = false,
+    ))]
     #[allow(clippy::too_many_arguments)]
     fn lines(
         &self,
         py: Python<'_>,
         file: PathBuf,
         state: StateInput,
-        options: Option<IteratorOptions>,
+        options: IteratorOptions,
         keepends: bool,
         align_start: bool,
         skip_empty: bool,
     ) -> PyResult<Py<LineIterator>> {
         let file = file.canonicalize()?;
-        let state = state.resolve(&file, &self.config)?;
-        let opts = options.unwrap_or_default();
+        let state = state.resolve(&self.config, &file)?;
         let iterator = LineIterator::new(
             (&self.config).into(),
             state,
             keepends,
-            opts,
+            options,
             align_start,
             skip_empty,
         )?;
@@ -86,14 +103,23 @@ impl PReader {
         Py::new(py, iterator)
     }
 
-    #[pyo3(signature = (file, *, state=StateInput::Default, options=None, delimiter, keep_delimiter=false, align_start=false, skip_empty=false))]
+    #[pyo3(signature = (
+        file,
+        *,
+        state = StateInput::Default,
+        options = IteratorOptions::default(),
+        delimiter,
+        keep_delimiter = false,
+        align_start = false,
+        skip_empty = false,
+    ))]
     #[allow(clippy::too_many_arguments)]
     fn delimiter(
         &self,
         py: Python<'_>,
         file: PathBuf,
         state: StateInput,
-        options: Option<IteratorOptions>,
+        options: IteratorOptions,
         delimiter: char,
         keep_delimiter: bool,
         align_start: bool,
@@ -105,14 +131,13 @@ impl PReader {
             ));
         };
         let file = file.canonicalize()?;
-        let state = state.resolve(&file, &self.config)?;
-        let opts = options.unwrap_or_default();
+        let state = state.resolve(&self.config, &file)?;
         let iterator = DelimiterIterator::new(
             (&self.config).into(),
             state,
             delimiter,
             keep_delimiter,
-            opts,
+            options,
             align_start,
             skip_empty,
         )?;
