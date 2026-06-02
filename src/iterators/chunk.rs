@@ -3,7 +3,7 @@ use std::{
     io::{BufReader, Read, Seek, SeekFrom},
 };
 
-use pyo3::{exceptions::PyValueError, prelude::*, types::PyBytes};
+use pyo3::{prelude::*, types::PyBytes};
 
 use crate::{
     iterators::base::IteratorBase,
@@ -25,12 +25,7 @@ impl ChunkIterator {
         opts: IteratorOptions,
         drop_partial: bool,
     ) -> PyResult<PyClassInitializer<Self>> {
-        if opts.start > opts.end {
-            return Err(PyValueError::new_err(format!(
-                "start ({}) must be <= end ({})",
-                opts.start, opts.end
-            )));
-        }
+        opts.validate()?;
 
         let end = opts.end.min(state.file.size);
         let skip_bytes = opts.skip.saturating_mul(chunk_size as u64);
@@ -40,6 +35,7 @@ impl ChunkIterator {
 
         let file = File::open(&state.file.path)?;
         let mut reader = BufReader::with_capacity(config.buffer_capacity, file);
+        
         reader.seek(SeekFrom::Start(initial_position))?;
 
         let buffer = vec![0u8; chunk_size];
@@ -80,8 +76,8 @@ impl ChunkIterator {
         let position = slf.as_super().state.position;
         let end = slf.as_super().end;
         let max_bytes = ((end - position) as usize).min(chunk_size);
-
         let drop_partial = slf.drop_partial;
+        
         if drop_partial && max_bytes < chunk_size {
             slf.as_super().finalize()?;
 

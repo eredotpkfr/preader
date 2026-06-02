@@ -125,11 +125,8 @@ impl PReader {
         align_start: bool,
         skip_empty: bool,
     ) -> PyResult<Py<DelimiterIterator>> {
-        let Ok(delimiter) = u8::try_from(delimiter) else {
-            return Err(PyValueError::new_err(
-                "delimiter must fit in a single byte (0-255)",
-            ));
-        };
+        let delimiter = u8::try_from(delimiter)
+            .map_err(|_| PyValueError::new_err("delimiter must fit in a single byte (0-255)"))?;
         let file = file.canonicalize()?;
         let state = state.resolve(&self.config, &file)?;
         let iterator = DelimiterIterator::new(

@@ -3,7 +3,7 @@ use std::{
     io::{BufRead, BufReader, Read, Result, Seek, SeekFrom},
 };
 
-use pyo3::{exceptions::PyValueError, prelude::*, types::PyString};
+use pyo3::{prelude::*, types::PyString};
 
 use crate::{
     iterators::base::IteratorBase,
@@ -28,12 +28,7 @@ impl LineIterator {
         align_start: bool,
         skip_empty: bool,
     ) -> PyResult<PyClassInitializer<Self>> {
-        if opts.start > opts.end {
-            return Err(PyValueError::new_err(format!(
-                "start ({}) must be <= end ({})",
-                opts.start, opts.end
-            )));
-        }
+        opts.validate()?;
 
         let end = opts.end.min(state.file.size);
 
@@ -99,6 +94,7 @@ fn peek_needs_align(path: &std::path::Path, position: u64, boundary_byte: u8) ->
     let mut peeker = File::open(path)?;
 
     peeker.seek(SeekFrom::Start(position - 1))?;
+
     let mut peek = [0u8; 1];
     let read_count = peeker.read(&mut peek)?;
 

@@ -3,7 +3,7 @@ use std::{
     io::{BufRead, BufReader, Read, Result, Seek, SeekFrom},
 };
 
-use pyo3::{exceptions::PyValueError, prelude::*, types::PyBytes};
+use pyo3::{prelude::*, types::PyBytes};
 
 use crate::{
     iterators::base::IteratorBase,
@@ -30,12 +30,7 @@ impl DelimiterIterator {
         align_start: bool,
         skip_empty: bool,
     ) -> PyResult<PyClassInitializer<Self>> {
-        if opts.start > opts.end {
-            return Err(PyValueError::new_err(format!(
-                "start ({}) must be <= end ({})",
-                opts.start, opts.end
-            )));
-        }
+        opts.validate()?;
 
         let end = opts.end.min(state.file.size);
 
@@ -63,6 +58,7 @@ impl DelimiterIterator {
 
         let file = File::open(&state.file.path)?;
         let mut reader = BufReader::with_capacity(config.buffer_capacity, file);
+
         reader.seek(SeekFrom::Start(initial_position))?;
 
         let base = IteratorBase::new(config, state, end, opts.limit);
@@ -144,6 +140,7 @@ impl DelimiterIterator {
             let delimiter_byte = slf.delimiter;
             let keep_delim = slf.keep_delimiter;
             let skip_empty = slf.skip_empty;
+
             let Some((segment, read_count)) = slf.read_segment()? else {
                 slf.as_super().finalize()?;
 

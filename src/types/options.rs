@@ -1,4 +1,4 @@
-use pyo3::prelude::*;
+use pyo3::{exceptions::PyValueError, prelude::*};
 
 #[pyclass(from_py_object)]
 #[derive(Clone)]
@@ -21,6 +21,19 @@ impl Default for IteratorOptions {
             skip: 0,
             limit: u64::MAX,
         }
+    }
+}
+
+impl IteratorOptions {
+    pub(crate) fn validate(&self) -> PyResult<()> {
+        if self.start > self.end {
+            return Err(PyValueError::new_err(format!(
+                "start ({}) must be <= end ({})",
+                self.start, self.end
+            )));
+        }
+
+        Ok(())
     }
 }
 

@@ -3,7 +3,7 @@ use std::{
     io::{BufReader, Bytes, Read, Result, Seek, SeekFrom},
 };
 
-use pyo3::{exceptions::PyValueError, prelude::*, types::PyBytes};
+use pyo3::{prelude::*, types::PyBytes};
 
 use crate::{
     State,
@@ -22,12 +22,7 @@ impl ByteIterator {
         mut state: State,
         opts: IteratorOptions,
     ) -> PyResult<PyClassInitializer<Self>> {
-        if opts.start > opts.end {
-            return Err(PyValueError::new_err(format!(
-                "start ({}) must be <= end ({})",
-                opts.start, opts.end
-            )));
-        }
+        opts.validate()?;
 
         let end = opts.end.min(state.file.size);
         let initial_position = state.position.max(opts.start.saturating_add(opts.skip)).min(end);
