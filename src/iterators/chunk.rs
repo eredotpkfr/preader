@@ -35,7 +35,7 @@ impl ChunkIterator {
 
         let file = File::open(&state.file.path)?;
         let mut reader = BufReader::with_capacity(config.buffer_capacity, file);
-        
+
         reader.seek(SeekFrom::Start(initial_position))?;
 
         let buffer = vec![0u8; chunk_size];
@@ -77,7 +77,7 @@ impl ChunkIterator {
         let end = slf.as_super().end;
         let max_bytes = ((end - position) as usize).min(chunk_size);
         let drop_partial = slf.drop_partial;
-        
+
         if drop_partial && max_bytes < chunk_size {
             slf.as_super().finalize()?;
 
