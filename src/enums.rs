@@ -2,10 +2,7 @@ use std::path::PathBuf;
 
 use pyo3::{Borrowed, FromPyObject, PyAny, PyErr, PyResult, exceptions::PyTypeError, prelude::*};
 
-use crate::{
-    State, StateError,
-    types::{StateManager, config::Config},
-};
+use crate::{State, StateError, StateManager, types::config::Config};
 
 pub(crate) enum StateInput {
     Object(State),

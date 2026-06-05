@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use pyo3::{exceptions::PyValueError, prelude::*};
 
 use crate::{
+    StateRegistry,
     enums::StateInput,
     iterators::{ByteIterator, ChunkIterator, DelimiterIterator, LineIterator},
     types::{IteratorOptions, config::Config},
@@ -22,6 +23,10 @@ impl PReader {
     #[pyo3(signature = (*, config=Config::default()))]
     fn new(config: Config) -> Self {
         Self { config }
+    }
+
+    fn states(&self) -> StateRegistry {
+        (&self.config).into()
     }
 
     #[pyo3(signature = (file, *, state=StateInput::Default, options=IteratorOptions::default()))]

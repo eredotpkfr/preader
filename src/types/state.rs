@@ -129,13 +129,13 @@ impl State {
         let tmp = self.manager.tmp(&self.name);
 
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).map_err(StateError::from_io)?;
         }
 
         let serialized = to_string_pretty(&self.data).map_err(StateError::from_serde)?;
 
-        fs::write(&tmp, &serialized)?;
-        fs::rename(&tmp, &path)?;
+        fs::write(&tmp, &serialized).map_err(StateError::from_io)?;
+        fs::rename(&tmp, &path).map_err(StateError::from_io)?;
 
         self.manager.last_saved_position = self.position;
 
@@ -144,9 +144,9 @@ impl State {
 
     pub fn verify(&self) -> PyResult<()> {
         let computed = self.checksum();
-        let metadata = fs::metadata(&self.file.path)?;
+        let metadata = fs::metadata(&self.file.path).map_err(StateError::from_io)?;
         let current_mtime = metadata.mtime();
-        let current_fingerprint = fingerprint(&self.file.path)?;
+        let current_fingerprint = fingerprint(&self.file.path).map_err(StateError::from_io)?;
 
         if computed != self.checksum {
             return Err(StateError::from_anyhow(anyhow!(
