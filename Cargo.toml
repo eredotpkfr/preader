@@ -16,9 +16,7 @@ hex = "0.4.3"
 pyo3 = { version = "0.28.3", features = ["abi3-py38"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = { version = "1.0.150", features = ["preserve_order"] }
-serde_norway = "0.9.42"
 sha2 = "0.11.0"
-toml = "1.1.2"
 
 [profile.release]
 opt-level = 3
