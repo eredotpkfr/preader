@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::Path;
 
 use pyo3::{Borrowed, FromPyObject, PyAny, PyErr, PyResult, exceptions::PyTypeError, prelude::*};
 
@@ -7,7 +7,7 @@ use crate::{State, StateError, StateManager, types::config::Config};
 pub(crate) enum StateInput {
     Object(State),
     Name(String),
-    Default,
+    Auto,
 }
 
 impl<'a, 'py> FromPyObject<'a, 'py> for StateInput {
@@ -15,7 +15,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for StateInput {
 
     fn extract(ob: Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
         if ob.is_none() {
-            return Ok(Self::Default);
+            return Ok(Self::Auto);
         }
 
         if let Ok(state) = ob.extract::<State>() {
@@ -33,7 +33,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for StateInput {
 }
 
 impl StateInput {
-    pub(crate) fn resolve(self, config: &Config, file: &PathBuf) -> PyResult<State> {
+    pub(crate) fn resolve(self, config: &Config, file: &Path) -> PyResult<State> {
         let manager = StateManager::from(config);
 
         let name = match self {
@@ -44,7 +44,7 @@ impl StateInput {
                 return Ok(state);
             }
             Self::Name(name) => name,
-            Self::Default => manager.name(file),
+            Self::Auto => manager.name(file),
         };
 
         if config.auto_load_state {

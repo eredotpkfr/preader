@@ -2,7 +2,7 @@ use std::{
     fs,
     ops::{Deref, DerefMut},
     os::unix::fs::MetadataExt,
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use anyhow::{Error, anyhow};
@@ -20,8 +20,8 @@ use crate::{
 #[pyclass(from_py_object)]
 #[derive(Clone)]
 pub struct State {
-    pub data: StateData,
-    pub manager: StateManager,
+    pub(crate) data: StateData,
+    pub(crate) manager: StateManager,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -55,7 +55,7 @@ impl From<(StateData, StateManager)> for State {
 }
 
 impl State {
-    pub(crate) fn new(config: &Config, path: &PathBuf, name: String) -> Result<Self, Error> {
+    pub(crate) fn new(config: &Config, path: &Path, name: String) -> Result<Self, Error> {
         let file = FileMetadata::try_from(path)?;
         let position = 0;
         let timestamps = Timestamps::now();
@@ -86,10 +86,6 @@ impl State {
         self.timestamps.updated_at = chrono::Utc::now();
         self.checksum = self.checksum();
     }
-
-    pub(crate) fn body(&self) -> ChecksumBody<'_> {
-        self.into()
-    }
 }
 
 #[pymethods]
@@ -115,7 +111,7 @@ impl State {
     }
 
     fn checksum(&self) -> String {
-        self.body().compute().unwrap()
+        ChecksumBody::from(self).compute().unwrap()
     }
 
     pub fn percent(&self) -> f64 {

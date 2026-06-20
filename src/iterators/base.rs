@@ -43,6 +43,11 @@ impl IteratorBase {
     #[inline]
     pub(crate) fn advance(&mut self, bytes: u64) -> PyResult<()> {
         self.state.advance(bytes);
+
+        if self.config.auto_save_state_bytes == 0 {
+            return Ok(());
+        }
+
         self.autosave(self.config.auto_save_state_bytes)
     }
 

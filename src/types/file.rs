@@ -1,4 +1,8 @@
-use std::{fs, os::unix::fs::MetadataExt, path::PathBuf};
+use std::{
+    fs,
+    os::unix::fs::MetadataExt,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Error, anyhow};
 use chrono::{DateTime, Utc};
@@ -21,10 +25,10 @@ pub struct FileMetadata {
     pub fingerprint: String,
 }
 
-impl TryFrom<&PathBuf> for FileMetadata {
+impl TryFrom<&Path> for FileMetadata {
     type Error = Error;
 
-    fn try_from(path: &PathBuf) -> Result<Self, Self::Error> {
+    fn try_from(path: &Path) -> Result<Self, Self::Error> {
         let metadata = fs::metadata(path)?;
         let mtime = DateTime::<Utc>::from_timestamp(metadata.mtime(), 0);
 

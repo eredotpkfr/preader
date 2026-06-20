@@ -30,7 +30,7 @@ impl PReader {
         (&self.config).into()
     }
 
-    #[pyo3(signature = (file, *, state=StateInput::Default, options=IteratorOptions::default()))]
+    #[pyo3(signature = (file, *, state=StateInput::Auto, options=IteratorOptions::default()))]
     fn bytes(
         &self,
         py: Python<'_>,
@@ -48,7 +48,7 @@ impl PReader {
     #[pyo3(signature = (
         file,
         *,
-        state = StateInput::Default,
+        state = StateInput::Auto,
         options = IteratorOptions::default(),
         chunk_size = DEFAULT_CHUNK_SIZE,
         drop_partial = false,
@@ -78,7 +78,7 @@ impl PReader {
     #[pyo3(signature = (
         file,
         *,
-        state = StateInput::Default,
+        state = StateInput::Auto,
         options = IteratorOptions::default(),
         keepends = false,
         align_start = false,
@@ -112,7 +112,7 @@ impl PReader {
     #[pyo3(signature = (
         file,
         *,
-        state = StateInput::Default,
+        state = StateInput::Auto,
         options = IteratorOptions::default(),
         delimiter,
         keep_delimiter = false,

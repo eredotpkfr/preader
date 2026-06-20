@@ -1,8 +1,10 @@
-use std::{fs, path::PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Error, anyhow};
 use chrono::Utc;
-use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::{
@@ -16,7 +18,7 @@ use crate::{
 pub(crate) const STATE_FILE_SUFFIX: &str = "state.json";
 pub(crate) const TMP_STATE_FILE_SUFFIX: &str = "tmp";
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct StateManager {
     pub config: StateManagerConfig,
     pub last_saved_position: u64,
@@ -41,7 +43,7 @@ impl From<&Config> for StateManager {
 }
 
 impl StateManager {
-    pub(crate) fn name(&self, file: &PathBuf) -> String {
+    pub(crate) fn name(&self, file: &Path) -> String {
         hex::encode(&Sha256::digest(file.as_os_str().as_encoded_bytes()))
     }
 

@@ -1,13 +1,11 @@
 use std::path::PathBuf;
 
-use serde::{Deserialize, Serialize};
-
 use crate::{
     types::config::reader::{Config, DEFAULT_VERIFY_STATE},
     utils::default_state_dir,
 };
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct StateManagerConfig {
     pub state_dir: PathBuf,
     pub verify_state: bool,
