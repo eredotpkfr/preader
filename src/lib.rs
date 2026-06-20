@@ -1,5 +1,7 @@
 use pyo3::prelude::*;
 
+mod macros;
+
 mod enums;
 mod exceptions;
 mod iterators;

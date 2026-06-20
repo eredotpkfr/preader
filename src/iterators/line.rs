@@ -168,12 +168,11 @@ impl LineIterator {
     }
 
     fn __repr__(slf: PyRef<'_, Self>) -> String {
-        format!(
-            "LineIterator(state={}, keepends={}, skip_empty={}, skip_remaining={})",
-            slf.as_super().state.__repr__(),
-            slf.keepends,
-            slf.skip_empty,
-            slf.skip_remaining,
-        )
+        crate::macros::pyrepr!("LineIterator" {
+            state = slf.as_super().state.__repr__(),
+            keepends = slf.keepends,
+            skip_empty = slf.skip_empty,
+            skip_remaining = slf.skip_remaining,
+        })
     }
 }

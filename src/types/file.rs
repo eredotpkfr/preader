@@ -40,12 +40,11 @@ impl TryFrom<&PathBuf> for FileMetadata {
 #[pymethods]
 impl FileMetadata {
     pub fn __repr__(&self) -> String {
-        format!(
-            "FileMetadata(path='{}', size={}, mtime={}, fingerprint='{}')",
-            self.path.display(),
-            self.size,
-            self.mtime.timestamp(),
-            self.fingerprint,
-        )
+        crate::macros::pyrepr!("FileMetadata" {
+            path = format!("'{}'", self.path.display()),
+            size = self.size,
+            mtime = self.mtime.timestamp(),
+            fingerprint = format!("'{}'", self.fingerprint),
+        })
     }
 }

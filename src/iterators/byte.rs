@@ -78,6 +78,8 @@ impl ByteIterator {
     }
 
     fn __repr__(slf: PyRef<'_, Self>) -> String {
-        format!("ByteIterator(state={})", slf.as_super().state.__repr__())
+        crate::macros::pyrepr!("ByteIterator" {
+            state = slf.as_super().state.__repr__(),
+        })
     }
 }

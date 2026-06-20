@@ -149,6 +149,8 @@ impl PReader {
     }
 
     fn __repr__(&self) -> String {
-        format!("PReader(config={})", self.config.__repr__())
+        crate::macros::pyrepr!("PReader" {
+            config = self.config.__repr__(),
+        })
     }
 }

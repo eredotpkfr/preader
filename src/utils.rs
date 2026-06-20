@@ -13,6 +13,10 @@ pub fn default_state_dir() -> PathBuf {
     dirs::cache_dir().unwrap_or_default().join(DEFAULT_STATE_DIRECTORY)
 }
 
+pub fn indent_lines(text: &str, width: usize) -> String {
+    text.replace('\n', &format!("\n{}", " ".repeat(width)))
+}
+
 pub fn fingerprint(path: &Path) -> Result<String> {
     let mut buffer = Vec::with_capacity(FINGERPRINT_BYTES as usize);
 

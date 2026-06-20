@@ -57,9 +57,11 @@ impl IteratorOptions {
     }
 
     fn __repr__(&self) -> String {
-        format!(
-            "IteratorOptions(start={}, end={}, skip={}, limit={})",
-            self.start, self.end, self.skip, self.limit,
-        )
+        crate::macros::pyrepr!("IteratorOptions" {
+            start = self.start,
+            end = self.end,
+            skip = self.skip,
+            limit = self.limit,
+        })
     }
 }

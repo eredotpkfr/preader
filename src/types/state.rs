@@ -185,12 +185,11 @@ impl State {
     }
 
     pub fn __repr__(&self) -> String {
-        format!(
-            "State(name='{}', file={}, position={}, timestamps={})",
-            self.name,
-            self.file.__repr__(),
-            self.position,
-            self.timestamps.__repr__(),
-        )
+        crate::macros::pyrepr!("State" {
+            name = format!("'{}'", self.name),
+            file = self.file.__repr__(),
+            position = self.position,
+            timestamps = self.timestamps.__repr__(),
+        })
     }
 }

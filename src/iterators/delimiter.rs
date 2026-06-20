@@ -173,13 +173,12 @@ impl DelimiterIterator {
     }
 
     fn __repr__(slf: PyRef<'_, Self>) -> String {
-        format!(
-            "DelimiterIterator(state={}, delimiter={}, keep_delimiter={}, skip_empty={}, skip_remaining={})",
-            slf.as_super().state.__repr__(),
-            slf.delimiter,
-            slf.keep_delimiter,
-            slf.skip_empty,
-            slf.skip_remaining,
-        )
+        crate::macros::pyrepr!("DelimiterIterator" {
+            state = slf.as_super().state.__repr__(),
+            delimiter = slf.delimiter,
+            keep_delimiter = slf.keep_delimiter,
+            skip_empty = slf.skip_empty,
+            skip_remaining = slf.skip_remaining,
+        })
     }
 }

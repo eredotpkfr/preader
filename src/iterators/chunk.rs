@@ -112,11 +112,10 @@ impl ChunkIterator {
     }
 
     fn __repr__(slf: PyRef<'_, Self>) -> String {
-        format!(
-            "ChunkIterator(state={}, chunk_size={}, drop_partial={})",
-            slf.as_super().state.__repr__(),
-            slf.chunk_size,
-            slf.drop_partial,
-        )
+        crate::macros::pyrepr!("ChunkIterator" {
+            state = slf.as_super().state.__repr__(),
+            chunk_size = slf.chunk_size,
+            drop_partial = slf.drop_partial,
+        })
     }
 }

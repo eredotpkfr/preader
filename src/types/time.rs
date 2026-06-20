@@ -27,10 +27,9 @@ impl Timestamps {
 #[pymethods]
 impl Timestamps {
     pub fn __repr__(&self) -> String {
-        format!(
-            "Timestamps(created_at={}, updated_at={})",
-            self.created_at.timestamp(),
-            self.updated_at.timestamp(),
-        )
+        crate::macros::pyrepr!("Timestamps" {
+            created_at = self.created_at.timestamp(),
+            updated_at = self.updated_at.timestamp(),
+        })
     }
 }
