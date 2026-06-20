@@ -14,8 +14,11 @@ use crate::{
 pub struct LineIterator {
     reader: BufReader<File>,
     buffer: String,
+    #[pyo3(get)]
     keepends: bool,
+    #[pyo3(get)]
     skip_empty: bool,
+    #[pyo3(get)]
     skip_remaining: u64,
 }
 
@@ -162,5 +165,15 @@ impl LineIterator {
 
             return Ok(Some(value));
         }
+    }
+
+    fn __repr__(slf: PyRef<'_, Self>) -> String {
+        format!(
+            "LineIterator(state={}, keepends={}, skip_empty={}, skip_remaining={})",
+            slf.as_super().state.__repr__(),
+            slf.keepends,
+            slf.skip_empty,
+            slf.skip_remaining,
+        )
     }
 }

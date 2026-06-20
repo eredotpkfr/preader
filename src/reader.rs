@@ -25,6 +25,7 @@ impl PReader {
         Self { config }
     }
 
+    #[getter]
     fn states(&self) -> StateRegistry {
         (&self.config).into()
     }
@@ -130,10 +131,10 @@ impl PReader {
         align_start: bool,
         skip_empty: bool,
     ) -> PyResult<Py<DelimiterIterator>> {
-        let delimiter = u8::try_from(delimiter)
-            .map_err(|_| PyValueError::new_err("delimiter must fit in a single byte"))?;
         let file = file.canonicalize()?;
         let state = state.resolve(&self.config, &file)?;
+        let delimiter = u8::try_from(delimiter)
+            .map_err(|_| PyValueError::new_err("delimiter must fit in a single byte"))?;
         let iterator = DelimiterIterator::new(
             (&self.config).into(),
             state,
@@ -145,5 +146,9 @@ impl PReader {
         )?;
 
         Py::new(py, iterator)
+    }
+
+    fn __repr__(&self) -> String {
+        format!("PReader(config={})", self.config.__repr__())
     }
 }

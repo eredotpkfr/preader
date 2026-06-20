@@ -55,4 +55,11 @@ impl IteratorOptions {
             limit,
         }
     }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "IteratorOptions(start={}, end={}, skip={}, limit={})",
+            self.start, self.end, self.skip, self.limit,
+        )
+    }
 }

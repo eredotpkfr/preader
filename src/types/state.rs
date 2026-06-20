@@ -83,7 +83,7 @@ impl State {
     }
 
     pub(crate) fn refresh(&mut self) {
-        self.timestamps.updated_at = chrono::Utc::now().timestamp();
+        self.timestamps.updated_at = chrono::Utc::now();
         self.checksum = self.checksum();
     }
 
@@ -146,6 +146,7 @@ impl State {
         let computed = self.checksum();
         let metadata = fs::metadata(&self.file.path).map_err(StateError::from_io)?;
         let current_mtime = metadata.mtime();
+        let saved_mtime = self.file.mtime.timestamp();
         let current_fingerprint = fingerprint(&self.file.path).map_err(StateError::from_io)?;
 
         if computed != self.checksum {
@@ -164,10 +165,10 @@ impl State {
             )));
         }
 
-        if self.file.mtime != current_mtime {
+        if saved_mtime != current_mtime {
             return Err(StateError::from_anyhow(anyhow!(
                 "file mtime mismatch (saved: {}, current: {})",
-                self.file.mtime,
+                saved_mtime,
                 current_mtime,
             )));
         }
@@ -181,5 +182,15 @@ impl State {
         }
 
         Ok(())
+    }
+
+    pub fn __repr__(&self) -> String {
+        format!(
+            "State(name='{}', file={}, position={}, timestamps={})",
+            self.name,
+            self.file.__repr__(),
+            self.position,
+            self.timestamps.__repr__(),
+        )
     }
 }

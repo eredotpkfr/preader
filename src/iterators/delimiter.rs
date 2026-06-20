@@ -14,9 +14,13 @@ use crate::{
 pub struct DelimiterIterator {
     reader: BufReader<File>,
     buffer: Vec<u8>,
+    #[pyo3(get)]
     delimiter: u8,
+    #[pyo3(get)]
     keep_delimiter: bool,
+    #[pyo3(get)]
     skip_empty: bool,
+    #[pyo3(get)]
     skip_remaining: u64,
 }
 
@@ -166,5 +170,16 @@ impl DelimiterIterator {
 
             return Ok(Some(value));
         }
+    }
+
+    fn __repr__(slf: PyRef<'_, Self>) -> String {
+        format!(
+            "DelimiterIterator(state={}, delimiter={}, keep_delimiter={}, skip_empty={}, skip_remaining={})",
+            slf.as_super().state.__repr__(),
+            slf.delimiter,
+            slf.keep_delimiter,
+            slf.skip_empty,
+            slf.skip_remaining,
+        )
     }
 }

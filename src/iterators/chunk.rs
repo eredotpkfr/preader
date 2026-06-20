@@ -14,6 +14,9 @@ use crate::{
 pub struct ChunkIterator {
     reader: BufReader<File>,
     buffer: Vec<u8>,
+    #[pyo3(get)]
+    chunk_size: usize,
+    #[pyo3(get)]
     drop_partial: bool,
 }
 
@@ -43,6 +46,7 @@ impl ChunkIterator {
         let sub = Self {
             reader,
             buffer,
+            chunk_size,
             drop_partial,
         };
 
@@ -105,5 +109,14 @@ impl ChunkIterator {
         slf.as_super().advance(chunk_len as u64)?;
 
         Ok(Some(value))
+    }
+
+    fn __repr__(slf: PyRef<'_, Self>) -> String {
+        format!(
+            "ChunkIterator(state={}, chunk_size={}, drop_partial={})",
+            slf.as_super().state.__repr__(),
+            slf.chunk_size,
+            slf.drop_partial,
+        )
     }
 }

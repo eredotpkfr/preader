@@ -71,4 +71,16 @@ impl Config {
             verify_state,
         }
     }
+
+    pub fn __repr__(&self) -> String {
+        format!(
+            "Config(state_dir='{}', buffer_capacity={}, auto_save_state={}, auto_save_state_bytes={}, auto_load_state={}, verify_state={})",
+            self.state_dir.display(),
+            self.buffer_capacity,
+            self.auto_save_state,
+            self.auto_save_state_bytes,
+            self.auto_load_state,
+            self.verify_state,
+        )
+    }
 }

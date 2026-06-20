@@ -1,6 +1,7 @@
 use std::{fs, os::unix::fs::MetadataExt, path::PathBuf};
 
-use anyhow::Error;
+use anyhow::{Error, anyhow};
+use chrono::{DateTime, Utc};
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -14,7 +15,8 @@ pub struct FileMetadata {
     #[pyo3(get)]
     pub size: u64,
     #[pyo3(get)]
-    pub mtime: i64,
+    #[serde(with = "chrono::serde::ts_seconds")]
+    pub mtime: DateTime<Utc>,
     #[pyo3(get)]
     pub fingerprint: String,
 }
@@ -24,12 +26,26 @@ impl TryFrom<&PathBuf> for FileMetadata {
 
     fn try_from(path: &PathBuf) -> Result<Self, Self::Error> {
         let metadata = fs::metadata(path)?;
+        let mtime = DateTime::<Utc>::from_timestamp(metadata.mtime(), 0);
 
         Ok(Self {
             path: path.to_path_buf(),
             size: metadata.len(),
-            mtime: metadata.mtime(),
+            mtime: mtime.ok_or_else(|| anyhow!("invalid mtime: {}", metadata.mtime()))?,
             fingerprint: fingerprint(path)?,
         })
+    }
+}
+
+#[pymethods]
+impl FileMetadata {
+    pub fn __repr__(&self) -> String {
+        format!(
+            "FileMetadata(path='{}', size={}, mtime={}, fingerprint='{}')",
+            self.path.display(),
+            self.size,
+            self.mtime.timestamp(),
+            self.fingerprint,
+        )
     }
 }

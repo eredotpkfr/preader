@@ -69,6 +69,7 @@ impl IteratorBase {
 
 #[pymethods]
 impl IteratorBase {
+    #[getter]
     fn state(&self) -> State {
         self.state.clone()
     }
