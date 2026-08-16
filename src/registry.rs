@@ -3,7 +3,8 @@ use std::{fs, path::PathBuf};
 use pyo3::{exceptions::PyKeyError, prelude::*};
 
 use crate::{
-    State, StateError, iterators::StateIterator, manager::StateManager, types::config::Config,
+    State, StateError, iterators::state::StateIterator, manager::StateManager,
+    types::config::reader::Config,
 };
 
 #[pyclass]

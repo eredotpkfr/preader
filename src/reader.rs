@@ -5,8 +5,10 @@ use pyo3::{exceptions::PyValueError, prelude::*};
 use crate::{
     StateRegistry,
     enums::StateInput,
-    iterators::{ByteIterator, ChunkIterator, DelimiterIterator, LineIterator},
-    types::{IteratorOptions, config::Config},
+    iterators::{
+        byte::ByteIterator, chunk::ChunkIterator, delimiter::DelimiterIterator, line::LineIterator,
+    },
+    types::{config::reader::Config, options::IteratorOptions},
 };
 
 pub const DEFAULT_CHUNK_SIZE: usize = 1024;

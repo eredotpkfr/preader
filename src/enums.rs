@@ -2,7 +2,7 @@ use std::path::Path;
 
 use pyo3::{Borrowed, FromPyObject, PyAny, PyErr, PyResult, exceptions::PyTypeError, prelude::*};
 
-use crate::{State, StateError, StateManager, types::config::Config};
+use crate::{State, StateError, StateManager, types::config::reader::Config};
 
 pub(crate) enum StateInput {
     Object(State),
@@ -47,10 +47,10 @@ impl StateInput {
             Self::Auto => manager.name(file),
         };
 
-        if config.auto_load_state {
-            if let Ok(state) = manager.load(&name) {
-                return Ok(state);
-            }
+        if config.auto_load_state
+            && let Ok(state) = manager.load(&name)
+        {
+            return Ok(state);
         }
 
         State::new(config, file, name).map_err(StateError::from_anyhow)

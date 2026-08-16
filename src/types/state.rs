@@ -14,7 +14,7 @@ use crate::{
     Config, StateManager,
     exceptions::StateError,
     types::{checksum::ChecksumBody, file::FileMetadata, time::Timestamps},
-    utils::fingerprint,
+    utils::file::fingerprint,
 };
 
 #[pyclass(from_py_object)]

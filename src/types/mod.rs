@@ -5,10 +5,3 @@ pub mod file;
 pub mod options;
 pub mod state;
 pub mod time;
-
-pub use core::Item;
-
-pub use file::FileMetadata;
-pub use options::IteratorOptions;
-pub use state::State;
-pub use time::Timestamps;

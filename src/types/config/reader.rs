@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use pyo3::prelude::*;
 use serde::Deserialize;
 
-use crate::utils::default_state_dir;
+use crate::utils::path::default_state_dir;
 
 // std::io::BufReader default = 8 KiB; we use 64 KiB to amortize syscalls on
 // large files where preader is typically used

@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 use crate::{
     State,
     types::{
-        config::{Config, StateManagerConfig},
+        config::{manager::StateManagerConfig, reader::Config},
         state::StateData,
     },
 };
@@ -18,19 +18,10 @@ use crate::{
 pub(crate) const STATE_FILE_SUFFIX: &str = "state.json";
 pub(crate) const TMP_STATE_FILE_SUFFIX: &str = "tmp";
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct StateManager {
     pub config: StateManagerConfig,
     pub last_saved_position: u64,
-}
-
-impl Default for StateManager {
-    fn default() -> Self {
-        Self {
-            config: StateManagerConfig::default(),
-            last_saved_position: 0,
-        }
-    }
 }
 
 impl From<&Config> for StateManager {
@@ -44,7 +35,7 @@ impl From<&Config> for StateManager {
 
 impl StateManager {
     pub(crate) fn name(&self, file: &Path) -> String {
-        hex::encode(&Sha256::digest(file.as_os_str().as_encoded_bytes()))
+        hex::encode(Sha256::digest(file.as_os_str().as_encoded_bytes()))
     }
 
     pub(crate) fn path(&self, name: &str) -> PathBuf {

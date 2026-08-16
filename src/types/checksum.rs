@@ -4,7 +4,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     State,
-    types::{FileMetadata, Timestamps},
+    types::{file::FileMetadata, time::Timestamps},
 };
 
 #[derive(Serialize)]

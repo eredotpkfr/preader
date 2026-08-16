@@ -13,12 +13,16 @@ mod utils;
 
 pub use exceptions::StateError;
 pub use iterators::{
-    ByteIterator, ChunkIterator, DelimiterIterator, IteratorBase, LineIterator, StateIterator,
+    base::IteratorBase, byte::ByteIterator, chunk::ChunkIterator, delimiter::DelimiterIterator,
+    line::LineIterator, state::StateIterator,
 };
 pub use manager::StateManager;
 pub use reader::PReader;
 pub use registry::StateRegistry;
-pub use types::{FileMetadata, IteratorOptions, State, Timestamps, config::Config};
+pub use types::{
+    config::reader::Config, file::FileMetadata, options::IteratorOptions, state::State,
+    time::Timestamps,
+};
 
 #[pymodule]
 mod preader {

@@ -9,7 +9,7 @@ use chrono::{DateTime, Utc};
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::utils::fingerprint;
+use crate::utils::file::fingerprint;
 
 #[pyclass(from_py_object)]
 #[derive(Clone, Serialize, Deserialize)]

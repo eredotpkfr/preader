@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 
-use crate::{State, types::config::IteratorConfig};
+use crate::{State, types::config::iterator::IteratorConfig};
 
 #[pyclass(subclass)]
 pub struct IteratorBase {
@@ -15,11 +15,10 @@ impl IteratorBase {
     pub(crate) fn new(config: IteratorConfig, mut state: State, end: u64, limit: u64) -> Self {
         let threshold = config.auto_save_state_bytes;
 
-        state.manager.last_saved_position = if threshold > 0 {
-            (state.position / threshold) * threshold
-        } else {
-            state.position
-        };
+        state.manager.last_saved_position = state
+            .position
+            .checked_div(threshold)
+            .map_or(state.position, |quotient| quotient * threshold);
 
         Self {
             config,

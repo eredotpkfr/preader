@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use crate::{
     types::config::reader::{Config, DEFAULT_VERIFY_STATE},
-    utils::default_state_dir,
+    utils::path::default_state_dir,
 };
 
 #[derive(Clone)]

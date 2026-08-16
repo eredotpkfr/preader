@@ -7,7 +7,7 @@ use pyo3::{prelude::*, types::PyString};
 
 use crate::{
     iterators::base::IteratorBase,
-    types::{Item, IteratorOptions, State, config::IteratorConfig},
+    types::{config::iterator::IteratorConfig, core::Item, options::IteratorOptions, state::State},
 };
 
 #[pyclass(extends = IteratorBase)]

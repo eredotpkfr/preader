@@ -3,7 +3,7 @@ macro_rules! pyrepr {
         let parts: Vec<String> = vec![
             $({
                 let v = $value.to_string();
-                format!("  {}={}", stringify!($field), $crate::utils::indent_lines(&v, 2))
+                format!("  {}={}", stringify!($field), $crate::utils::text::indent_lines(&v, 2))
             }),*
         ];
 
