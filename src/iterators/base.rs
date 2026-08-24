@@ -12,7 +12,7 @@ pub struct IteratorBase {
 }
 
 impl IteratorBase {
-    pub(crate) fn new(config: IteratorConfig, mut state: State, end: u64, limit: u64) -> Self {
+    pub fn new(config: IteratorConfig, mut state: State, end: u64, limit: u64) -> Self {
         let threshold = config.auto_save_state_bytes;
 
         state.manager.last_saved_position = state
@@ -30,17 +30,17 @@ impl IteratorBase {
     }
 
     #[inline]
-    pub(crate) fn should_stop(&self) -> bool {
+    pub fn should_stop(&self) -> bool {
         self.state.position >= self.end || self.yielded >= self.limit
     }
 
     #[inline]
-    pub(crate) fn count_yield(&mut self) {
+    pub fn count_yield(&mut self) {
         self.yielded += 1;
     }
 
     #[inline]
-    pub(crate) fn advance(&mut self, bytes: u64) -> PyResult<()> {
+    pub fn advance(&mut self, bytes: u64) -> PyResult<()> {
         self.state.advance(bytes);
 
         if self.config.auto_save_state_bytes == 0 {
@@ -51,7 +51,7 @@ impl IteratorBase {
     }
 
     #[inline]
-    pub(crate) fn finalize(&mut self) -> PyResult<()> {
+    pub fn finalize(&mut self) -> PyResult<()> {
         self.autosave(0)
     }
 
@@ -85,7 +85,11 @@ impl IteratorBase {
 
 impl Drop for IteratorBase {
     fn drop(&mut self) {
-        Python::try_attach(|_| {
+        Python::try_attach(|py| {
+            if PyErr::occurred(py) {
+                return;
+            }
+
             if let Err(err) = self.finalize() {
                 eprintln!("preader: save failed: {err}");
             }
