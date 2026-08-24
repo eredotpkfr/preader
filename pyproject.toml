@@ -1,20 +1,34 @@
 [build-system]
-requires = ["maturin>=1.13.3,<2.0"]
+requires = ["maturin>=1.14.1,<2.0"]
 build-backend = "maturin"
 
 [project]
 name = "preader"
 description = "A Python package for reading files with live read-percentage tracking"
 readme = "README.md"
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     { name = "Erdoğan YOKSUL", email = "erdoganyoksul3@gmail.com" },
 ]
+maintainers = [
+    { name = "Erdoğan YOKSUL", email = "erdoganyoksul3@gmail.com" },
+]
 requires-python = ">=3.8"
+keywords = ["file-reader", "resumable", "iterator", "checksum", "progress-tracking"]
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Filesystems",
 ]
 dynamic = ["version"]
 
@@ -27,3 +41,25 @@ issues = "https://github.com/eredotpkfr/preader/issues"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "pytest-xdist",
+    "pytest-randomly",
+    "pytest-timeout",
+    "pytest-repeat",
+    "pytest-socket",
+    "pytest-icdiff",
+    "pytest-sugar",
+    "coverage",
+]
+
+[tool.pytest.ini_options]
+addopts = "-n auto -ra --disable-socket"
+testpaths = ["tests/python"]
+timeout = 10

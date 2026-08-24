@@ -36,6 +36,7 @@ all: \
 	install-uv-linux \
 	install-uv-mac \
 	live-book \
+	pytest \
 	rustfmt \
 	rustfmt-check \
 	rustup \
@@ -44,58 +45,59 @@ all: \
 	uv-create-venv
 
 book-build:
-	@mdbook build book
+	@uv run mdbook build book
 book-test:
-	@mdbook test book
+	@uv run mdbook test book
 cargo-build:
-	@cargo build
+	@uv run cargo build
 cargo-check:
-	@cargo check
+	@uv run cargo check
 cargo-clean:
-	@cargo clean
+	@uv run cargo clean
 cargo-doc:
-	@cargo doc
+	@uv run cargo doc
 cargo-doc-rs:
-	@cargo +nightly docs-rs
+	@uv run cargo +nightly docs-rs
 cargo-doc-test:
-	@cargo test --doc
+	@uv run cargo test --doc
 cargo-fix:
-	@cargo fix --allow-dirty --allow-staged
+	@uv run cargo fix --allow-dirty --allow-staged
 cargo-machete:
-	@cargo machete
+	@uv run cargo machete
 cargo-nextest:
-	@cargo nextest run
+	@uv run cargo nextest run
 cargo-test:
-	@cargo test
+	@uv run cargo test
 cargo-udeps:
-	@cargo +nightly udeps
+	@uv run cargo +nightly udeps
 clippy:
-	@cargo clippy --all-targets --all-features
+	@uv run cargo clippy --all-targets --all-features
 coverage:
-	@cargo +nightly llvm-cov \
+	@uv run cargo +nightly llvm-cov \
 		--all-features \
 		--workspace \
 		--doctests \
 		--html \
 		--open
 deny:
-	@cargo deny --all-features --log-level error check
+	@uv run cargo deny --all-features --log-level error check
 develop:
-	@uv run --no-sync --no-cache maturin develop
+	@rm -rf .venv/lib/*/site-packages/preader
+	@uv run maturin develop --uv
 install-cargo-clippy:
-	@rustup component add clippy
+	@uv run rustup component add clippy
 install-cargo-deny:
-	@cargo install cargo-deny --locked
+	@uv run cargo install cargo-deny --locked
 install-cargo-doc-rs:
-	@cargo install cargo-docs-rs
+	@uv run cargo install cargo-docs-rs
 install-cargo-llvm-cov:
-	@cargo install cargo-llvm-cov --locked
+	@uv run cargo install cargo-llvm-cov --locked
 install-cargo-machete:
-	@cargo install cargo-machete --locked
+	@uv run cargo install cargo-machete --locked
 install-cargo-mdbook:
-	@cargo install mdbook
+	@uv run cargo install mdbook
 install-cargo-nextest:
-	@cargo install cargo-nextest --locked
+	@uv run cargo install cargo-nextest --locked
 install-cargo-tools: \
 	install-cargo-clippy \
 	install-cargo-deny \
@@ -106,9 +108,9 @@ install-cargo-tools: \
 	install-cargo-udeps \
 	install-nightly-toolchain
 install-cargo-udeps:
-	@cargo install cargo-udeps --locked
+	@uv run cargo install cargo-udeps --locked
 install-nightly-toolchain:
-	@rustup toolchain install nightly
+	@uv run rustup toolchain install nightly
 install-pre-commit-hooks:
 	@pre-commit install --install-hooks
 	@pre-commit install --hook-type commit-msg --install-hooks
@@ -121,16 +123,18 @@ install-uv-linux:
 install-uv-mac:
 	@brew install uv
 live-book: book-test
-	@mdbook serve book
+	@uv run mdbook serve book
+pytest: develop
+	@uv run pytest
 rustfmt: cargo-fix
-	@cargo +nightly fmt --all
+	@uv run cargo +nightly fmt --all
 rustfmt-check:
-	@cargo +nightly fmt --all -- --check
+	@uv run cargo +nightly fmt --all -- --check
 rustup:
 	@rustup self update
 	@rustup update
 shell: develop
-	@uv run --no-sync --no-cache python3
+	@uv run python3
 update-pre-commit-hooks:
 	@pre-commit autoupdate
 uv-create-venv:
