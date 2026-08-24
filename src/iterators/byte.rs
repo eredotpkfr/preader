@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::{BufReader, Bytes, Read, Result, Seek, SeekFrom},
+    io::{BufReader, Bytes, Read, Result},
 };
 
 use pyo3::{prelude::*, types::PyBytes};
@@ -24,17 +24,12 @@ impl ByteIterator {
     ) -> PyResult<PyClassInitializer<Self>> {
         opts.validate()?;
 
-        let end = opts.end.min(state.file.size);
-        let initial_position = state.position.max(opts.start.saturating_add(opts.skip)).min(end);
+        let window = opts.window(state.position, state.file.size, opts.skip);
+        let reader = window.open(&state.file.path, config.buffer_capacity)?;
 
-        state.position = initial_position;
+        state.position = window.position;
 
-        let file = File::open(&state.file.path)?;
-        let mut reader = BufReader::with_capacity(config.buffer_capacity, file);
-
-        reader.seek(SeekFrom::Start(initial_position))?;
-
-        let base = IteratorBase::new(config, state, end, opts.limit);
+        let base = IteratorBase::new(config, state, window.end, opts.limit);
         let sub = Self {
             bytes: reader.bytes(),
         };

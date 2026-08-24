@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::{BufRead, BufReader, Read, Result, Seek, SeekFrom},
+    io::{BufRead, BufReader, Result},
 };
 
 use pyo3::{prelude::*, types::PyBytes};
@@ -8,6 +8,7 @@ use pyo3::{prelude::*, types::PyBytes};
 use crate::{
     iterators::base::IteratorBase,
     types::{config::iterator::IteratorConfig, core::Item, options::IteratorOptions, state::State},
+    utils::file::starts_mid_item,
 };
 
 #[pyclass(extends = IteratorBase)]
@@ -36,39 +37,25 @@ impl DelimiterIterator {
     ) -> PyResult<PyClassInitializer<Self>> {
         opts.validate()?;
 
-        let end = opts.end.min(state.file.size);
+        let window = opts.window(state.position, state.file.size, 0);
+        let reader = window.open(&state.file.path, config.buffer_capacity)?;
 
-        let (initial_position, fresh_path) = if state.position >= end {
-            (end, false)
-        } else if state.position > opts.start {
-            (state.position, false)
-        } else {
-            (opts.start.min(end), true)
-        };
-
-        let skip_remaining = if fresh_path {
-            let align_extra = if align_start && initial_position > 0 {
-                peek_needs_align(&state.file.path, initial_position, delimiter)?
-            } else {
-                0
-            };
-
-            opts.skip.saturating_add(align_extra)
+        let skip_remaining = if window.from_start {
+            opts.skip.saturating_add(u64::from(
+                align_start && starts_mid_item(reader.get_ref(), window.position, delimiter)?,
+            ))
         } else {
             0
         };
 
-        state.position = initial_position;
+        state.position = window.position;
 
-        let file = File::open(&state.file.path)?;
-        let mut reader = BufReader::with_capacity(config.buffer_capacity, file);
+        let buffer = Vec::new();
+        let base = IteratorBase::new(config, state, window.end, opts.limit);
 
-        reader.seek(SeekFrom::Start(initial_position))?;
-
-        let base = IteratorBase::new(config, state, end, opts.limit);
         let sub = Self {
             reader,
-            buffer: Vec::new(),
+            buffer,
             delimiter,
             keep_delimiter,
             skip_empty,
@@ -96,20 +83,6 @@ impl DelimiterIterator {
 
         Ok(Some((slice, read_count as u64)))
     }
-}
-
-fn peek_needs_align(path: &std::path::Path, position: u64, boundary_byte: u8) -> Result<u64> {
-    let mut peeker = File::open(path)?;
-
-    peeker.seek(SeekFrom::Start(position - 1))?;
-    let mut peek = [0u8; 1];
-    let read_count = peeker.read(&mut peek)?;
-
-    Ok(if read_count == 1 && peek[0] != boundary_byte {
-        1
-    } else {
-        0
-    })
 }
 
 #[pymethods]
