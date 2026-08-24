@@ -67,11 +67,11 @@ impl StateRegistry {
             return Err(PyKeyError::new_err(name.to_string()));
         }
 
-        fs::remove_file(self.path(name)).map_err(StateError::from_io)
+        fs::remove_file(self.path(name)?).map_err(StateError::from_io)
     }
 
     fn exists(&self, name: &str) -> bool {
-        self.path(name).exists()
+        self.manager.path(name).map(|path| path.exists()).unwrap_or(false)
     }
 
     fn all(&self) -> PyResult<Vec<State>> {
@@ -82,7 +82,7 @@ impl StateRegistry {
         self.names()?.try_for_each(|name| self.delete(&name?))
     }
 
-    fn path(&self, name: &str) -> PathBuf {
-        self.manager.path(name)
+    fn path(&self, name: &str) -> PyResult<PathBuf> {
+        self.manager.path(name).map_err(StateError::from_anyhow)
     }
 }

@@ -13,10 +13,11 @@ use crate::{
         config::{manager::StateManagerConfig, reader::Config},
         state::StateData,
     },
+    utils::path::{scoped_join, strip_extension},
 };
 
-pub(crate) const STATE_FILE_SUFFIX: &str = "state.json";
-pub(crate) const TMP_STATE_FILE_SUFFIX: &str = "tmp";
+pub const STATE_FILE_SUFFIX: &str = "state.json";
+pub const TMP_STATE_FILE_SUFFIX: &str = "tmp";
 
 #[derive(Clone, Default)]
 pub struct StateManager {
@@ -34,25 +35,34 @@ impl From<&Config> for StateManager {
 }
 
 impl StateManager {
-    pub(crate) fn name(&self, file: &Path) -> String {
+    pub fn name(&self, file: &Path) -> String {
         hex::encode(Sha256::digest(file.as_os_str().as_encoded_bytes()))
     }
 
-    pub(crate) fn path(&self, name: &str) -> PathBuf {
-        self.config.state_dir.join(name).with_added_extension(STATE_FILE_SUFFIX)
+    pub fn path(&self, name: &str) -> Result<PathBuf, Error> {
+        let path = scoped_join(
+            &self.config.state_dir,
+            strip_extension(name, STATE_FILE_SUFFIX),
+        )?;
+
+        Ok(path.with_added_extension(STATE_FILE_SUFFIX))
     }
 
-    pub(crate) fn tmp(&self, name: &str) -> PathBuf {
-        self.config
-            .state_dir
-            .join(name)
-            .with_added_extension(Utc::now().timestamp_nanos_opt().unwrap_or(0).to_string())
+    pub fn tmp(&self, name: &str) -> Result<PathBuf, Error> {
+        let path = scoped_join(
+            &self.config.state_dir,
+            strip_extension(name, STATE_FILE_SUFFIX),
+        )?;
+        let timestamp_nanos = Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+        Ok(path
+            .with_added_extension(timestamp_nanos.to_string())
             .with_added_extension(STATE_FILE_SUFFIX)
-            .with_added_extension(TMP_STATE_FILE_SUFFIX)
+            .with_added_extension(TMP_STATE_FILE_SUFFIX))
     }
 
-    pub(crate) fn load(&self, name: &str) -> Result<State, Error> {
-        let path = self.path(name);
+    pub fn load(&self, name: &str) -> Result<State, Error> {
+        let path = self.path(name)?;
 
         if !path.exists() {
             return Err(anyhow!("state not found: {name}"));

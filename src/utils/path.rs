@@ -29,5 +29,13 @@ pub fn scoped_join(root: &Path, unsafe_path: &str) -> anyhow::Result<PathBuf> {
         return Err(anyhow!("path escapes root: {unsafe_path}"));
     }
 
+    if candidate.file_name().is_none() {
+        return Err(anyhow!("path must name an entry: {unsafe_path}"));
+    }
+
     Ok(root.join(unsafe_path))
+}
+
+pub fn strip_extension<'a>(name: &'a str, extension: &str) -> &'a str {
+    name.strip_suffix(&format!(".{extension}")).unwrap_or(name)
 }
