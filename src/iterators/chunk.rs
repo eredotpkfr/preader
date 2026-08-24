@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::{BufReader, Read, Seek, SeekFrom},
+    io::{BufReader, ErrorKind, Read},
 };
 
 use pyo3::{prelude::*, types::PyBytes};
@@ -30,19 +30,15 @@ impl ChunkIterator {
     ) -> PyResult<PyClassInitializer<Self>> {
         opts.validate()?;
 
-        let end = opts.end.min(state.file.size);
         let skip_bytes = opts.skip.saturating_mul(chunk_size as u64);
-        let initial_position = state.position.max(opts.start.saturating_add(skip_bytes)).min(end);
+        let window = opts.window(state.position, state.file.size, skip_bytes);
+        let reader = window.open(&state.file.path, config.buffer_capacity)?;
 
-        state.position = initial_position;
-
-        let file = File::open(&state.file.path)?;
-        let mut reader = BufReader::with_capacity(config.buffer_capacity, file);
-
-        reader.seek(SeekFrom::Start(initial_position))?;
+        state.position = window.position;
 
         let buffer = vec![0u8; chunk_size];
-        let base = IteratorBase::new(config, state, end, opts.limit);
+        let base = IteratorBase::new(config, state, window.end, opts.limit);
+
         let sub = Self {
             reader,
             buffer,
@@ -55,9 +51,18 @@ impl ChunkIterator {
 
     #[inline]
     fn read_chunk(&mut self, max_bytes: usize) -> std::io::Result<Option<&[u8]>> {
-        let read_count = self.reader.read(&mut self.buffer[..max_bytes])?;
+        let mut filled = 0;
 
-        Ok((read_count > 0).then_some(&self.buffer[..read_count]))
+        while filled < max_bytes {
+            match self.reader.read(&mut self.buffer[filled..max_bytes]) {
+                Ok(0) => break,
+                Ok(read_count) => filled += read_count,
+                Err(error) if error.kind() == ErrorKind::Interrupted => continue,
+                Err(error) => return Err(error),
+            }
+        }
+
+        Ok((filled > 0).then_some(&self.buffer[..filled]))
     }
 }
 
@@ -76,7 +81,7 @@ impl ChunkIterator {
             return Ok(None);
         }
 
-        let chunk_size = slf.buffer.len();
+        let chunk_size = slf.chunk_size;
         let position = slf.as_super().state.position;
         let end = slf.as_super().end;
         let max_bytes = ((end - position) as usize).min(chunk_size);
