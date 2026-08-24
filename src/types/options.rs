@@ -1,5 +1,7 @@
 use pyo3::{exceptions::PyValueError, prelude::*};
 
+use crate::types::window::Window;
+
 #[pyclass(from_py_object)]
 #[derive(Clone)]
 pub struct IteratorOptions {
@@ -34,6 +36,17 @@ impl IteratorOptions {
         }
 
         Ok(())
+    }
+
+    pub fn window(&self, position: u64, size: u64, skip_bytes: u64) -> Window {
+        let end = self.end.min(size);
+        let start = self.start.saturating_add(skip_bytes);
+
+        Window {
+            position: position.max(start).min(end),
+            end,
+            from_start: position <= start && position < end,
+        }
     }
 }
 

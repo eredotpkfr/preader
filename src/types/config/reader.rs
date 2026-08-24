@@ -47,6 +47,7 @@ impl Default for Config {
 impl Config {
     #[new]
     #[pyo3(signature = (
+        *,
         buffer_capacity = DEFAULT_BUFFER_CAPACITY,
         state_dir = default_state_dir(),
         auto_save_state = false,

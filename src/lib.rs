@@ -16,12 +16,26 @@ pub use iterators::{
     base::IteratorBase, byte::ByteIterator, chunk::ChunkIterator, delimiter::DelimiterIterator,
     line::LineIterator, state::StateIterator,
 };
-pub use manager::StateManager;
+pub use manager::{STATE_FILE_SUFFIX, StateManager, TMP_STATE_FILE_SUFFIX};
 pub use reader::PReader;
 pub use registry::StateRegistry;
 pub use types::{
-    config::reader::Config, file::FileMetadata, options::IteratorOptions, state::State,
+    checksum::ChecksumBody,
+    config::{
+        iterator::IteratorConfig,
+        manager::StateManagerConfig,
+        reader::{Config, DEFAULT_VERIFY_STATE},
+    },
+    file::FileMetadata,
+    options::IteratorOptions,
+    state::{State, StateData},
     time::Timestamps,
+    window::Window,
+};
+pub use utils::{
+    file::{fingerprint, starts_mid_item},
+    path::{DEFAULT_STATE_DIRECTORY, default_state_dir, scoped_join, strip_extension},
+    text::indent_lines,
 };
 
 #[pymodule]

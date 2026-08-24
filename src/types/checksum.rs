@@ -8,7 +8,7 @@ use crate::{
 };
 
 #[derive(Serialize)]
-pub(crate) struct ChecksumBody<'a> {
+pub struct ChecksumBody<'a> {
     pub name: &'a str,
     pub file: &'a FileMetadata,
     pub position: u64,

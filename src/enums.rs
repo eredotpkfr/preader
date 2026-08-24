@@ -1,8 +1,12 @@
 use std::path::Path;
 
+use anyhow::anyhow;
 use pyo3::{Borrowed, FromPyObject, PyAny, PyErr, PyResult, exceptions::PyTypeError, prelude::*};
 
-use crate::{State, StateError, StateManager, types::config::reader::Config};
+use crate::{
+    State, StateError, StateManager,
+    types::{config::reader::Config, state::RESYNC_HINT},
+};
 
 pub(crate) enum StateInput {
     Object(State),
@@ -38,9 +42,20 @@ impl StateInput {
 
         let name = match self {
             Self::Object(state) => {
-                if config.verify_state {
-                    state.verify()?;
+                if !config.verify_state {
+                    return Ok(state);
                 }
+
+                if state.file.path != file {
+                    return Err(StateError::from_anyhow(anyhow!(
+                        "file path mismatch (saved: '{}', current: '{}') {}",
+                        state.file.path.display(),
+                        file.display(),
+                        RESYNC_HINT,
+                    )));
+                }
+
+                state.verify()?;
                 return Ok(state);
             }
             Self::Name(name) => name,
@@ -49,6 +64,7 @@ impl StateInput {
 
         if config.auto_load_state
             && let Ok(state) = manager.load(&name)
+            && state.file.path == file
         {
             return Ok(state);
         }
