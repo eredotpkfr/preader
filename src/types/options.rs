@@ -40,10 +40,10 @@ impl IteratorOptions {
 
     pub fn window(&self, position: u64, size: u64, skip_bytes: u64) -> Window {
         let end = self.end.min(size);
-        let start = self.start.saturating_add(skip_bytes);
+        let start = self.start.saturating_add(skip_bytes).min(end);
 
         Window {
-            position: position.max(start).min(end),
+            position: position.max(start),
             end,
             from_start: position <= start && position < end,
         }

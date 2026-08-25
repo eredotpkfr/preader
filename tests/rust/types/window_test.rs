@@ -18,7 +18,7 @@ const UNSEEKABLE_POSITION: u64 = i64::MAX as u64 + 1;
 #[case::resume_past_the_start(IteratorOptions { start: 10, ..Default::default() }, 40, 40, false)]
 #[case::resume_before_the_start(IteratorOptions { start: 40, ..Default::default() }, 10, 40, true)]
 #[case::fully_consumed(IteratorOptions::default(), FILE_SIZE, FILE_SIZE, false)]
-#[case::resume_past_the_end(IteratorOptions { end: 50, ..Default::default() }, 80, 50, false)]
+#[case::resume_past_the_end(IteratorOptions { end: 50, ..Default::default() }, 80, 80, false)]
 #[case::start_past_the_file(IteratorOptions { start: 150, ..Default::default() }, 0, FILE_SIZE, true)]
 #[case::start_at_the_file_end(
     IteratorOptions { start: FILE_SIZE, ..Default::default() },
