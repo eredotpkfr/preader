@@ -36,6 +36,7 @@ all: \
 	install-uv-linux \
 	install-uv-mac \
 	live-book \
+	maturin-generate-ci \
 	pytest \
 	rustfmt \
 	rustfmt-check \
@@ -82,7 +83,7 @@ coverage:
 deny:
 	@uv run cargo deny --all-features --log-level error check
 develop:
-	@rm -rf .venv/lib/*/site-packages/preader
+	@uv run python -c "import pathlib, shutil, sysconfig; shutil.rmtree(pathlib.Path(sysconfig.get_paths()['purelib']) / 'preader', ignore_errors=True)"
 	@uv run maturin develop --uv
 install-cargo-clippy:
 	@uv run rustup component add clippy
@@ -124,6 +125,8 @@ install-uv-mac:
 	@brew install uv
 live-book: book-test
 	@uv run mdbook serve book
+maturin-generate-ci:
+	@uv run maturin generate-ci github
 pytest: develop
 	@uv run pytest
 rustfmt: cargo-fix

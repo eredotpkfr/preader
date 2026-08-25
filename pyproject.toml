@@ -1,5 +1,5 @@
 [build-system]
-requires = ["maturin>=1.14.1,<2.0"]
+requires = ["maturin>=1.15.0,<2.0"]
 build-backend = "maturin"
 
 [project]
@@ -42,11 +42,14 @@ issues = "https://github.com/eredotpkfr/preader/issues"
 [tool.maturin]
 features = ["pyo3/extension-module"]
 
+[tool.maturin.generate-ci.github.all]
+
 [tool.uv]
 package = false
 
 [dependency-groups]
 dev = [
+    "maturin>=1.15.0,<2.0",
     "pytest",
     "pytest-cov",
     "pytest-xdist",
