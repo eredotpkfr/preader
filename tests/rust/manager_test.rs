@@ -372,7 +372,7 @@ fn load_accepts_an_already_suffixed_name(sandbox: Sandbox) {
 fn load_fails_when_the_path_is_a_directory(sandbox: Sandbox) {
     fs::create_dir_all(sandbox.manager.path(TEST_STATE_NAME).unwrap()).unwrap();
 
-    assert!(sandbox.load_error(TEST_STATE_NAME).contains("Is a directory"));
+    assert!(sandbox.load_error(TEST_STATE_NAME).contains("state not found"));
 }
 
 #[rstest]

@@ -4,7 +4,7 @@ create_exception!(preader, StateError, PyException);
 
 impl StateError {
     pub fn from_io(error: std::io::Error) -> PyErr {
-        Self::new_err(format!("io failed: {error:#}"))
+        Self::new_err(format!("io failed ({:?}): {error:#}", error.kind()))
     }
 
     pub fn from_anyhow(error: anyhow::Error) -> PyErr {

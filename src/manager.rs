@@ -64,7 +64,7 @@ impl StateManager {
     pub fn load(&self, name: &str) -> Result<State, Error> {
         let path = self.path(name)?;
 
-        if !path.exists() {
+        if !path.is_file() {
             return Err(anyhow!("state not found: {name}"));
         }
 
