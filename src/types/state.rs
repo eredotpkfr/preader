@@ -1,8 +1,8 @@
 use std::{
     fs,
     ops::{Deref, DerefMut},
-    os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
+    time::UNIX_EPOCH,
 };
 
 use anyhow::{Error, anyhow};
@@ -156,7 +156,7 @@ impl State {
     pub fn verify(&self) -> PyResult<()> {
         let computed = self.checksum()?;
         let metadata = fs::metadata(&self.file.path).map_err(StateError::from_io)?;
-        let current_mtime = metadata.mtime();
+        let current_mtime = metadata.modified()?.duration_since(UNIX_EPOCH)?.as_secs() as i64;
         let saved_mtime = self.file.mtime.timestamp();
         let current_fingerprint = fingerprint(&self.file.path).map_err(StateError::from_io)?;
 

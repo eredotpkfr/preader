@@ -1,6 +1,9 @@
 #[cfg(unix)]
 use std::os::unix::fs::symlink;
-use std::{fs::File, io::ErrorKind};
+use std::{
+    fs::File,
+    io::{ErrorKind, Seek},
+};
 
 use preader::{fingerprint, starts_mid_item};
 use rstest::rstest;
@@ -82,6 +85,18 @@ fn starts_mid_item_detects_an_unaligned_position(
     let file = File::open(path).unwrap();
 
     assert_eq!(starts_mid_item(&file, position, b'\n').unwrap(), expected);
+}
+
+#[rstest]
+#[case::inside_the_file(2)]
+#[case::at_the_file_end(3)]
+#[case::past_the_file_end(9)]
+fn starts_mid_item_leaves_the_cursor_at_the_position(tmp_dir: TempDir, #[case] position: u64) {
+    let mut file = File::open(write(&tmp_dir, "data.bin", b"foo")).unwrap();
+
+    starts_mid_item(&file, position, b'\n').unwrap();
+
+    assert_eq!(file.stream_position().unwrap(), position);
 }
 
 #[rstest]

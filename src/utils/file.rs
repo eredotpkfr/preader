@@ -1,7 +1,6 @@
 use std::{
     fs::File,
-    io::{Read, Result},
-    os::unix::fs::FileExt,
+    io::{Read, Result, Seek, SeekFrom},
     path::Path,
 };
 
@@ -22,7 +21,14 @@ pub fn starts_mid_item(file: &File, position: u64, boundary: u8) -> Result<bool>
         return Ok(false);
     };
 
+    let mut handle = file;
     let mut byte = [0u8; 1];
 
-    Ok(file.read_at(&mut byte, previous)? == 1 && byte[0] != boundary)
+    handle.seek(SeekFrom::Start(previous))?;
+
+    let read_count = handle.read(&mut byte)?;
+
+    handle.seek(SeekFrom::Start(position))?;
+
+    Ok(read_count == 1 && byte[0] != boundary)
 }

@@ -1,7 +1,7 @@
 use std::{
     fs,
-    os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
+    time::UNIX_EPOCH,
 };
 
 use anyhow::{Error, anyhow};
@@ -30,12 +30,18 @@ impl TryFrom<&Path> for FileMetadata {
 
     fn try_from(path: &Path) -> Result<Self, Self::Error> {
         let metadata = fs::metadata(path)?;
-        let mtime = DateTime::<Utc>::from_timestamp(metadata.mtime(), 0);
+
+        if !metadata.is_file() {
+            return Err(anyhow!("not a file: {}", path.display()));
+        }
+
+        let seconds = metadata.modified()?.duration_since(UNIX_EPOCH)?.as_secs() as i64;
+        let mtime = DateTime::<Utc>::from_timestamp(seconds, 0);
 
         Ok(Self {
             path: path.to_path_buf(),
             size: metadata.len(),
-            mtime: mtime.ok_or_else(|| anyhow!("invalid mtime: {}", metadata.mtime()))?,
+            mtime: mtime.ok_or_else(|| anyhow!("invalid mtime: {seconds}"))?,
             fingerprint: fingerprint(path)?,
         })
     }
