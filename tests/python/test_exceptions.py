@@ -11,7 +11,7 @@ def test_io_errors_get_prefixed(reader, tmp_file):
     state.save()
     tmp_file.unlink()
 
-    with pytest.raises(StateError, match=r"^io failed: "):
+    with pytest.raises(StateError, match=r"^io failed \(NotFound\): "):
         state.verify()
 
 
@@ -27,4 +27,4 @@ def test_anyhow_errors_are_not_prefixed(registry):
     message = str(exc_info.value)
 
     assert message == "path escapes root: ../../etc/passwd"
-    assert not message.startswith(("io failed: ", "regex failed: ", "serde failed: "))
+    assert not message.startswith(("io failed", "regex failed", "serde failed"))

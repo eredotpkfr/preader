@@ -100,3 +100,11 @@ def fingerprint():
         return hashlib.sha256(path.read_bytes()[:window]).hexdigest()
 
     return _fingerprint
+
+
+@pytest.fixture
+def requires_symlinks(tmp_path):
+    try:
+        (tmp_path / "link").symlink_to(tmp_path / "target")
+    except (NotImplementedError, OSError):
+        pytest.skip("creating a symlink is not permitted here")

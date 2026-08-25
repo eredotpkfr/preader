@@ -1,10 +1,17 @@
 import json
+import os
 
 import pytest
 
 from preader import PReader, StateError
 
-from constants import TEST_STATE_NAME, TEST_UNSAFE_STATE_NAMES, TEST_UNSAFE_STATE_NAME_IDS
+from constants import (
+    TEST_STATE_NAME,
+    TEST_UNSAFE_STATE_NAMES,
+    TEST_UNSAFE_STATE_NAME_IDS,
+    TEST_WINDOWS_UNSAFE_STATE_NAMES,
+    TEST_WINDOWS_UNSAFE_STATE_NAME_IDS,
+)
 
 OTHER_STATE_NAME = "job-2"
 
@@ -77,7 +84,7 @@ def test_getitem_raises_when_name_is_unsafe(registry, name):
 def test_getitem_raises_when_state_is_a_directory(registry):
     registry.path(TEST_STATE_NAME).mkdir(parents=True)
 
-    with pytest.raises(StateError, match="Is a directory"):
+    with pytest.raises(StateError, match="state not found"):
         registry[TEST_STATE_NAME]
 
 
@@ -191,6 +198,15 @@ def test_path_accepts_an_already_suffixed_name(registry):
 )
 def test_path_raises_when_name_is_unsafe(registry, name, message):
     with pytest.raises(StateError, match=message):
+        registry.path(name)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows path syntax is only unsafe on Windows")
+@pytest.mark.parametrize(
+    "name", TEST_WINDOWS_UNSAFE_STATE_NAMES, ids=TEST_WINDOWS_UNSAFE_STATE_NAME_IDS
+)
+def test_path_raises_when_a_windows_name_is_unsafe(registry, name):
+    with pytest.raises(StateError, match="path escapes root"):
         registry.path(name)
 
 
@@ -355,7 +371,7 @@ def test_names_creates_the_state_dir(registry, config):
 def test_registry_raises_when_the_state_dir_is_a_file(make_reader, tmp_path, call):
     (tmp_path / "preader").write_text("not a directory")
 
-    with pytest.raises(StateError, match="File exists"):
+    with pytest.raises(StateError, match="AlreadyExists"):
         call(make_reader().states)
 
 

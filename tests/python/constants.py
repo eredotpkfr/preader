@@ -9,4 +9,20 @@ TEST_UNSAFE_STATE_NAMES = {
     ".": "path must name an entry",
 }
 TEST_UNSAFE_STATE_NAME_IDS = ("traversal", "absolute", "empty", "current_dir")
+TEST_WINDOWS_UNSAFE_STATE_NAMES = (
+    "C:\\job-1",
+    "C:job-1",
+    "\\job-1",
+    "\\\\server\\share\\job-1",
+    "\\\\?\\C:\\job-1",
+    "..\\..\\etc\\passwd",
+)
+TEST_WINDOWS_UNSAFE_STATE_NAME_IDS = (
+    "drive_absolute",
+    "drive_relative",
+    "root_relative",
+    "unc_share",
+    "verbatim_drive",
+    "backslash_traversal",
+)
 TEST_ALPHABET = string.ascii_lowercase.encode()

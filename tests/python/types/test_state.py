@@ -6,7 +6,13 @@ import pytest
 
 from preader import Config, PReader, StateError
 
-from constants import TEST_STATE_NAME, TEST_UNSAFE_STATE_NAMES, TEST_UNSAFE_STATE_NAME_IDS
+from constants import (
+    TEST_STATE_NAME,
+    TEST_UNSAFE_STATE_NAMES,
+    TEST_UNSAFE_STATE_NAME_IDS,
+    TEST_WINDOWS_UNSAFE_STATE_NAMES,
+    TEST_WINDOWS_UNSAFE_STATE_NAME_IDS,
+)
 
 
 def test_state_fields(config, reader, tmp_file):
@@ -26,6 +32,17 @@ def test_path_raises_when_name_is_unsafe(reader, tmp_file, name, message):
     state = reader.bytes(tmp_file, state=name).state
 
     with pytest.raises(StateError, match=message):
+        state.path
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows path syntax is only unsafe on Windows")
+@pytest.mark.parametrize(
+    "name", TEST_WINDOWS_UNSAFE_STATE_NAMES, ids=TEST_WINDOWS_UNSAFE_STATE_NAME_IDS
+)
+def test_path_raises_when_a_windows_name_is_unsafe(reader, tmp_file, name):
+    state = reader.bytes(tmp_file, state=name).state
+
+    with pytest.raises(StateError, match="path escapes root"):
         state.path
 
 
@@ -102,7 +119,7 @@ def test_save_raises_when_state_dir_blocked(tmp_path, tmp_file):
 
     state = reader.bytes(tmp_file).state
 
-    with pytest.raises(StateError, match="File exists"):
+    with pytest.raises(StateError, match="AlreadyExists"):
         state.save()
 
 
@@ -110,7 +127,7 @@ def test_save_raises_when_state_path_is_a_directory(reader, tmp_file):
     state = reader.bytes(tmp_file).state
     state.path.mkdir(parents=True)
 
-    with pytest.raises(StateError, match="Is a directory"):
+    with pytest.raises(StateError, match="io failed"):
         state.save()
 
 
@@ -198,7 +215,7 @@ def test_verify_raises_when_file_deleted(make_reader, tmp_large_file):
 
     os.remove(tmp_large_file)
 
-    with pytest.raises(StateError, match="No such file") as exc_info:
+    with pytest.raises(StateError, match="NotFound") as exc_info:
         state.verify()
 
     assert "mismatch" not in str(exc_info.value)
@@ -247,7 +264,7 @@ def test_resync_does_not_mutate_original(reader, tmp_file, tmp_path):
 
 @pytest.mark.parametrize(
     ("name", "message"),
-    [("../../etc/passwd", "path escapes root"), (TEST_STATE_NAME, "Is a directory")],
+    [("../../etc/passwd", "path escapes root"), (TEST_STATE_NAME, "io failed")],
     ids=["path_rejected", "commit_failed"],
 )
 def test_save_leaves_the_state_untouched_when_it_fails(
@@ -275,7 +292,7 @@ def test_save_removes_the_temporary_file_when_it_fails(make_reader, tmp_file, tm
 
     state = make_reader().bytes(tmp_file, state=TEST_STATE_NAME).state
 
-    with pytest.raises(StateError, match="Is a directory"):
+    with pytest.raises(StateError, match="io failed"):
         state.save()
 
     assert list(state_dir.glob("*.tmp")) == []
@@ -297,7 +314,7 @@ def test_saved_state_for_a_deleted_file_fails_to_reload(reader, make_file):
     path.unlink()
     state.save()
 
-    with pytest.raises(StateError, match="No such file"):
+    with pytest.raises(StateError, match="NotFound"):
         reader.states[TEST_STATE_NAME]
 
 
@@ -316,7 +333,7 @@ def test_resync_raises_when_the_path_is_a_directory(reader, tmp_file, tmp_path):
     directory = tmp_path / "elsewhere"
     directory.mkdir()
 
-    with pytest.raises(StateError, match="Is a directory"):
+    with pytest.raises(StateError, match="not a file"):
         state.resync(directory)
 
 
@@ -324,7 +341,7 @@ def test_resync_raises_when_file_missing(reader, tmp_file, tmp_path):
     state = reader.bytes(tmp_file, state=TEST_STATE_NAME).state
     state.save()
 
-    with pytest.raises(StateError, match="No such file"):
+    with pytest.raises(StateError, match="NotFound"):
         state.resync(tmp_path / "does-not-exist.bin")
 
 
@@ -420,7 +437,7 @@ def test_percent_treats_a_zero_size_as_one_byte(make_reader, make_file, consume)
 def test_save_raises_when_the_name_is_too_long(reader, tmp_file):
     state = reader.bytes(tmp_file, state="x" * 300).state
 
-    with pytest.raises(StateError, match="too long"):
+    with pytest.raises(StateError, match="io failed"):
         state.save()
 
 

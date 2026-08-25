@@ -37,6 +37,7 @@ def test_preader_repr(config, reader, reindent, expected_repr):
     assert repr(reader) == expected_repr("PReader", config=reindent(repr(config), 2))
 
 
+@pytest.mark.usefixtures("requires_symlinks")
 def test_bytes_follows_symlink(reader, tmp_file):
     symlink = tmp_file.parent / "link.bin"
     symlink.symlink_to(tmp_file)
@@ -50,7 +51,7 @@ def test_bytes_raises_when_path_is_a_directory(reader, tmp_path):
     directory = tmp_path / "a-directory"
     directory.mkdir()
 
-    with pytest.raises(StateError, match="Is a directory"):
+    with pytest.raises(StateError, match="not a file"):
         reader.bytes(directory)
 
 

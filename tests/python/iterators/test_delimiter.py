@@ -1,10 +1,18 @@
 import json
+import os
 
 import pytest
 
 from preader import Config, IteratorOptions, PReader, StateError
 
-from constants import TEST_DEFAULT_DELIMITER, TEST_STATE_NAME, TEST_UNSAFE_STATE_NAMES, TEST_UNSAFE_STATE_NAME_IDS
+from constants import (
+    TEST_DEFAULT_DELIMITER,
+    TEST_STATE_NAME,
+    TEST_UNSAFE_STATE_NAMES,
+    TEST_UNSAFE_STATE_NAME_IDS,
+    TEST_WINDOWS_UNSAFE_STATE_NAMES,
+    TEST_WINDOWS_UNSAFE_STATE_NAME_IDS,
+)
 
 SEGMENTS = [f"seg-{i}" for i in range(10)]
 DELIMITER_CONTENT = TEST_DEFAULT_DELIMITER.join(SEGMENTS).encode()
@@ -121,6 +129,24 @@ def test_resume_ignores_options_when_already_past_start(reader, data_file, consu
     expected = [seg.encode() for seg in SEGMENTS[3:]]
 
     assert list(resumed) == expected
+
+
+def test_end_below_the_position_does_not_rewind_the_state(data_file, make_reader):
+    reader = make_reader(auto_save_state=True, auto_save_state_bytes=64, auto_load_state=True)
+
+    list(reader.delimiter(
+        data_file, delimiter=TEST_DEFAULT_DELIMITER, state=TEST_STATE_NAME
+    ))
+
+    saved = reader.states[TEST_STATE_NAME].position
+
+    assert saved == len(data_file.read_bytes())
+
+    list(reader.delimiter(
+        data_file, delimiter=TEST_DEFAULT_DELIMITER, state=TEST_STATE_NAME, options=IteratorOptions(end=5)
+    ))
+
+    assert reader.states[TEST_STATE_NAME].position == saved
 
 
 def test_resume_on_fully_consumed_file_yields_nothing(reader, tmp_file, consume):
@@ -288,6 +314,18 @@ def test_unsafe_name_defers_rejection_to_save(reader, tmp_file, name, message):
         iterator.state.save()
 
 
+@pytest.mark.skipif(os.name != "nt", reason="Windows path syntax is only unsafe on Windows")
+@pytest.mark.parametrize(
+    "name", TEST_WINDOWS_UNSAFE_STATE_NAMES, ids=TEST_WINDOWS_UNSAFE_STATE_NAME_IDS
+)
+def test_unsafe_windows_name_defers_rejection_to_save(reader, tmp_file, name):
+    iterator = reader.delimiter(tmp_file, delimiter=TEST_DEFAULT_DELIMITER, state=name)
+    assert iterator.state.position == 0
+
+    with pytest.raises(StateError, match="path escapes root"):
+        iterator.state.save()
+
+
 def test_raises_when_state_object_file_argument_mismatches(reader, make_file):
     tracked = make_file(DELIMITER_CONTENT, name="tracked.bin")
     untracked = make_file(DELIMITER_CONTENT, name="untracked.bin")
@@ -452,10 +490,11 @@ def test_raises_when_resumed_file_replaced_by_directory(reader, data_file):
     data_file.unlink()
     data_file.mkdir()
 
-    with pytest.raises(StateError, match="Is a directory"):
+    with pytest.raises(StateError, match="io failed"):
         reader.delimiter(data_file, delimiter=TEST_DEFAULT_DELIMITER, state=state)
 
 
+@pytest.mark.usefixtures("requires_symlinks")
 def test_two_symlinks_to_same_target_share_auto_name(reader, tmp_path, make_file):
     real = make_file(DELIMITER_CONTENT, name="real.bin")
 

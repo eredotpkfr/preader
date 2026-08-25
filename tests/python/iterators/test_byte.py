@@ -1,10 +1,18 @@
 import json
+import os
 
 import pytest
 
 from preader import Config, IteratorOptions, PReader, StateError
 
-from constants import TEST_ALPHABET, TEST_STATE_NAME, TEST_UNSAFE_STATE_NAMES, TEST_UNSAFE_STATE_NAME_IDS
+from constants import (
+    TEST_ALPHABET,
+    TEST_STATE_NAME,
+    TEST_UNSAFE_STATE_NAMES,
+    TEST_UNSAFE_STATE_NAME_IDS,
+    TEST_WINDOWS_UNSAFE_STATE_NAMES,
+    TEST_WINDOWS_UNSAFE_STATE_NAME_IDS,
+)
 
 
 @pytest.fixture
@@ -61,6 +69,20 @@ def test_resume_ignores_options_when_already_past_start(reader, data_file, consu
     resumed = reader.bytes(data_file, state=state, options=options)
 
     assert b"".join(resumed) == TEST_ALPHABET[15:]
+
+
+def test_end_below_the_position_does_not_rewind_the_state(data_file, make_reader):
+    reader = make_reader(auto_save_state=True, auto_save_state_bytes=64, auto_load_state=True)
+
+    list(reader.bytes(data_file, state=TEST_STATE_NAME))
+
+    saved = reader.states[TEST_STATE_NAME].position
+
+    assert saved == len(data_file.read_bytes())
+
+    list(reader.bytes(data_file, state=TEST_STATE_NAME, options=IteratorOptions(end=5)))
+
+    assert reader.states[TEST_STATE_NAME].position == saved
 
 
 def test_threshold_autosave_triggers_mid_iteration(data_file, make_reader, consume):
@@ -230,6 +252,18 @@ def test_unsafe_name_defers_rejection_to_save(reader, tmp_file, name, message):
     assert iterator.state.position == 0
 
     with pytest.raises(StateError, match=message):
+        iterator.state.save()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows path syntax is only unsafe on Windows")
+@pytest.mark.parametrize(
+    "name", TEST_WINDOWS_UNSAFE_STATE_NAMES, ids=TEST_WINDOWS_UNSAFE_STATE_NAME_IDS
+)
+def test_unsafe_windows_name_defers_rejection_to_save(reader, tmp_file, name):
+    iterator = reader.bytes(tmp_file, state=name)
+    assert iterator.state.position == 0
+
+    with pytest.raises(StateError, match="path escapes root"):
         iterator.state.save()
 
 
@@ -413,10 +447,11 @@ def test_raises_when_resumed_file_replaced_by_directory(reader, data_file):
     data_file.unlink()
     data_file.mkdir()
 
-    with pytest.raises(StateError, match="Is a directory"):
+    with pytest.raises(StateError, match="io failed"):
         reader.bytes(data_file, state=state)
 
 
+@pytest.mark.usefixtures("requires_symlinks")
 def test_two_symlinks_to_same_target_share_auto_name(reader, tmp_path, make_file):
     real = make_file(TEST_ALPHABET, name="real.bin")
 
