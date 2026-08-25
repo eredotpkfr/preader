@@ -1,5 +1,5 @@
 use std::path::{
-    Component::{ParentDir, Prefix},
+    Component::{ParentDir, Prefix, RootDir},
     Path, PathBuf,
 };
 
@@ -21,11 +21,11 @@ pub fn scoped_join(root: &Path, unsafe_path: &str) -> anyhow::Result<PathBuf> {
     }
 
     let candidate = Path::new(unsafe_path);
-    let components = candidate
+    let escapes = candidate
         .components()
-        .any(|component| matches!(component, ParentDir | Prefix(_)));
+        .any(|component| matches!(component, ParentDir | Prefix(_) | RootDir));
 
-    if candidate.is_absolute() || components {
+    if escapes {
         return Err(anyhow!("path escapes root: {unsafe_path}"));
     }
 

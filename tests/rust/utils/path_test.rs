@@ -12,7 +12,6 @@ fn root() -> &'static Path {
 #[case::plain("job-1.state.json")]
 #[case::nested("nested/job-1.state.json")]
 #[case::unnormalized("./job-1")]
-#[case::windows_style("C:\\job-1")]
 fn scoped_join_keeps_a_contained_path_verbatim(root: &Path, #[case] contained: &str) {
     assert_eq!(scoped_join(root, contained).unwrap(), root.join(contained));
 }
@@ -34,6 +33,20 @@ fn scoped_join_fails_when_the_path_is_unsafe(
     let error = scoped_join(root, unsafe_path).unwrap_err();
 
     assert!(error.to_string().contains(message));
+}
+
+#[cfg(windows)]
+#[rstest]
+#[case::drive_absolute("C:\\job-1")]
+#[case::drive_relative("C:job-1")]
+#[case::root_relative("\\job-1")]
+#[case::unc_share("\\\\server\\share\\job-1")]
+#[case::verbatim_drive("\\\\?\\C:\\job-1")]
+#[case::backslash_traversal("..\\..\\etc\\passwd")]
+fn scoped_join_fails_when_a_windows_path_is_unsafe(root: &Path, #[case] unsafe_path: &str) {
+    let error = scoped_join(root, unsafe_path).unwrap_err();
+
+    assert!(error.to_string().contains("escapes root"));
 }
 
 #[rstest]
