@@ -52,13 +52,13 @@ def test_zero_chunk_size_yields_nothing(reader, tmp_file):
 
 def test_drop_partial_discards_chunk_cut_short_by_end(reader, data_file):
     options = IteratorOptions(end=12)
+    iterator = reader.chunks(data_file, options=options, chunk_size=5, drop_partial=True)
 
-    chunks = list(reader.chunks(data_file, options=options, chunk_size=5, drop_partial=True))
+    assert list(iterator) == [TEST_ALPHABET[0:5], TEST_ALPHABET[5:10]]
+    assert iterator.state.position == 10
 
-    assert chunks == [TEST_ALPHABET[0:5], TEST_ALPHABET[5:10]]
 
-
-def test_keeps_partial_chunk_cut_by_end_without_drop_partial(reader, data_file):
+def test_keeps_partial_chunk_cut_by_end(reader, data_file):
     options = IteratorOptions(end=12)
 
     chunks = list(reader.chunks(data_file, options=options, chunk_size=5))
@@ -175,16 +175,70 @@ def test_extra_next_after_exhaustion_does_not_resave(data_file, make_reader, con
     assert reader.states[TEST_STATE_NAME].path.stat().st_mtime == mtime_before
 
 
-def test_autosave_error_propagates_from_unbound_iteration(tmp_path, data_file):
-    blocking_file = tmp_path / "preader"
-    blocking_file.write_bytes(b"foo")
+def test_autosave_error_propagates_from_unbound_iteration(config, make_reader, data_file, capfd):
+    config.state_dir.write_bytes(b"foo")
 
-    config = Config(state_dir=blocking_file, auto_save_state=True, auto_save_state_bytes=5)
-    reader = PReader(config=config)
+    reader = make_reader(auto_save_state=True, auto_save_state_bytes=5)
 
     with pytest.raises(StateError, match="io failed"):
         for _ in reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=3):
             pass
+
+    assert "preader: save failed" not in capfd.readouterr().err
+
+
+def test_save_error_at_finalize_propagates(data_file, make_reader):
+    reader = make_reader(auto_save_state=True)
+
+    with pytest.raises(StateError, match="path escapes root"):
+        for _ in reader.chunks(data_file, state="../../etc/passwd"):
+            pass
+
+
+def test_save_error_propagates_after_a_truncation(data_file, make_reader):
+    reader = make_reader(auto_save_state=True, buffer_capacity=1)
+    iterator = reader.chunks(data_file, chunk_size=3, state="../../etc/passwd")
+
+    next(iterator)
+
+    with open(data_file, "r+b") as file:
+        file.truncate(1)
+
+    with pytest.raises(StateError, match="path escapes root"):
+        list(iterator)
+
+
+def test_save_error_propagates_when_end_drops_a_chunk(data_file, make_reader):
+    reader = make_reader(auto_save_state=True)
+    options = IteratorOptions(end=12)
+
+    with pytest.raises(StateError, match="path escapes root"):
+        list(
+            reader.chunks(
+                data_file,
+                chunk_size=8,
+                drop_partial=True,
+                state="../../etc/passwd",
+                options=options,
+            )
+        )
+
+
+@pytest.mark.parametrize("threshold", [4, 1000], ids=["at_the_threshold", "at_the_end"])
+def test_save_error_propagates_on_a_dropped_short_chunk(make_file, make_reader, threshold):
+    reader = make_reader(
+        auto_save_state=True, auto_save_state_bytes=threshold, buffer_capacity=1
+    )
+    path = make_file(b"foobarbaz")
+    iterator = reader.chunks(path, chunk_size=3, drop_partial=True, state="../../etc/passwd")
+
+    next(iterator)
+
+    with open(path, "r+b") as file:
+        file.truncate(5)
+
+    with pytest.raises(StateError, match="path escapes root"):
+        list(iterator)
 
 
 def test_chunk_iterator_repr(reader, tmp_file, reindent, expected_repr):
@@ -286,7 +340,7 @@ def test_raises_when_state_object_file_argument_mismatches(reader, make_file):
     state = reader.chunks(tracked, state=TEST_STATE_NAME).state
     state.save()
 
-    with pytest.raises(StateError, match="resync"):
+    with pytest.raises(StateError, match=r"file path mismatch .*resync"):
         reader.chunks(untracked, state=state)
 
 
@@ -331,6 +385,20 @@ def test_raises_when_file_deleted_and_verify_disabled(data_file, make_reader):
 
     with pytest.raises(FileNotFoundError):
         reader.chunks(data_file, state=state, chunk_size=3)
+
+
+def test_raises_when_the_tracked_file_is_deleted(make_file, make_reader):
+    reader = make_reader(verify_state=False)
+    tracked = make_file(TEST_ALPHABET, name="tracked.bin")
+    untracked = make_file(TEST_ALPHABET, name="untracked.bin")
+
+    state = reader.chunks(tracked, state=TEST_STATE_NAME).state
+
+    state.save()
+    tracked.unlink()
+
+    with pytest.raises(FileNotFoundError):
+        reader.chunks(untracked, state=state)
 
 
 def test_resync_allows_resuming_moved_file(reader, tmp_path, data_file, consume):
@@ -436,6 +504,18 @@ def test_clear_does_not_affect_live_iterator(reader, data_file):
     assert reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=5).state.position == 0
 
 
+def test_raises_when_reading_a_directory(data_file, make_reader):
+    reader = make_reader(verify_state=False)
+    state = reader.chunks(data_file, state=TEST_STATE_NAME).state
+    state.save()
+
+    data_file.unlink()
+    data_file.mkdir()
+
+    with pytest.raises(OSError):
+        list(reader.chunks(data_file, state=state))
+
+
 def test_raises_when_resumed_file_replaced_by_directory(reader, data_file):
     state = reader.chunks(data_file, state=TEST_STATE_NAME).state
     state.save()
@@ -474,6 +554,19 @@ def test_state_dir_change_creates_fresh_state(data_file, make_reader, tmp_path):
     assert other_reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=5).state.position == 0
 
 
+def test_state_object_keeps_its_own_state_dir(data_file, make_reader, tmp_path):
+    owner = make_reader(auto_save_state=True)
+    state = owner.bytes(data_file, state=TEST_STATE_NAME).state
+
+    config = Config(state_dir=tmp_path / "other-preader", auto_save_state=True, verify_state=False)
+    reader = PReader(config=config)
+
+    list(reader.chunks(data_file, state=state))
+
+    assert (owner.config.state_dir / f"{TEST_STATE_NAME}.state.json").is_file()
+    assert not (config.state_dir / f"{TEST_STATE_NAME}.state.json").exists()
+
+
 def test_auto_load_state_ignores_a_corrupt_payload(data_file, make_reader):
     reader = make_reader(auto_load_state=True)
     iterator = reader.chunks(data_file, chunk_size=3)
@@ -481,7 +574,7 @@ def test_auto_load_state_ignores_a_corrupt_payload(data_file, make_reader):
     next(iterator)
 
     state_path = iterator.state.save()
-    state_path.write_text("{ not valid json")
+    state_path.write_text("not valid json")
 
     assert reader.chunks(data_file, chunk_size=3).state.position == 0
 

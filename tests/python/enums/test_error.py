@@ -15,6 +15,16 @@ def test_io_errors_get_prefixed(reader, tmp_file):
         state.verify()
 
 
+def test_serde_errors_get_prefixed(registry):
+    path = registry.path(TEST_STATE_NAME)
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("not valid json")
+
+    with pytest.raises(StateError, match=r"^serde failed: "):
+        registry[TEST_STATE_NAME]
+
+
 def test_regex_errors_get_prefixed(registry):
     with pytest.raises(StateError, match=r"^regex failed: "):
         registry.search("[invalid(")

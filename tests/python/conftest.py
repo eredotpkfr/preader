@@ -1,6 +1,8 @@
 import hashlib
 import itertools
 
+import os
+
 import pytest
 
 from preader import Config, PReader
@@ -108,3 +110,54 @@ def requires_symlinks(tmp_path):
         (tmp_path / "link").symlink_to(tmp_path / "target")
     except (NotImplementedError, OSError):
         pytest.skip("creating a symlink is not permitted here")
+
+
+@pytest.fixture
+def requires_non_utf8_names(tmp_path):
+    probe = tmp_path / os.fsdecode(b"probe-\xff.bin")
+
+    try:
+        probe.write_bytes(b"")
+    except (OSError, UnicodeError):
+        pytest.skip("a non-UTF-8 file name cannot be created here")
+
+    probe.unlink()
+
+
+@pytest.fixture
+def revoke_permissions(tmp_path):
+    probe = tmp_path / "probe"
+
+    probe.mkdir()
+    probe.chmod(0o000)
+
+    enforced = not os.access(probe, os.R_OK)
+
+    probe.chmod(0o755)
+
+    if not enforced:
+        pytest.skip("file permissions are not enforced here")
+
+    blocked = []
+
+    def _revoke_permissions(path):
+        blocked.append(path)
+        path.chmod(0o000)
+
+        return path
+
+    yield _revoke_permissions
+
+    for path in blocked:
+        path.chmod(0o755 if path.is_dir() else 0o644)
+
+
+@pytest.fixture
+def requires_pre_epoch_mtime(tmp_path):
+    probe = tmp_path / "probe.bin"
+    probe.write_bytes(b"")
+
+    try:
+        os.utime(probe, (-86400, -86400))
+    except (OSError, OverflowError):
+        pytest.skip("a pre-epoch mtime cannot be set here")

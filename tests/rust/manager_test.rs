@@ -1,5 +1,5 @@
 #[cfg(unix)]
-use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+use std::{ffi::OsStr, os::unix::ffi::OsStrExt, os::unix::fs::symlink};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -34,7 +34,7 @@ impl Sandbox {
         self.manager.load(name).err().unwrap().to_string()
     }
 
-    fn write_state(&self, name: &str, payload: &str) {
+    fn write_state(&self, name: &str, payload: impl AsRef<[u8]>) {
         fs::write(self.manager.path(name).unwrap(), payload).unwrap();
     }
 
@@ -179,11 +179,24 @@ fn path_appends_the_suffix_inside_the_state_dir(sandbox: Sandbox) {
 #[case::traversal("../../etc/passwd", "path escapes root")]
 #[case::absolute("/tmp", "path escapes root")]
 #[case::empty("", "path must not be empty")]
-#[case::current_dir(".", "path must name an entry")]
+#[case::current_dir(".", "path must not be empty")]
 fn path_fails_when_the_name_is_unsafe(sandbox: Sandbox, #[case] name: &str, #[case] message: &str) {
     let error = sandbox.manager.path(name).unwrap_err();
 
     assert!(error.to_string().contains(message));
+}
+
+#[cfg(windows)]
+#[rstest]
+#[case::drive_absolute("C:\\job-1")]
+#[case::drive_relative("C:job-1")]
+#[case::root_relative("\\job-1")]
+#[case::unc_share("\\\\server\\share\\job-1")]
+#[case::verbatim_drive("\\\\?\\C:\\job-1")]
+#[case::backslash_traversal("..\\..\\etc\\passwd")]
+fn path_fails_when_a_windows_name_is_unsafe(sandbox: Sandbox, #[case] name: &str) {
+    assert!(sandbox.manager.path(name).is_err());
+    assert!(sandbox.manager.tmp(name).is_err());
 }
 
 #[rstest]
@@ -254,7 +267,7 @@ fn tmp_differs_between_calls(sandbox: Sandbox) {
 #[case::traversal("../../etc/passwd", "path escapes root")]
 #[case::absolute("/tmp", "path escapes root")]
 #[case::empty("", "path must not be empty")]
-#[case::current_dir(".", "path must name an entry")]
+#[case::current_dir(".", "path must not be empty")]
 fn tmp_fails_when_the_name_is_unsafe(sandbox: Sandbox, #[case] name: &str, #[case] message: &str) {
     let error = sandbox.manager.tmp(name).unwrap_err();
 
@@ -313,29 +326,58 @@ fn tmp_nests_under_a_subdirectory_name(sandbox: Sandbox) {
 }
 
 #[rstest]
+#[case::one_level("sub/job-1")]
+#[case::four_levels("sub-1/sub-2/sub-3/sub-4/job-1")]
+fn load_reads_back_a_nested_state(sandbox: Sandbox, #[case] name: &str) {
+    let path = sandbox.save_verifiable_state(name, 3);
+
+    assert!(path.is_file());
+    assert_eq!(path, sandbox.manager.path(name).unwrap());
+    assert_eq!(sandbox.manager.load(name).unwrap().position, 3);
+}
+
+#[cfg(unix)]
+#[rstest]
+fn tmp_fails_when_the_name_escapes_through_a_symlink(sandbox: Sandbox) {
+    let outside = sandbox.tmp_dir.path().join("outside");
+
+    fs::create_dir_all(&outside).unwrap();
+    symlink(&outside, sandbox.state_dir().join("link")).unwrap();
+
+    assert!(sandbox.manager.tmp("link/job-1").is_err());
+}
+
+#[rstest]
 fn load_fails_when_the_state_is_missing(sandbox: Sandbox) {
     assert!(sandbox.load_error(TEST_STATE_NAME).contains("state not found"));
 }
 
 #[rstest]
-fn load_fails_when_the_content_is_unparsable(sandbox: Sandbox) {
-    sandbox.write_state(TEST_STATE_NAME, "not valid json");
+#[case::unparsable("not valid json", "expected ident")]
+#[case::missing_fields("{}", "missing field `name`")]
+#[case::empty("", "EOF while parsing")]
+fn load_fails_when_the_payload_is_malformed(
+    sandbox: Sandbox,
+    #[case] payload: &str,
+    #[case] message: &str,
+) {
+    sandbox.write_state(TEST_STATE_NAME, payload);
 
-    assert!(sandbox.load_error(TEST_STATE_NAME).contains("expected ident"));
+    assert!(sandbox.load_error(TEST_STATE_NAME).contains(message));
 }
 
 #[rstest]
 #[case::traversal("../../etc/passwd", "path escapes root")]
 #[case::absolute("/tmp", "path escapes root")]
 #[case::empty("", "path must not be empty")]
-#[case::current_dir(".", "path must name an entry")]
+#[case::current_dir(".", "path must not be empty")]
 fn load_fails_when_the_name_is_unsafe(sandbox: Sandbox, #[case] name: &str, #[case] message: &str) {
     assert!(sandbox.load_error(name).contains(message));
 }
 
 #[rstest]
 fn load_deserializes_the_payload_without_verification(#[with(false)] sandbox: Sandbox) {
-    sandbox.write_state(TEST_STATE_NAME, &unverifiable_payload(TEST_STATE_NAME));
+    sandbox.write_state(TEST_STATE_NAME, unverifiable_payload(TEST_STATE_NAME));
 
     let state = sandbox.manager.load(TEST_STATE_NAME).unwrap();
 
@@ -354,9 +396,9 @@ fn load_deserializes_the_payload_without_verification(#[with(false)] sandbox: Sa
 
 #[rstest]
 fn load_verifies_by_default(sandbox: Sandbox) {
-    sandbox.write_state(TEST_STATE_NAME, &unverifiable_payload(TEST_STATE_NAME));
+    sandbox.write_state(TEST_STATE_NAME, unverifiable_payload(TEST_STATE_NAME));
 
-    assert!(sandbox.manager.load(TEST_STATE_NAME).is_err());
+    assert!(sandbox.load_error(TEST_STATE_NAME).contains("io failed"));
 }
 
 #[rstest]
@@ -376,17 +418,10 @@ fn load_fails_when_the_path_is_a_directory(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn load_fails_when_fields_are_missing(sandbox: Sandbox) {
-    sandbox.write_state(TEST_STATE_NAME, "{}");
+fn load_fails_when_the_content_is_not_utf8(sandbox: Sandbox) {
+    sandbox.write_state(TEST_STATE_NAME, b"{\"name\": \"\xff\"}");
 
-    assert!(sandbox.load_error(TEST_STATE_NAME).contains("missing field `name`"));
-}
-
-#[rstest]
-fn load_fails_when_the_file_is_empty(sandbox: Sandbox) {
-    sandbox.write_state(TEST_STATE_NAME, "");
-
-    assert!(sandbox.load_error(TEST_STATE_NAME).contains("EOF while parsing"));
+    assert!(sandbox.load_error(TEST_STATE_NAME).contains("valid UTF-8"));
 }
 
 #[rstest]
@@ -402,7 +437,7 @@ fn load_returns_a_verified_state(sandbox: Sandbox) {
 #[rstest]
 fn load_carries_the_managers_saved_position(#[with(false)] mut sandbox: Sandbox) {
     sandbox.manager.last_saved_position = 512;
-    sandbox.write_state(TEST_STATE_NAME, &unverifiable_payload(TEST_STATE_NAME));
+    sandbox.write_state(TEST_STATE_NAME, unverifiable_payload(TEST_STATE_NAME));
 
     let state = sandbox.manager.load(TEST_STATE_NAME).unwrap();
 

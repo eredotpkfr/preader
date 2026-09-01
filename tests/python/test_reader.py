@@ -1,8 +1,10 @@
+import os
+
 import pytest
 
 from preader import Config, IteratorOptions, PReader, StateError
 
-from constants import TEST_ALPHABET, TEST_STATE_NAME
+from constants import TEST_ALPHABET, TEST_DEFAULT_DELIMITER, TEST_STATE_NAME
 
 
 def test_preader_defaults():
@@ -55,6 +57,39 @@ def test_bytes_raises_when_path_is_a_directory(reader, tmp_path):
         reader.bytes(directory)
 
 
+def test_bytes_raises_when_the_file_is_unreadable(reader, tmp_file, revoke_permissions):
+    revoke_permissions(tmp_file)
+
+    with pytest.raises(StateError, match="Permission denied"):
+        reader.bytes(tmp_file)
+
+
+@pytest.mark.usefixtures("requires_non_utf8_names")
+def test_bytes_raises_when_path_is_not_utf8(reader, make_file):
+    path = make_file(b"foo", name=os.fsdecode(b"data-\xff.bin"))
+
+    with pytest.raises(StateError, match="invalid UTF-8"):
+        reader.bytes(path)
+
+
+@pytest.mark.usefixtures("requires_pre_epoch_mtime")
+def test_bytes_raises_when_mtime_precedes_the_epoch(reader, tmp_file):
+    os.utime(tmp_file, (-86400, -86400))
+
+    with pytest.raises(StateError, match="second time provided"):
+        reader.bytes(tmp_file)
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="a fifo cannot be created here")
+def test_bytes_raises_when_path_is_a_fifo(reader, tmp_path):
+    fifo = tmp_path / "a-fifo"
+
+    os.mkfifo(fifo)
+
+    with pytest.raises(StateError, match="not a file"):
+        reader.bytes(fifo)
+
+
 def test_bytes_yields_nothing_for_empty_file(reader, empty_file):
     assert list(reader.bytes(empty_file)) == []
 
@@ -63,11 +98,25 @@ def test_bytes_yields_one_item_for_a_single_byte_file(reader, make_file):
     assert list(reader.bytes(make_file(b"a"))) == [b"a"]
 
 
-def test_raises_when_start_exceeds_end(reader, tmp_file):
+@pytest.mark.parametrize(
+    "iterate",
+    [
+        lambda reader, path, options: reader.bytes(path, options=options),
+        lambda reader, path, options: reader.chunks(path, options=options),
+        lambda reader, path, options: reader.lines(path, options=options),
+        lambda reader, path, options: reader.delimiter(
+            path, options=options, delimiter=TEST_DEFAULT_DELIMITER
+        ),
+    ],
+    ids=["bytes", "chunks", "lines", "delimiter"],
+)
+def test_raises_when_start_exceeds_end(reader, tmp_file, iterate):
     with pytest.raises(ValueError, match="start .* must be <= end"):
-        options = IteratorOptions(start=10, end=5)
+        iterate(reader, tmp_file, IteratorOptions(start=10, end=5))
 
-        reader.bytes(tmp_file, options=options)
+
+def test_bytes_treats_an_explicit_none_state_as_auto(reader, tmp_file):
+    assert reader.bytes(tmp_file, state=None).state.name == reader.bytes(tmp_file).state.name
 
 
 def test_chunks_splits_into_fixed_size_pieces(reader, make_file):
@@ -126,10 +175,16 @@ def test_chunks_attributes(reader, tmp_file, drop_partial):
     assert iterator.drop_partial is drop_partial
 
 
-def test_lines_splits_on_newline(reader, make_file):
-    path = make_file(b"foo\nbar\nbaz\n")
-
-    assert list(reader.lines(path)) == ["foo", "bar", "baz"]
+@pytest.mark.parametrize(
+    ("content", "expected"),
+    [
+        (b"foo\nbar\nbaz\n", ["foo", "bar", "baz"]),
+        (b"foo\n\nbar\n", ["foo", "", "bar"]),
+    ],
+    ids=["plain", "with_a_blank_line"],
+)
+def test_lines_splits_on_newline(reader, make_file, content, expected):
+    assert list(reader.lines(make_file(content))) == expected
 
 
 def test_lines_keepends_preserves_newline(reader, make_file):
@@ -152,12 +207,6 @@ def test_lines_yields_one_item_for_a_single_byte_file(reader, make_file):
     assert list(reader.lines(make_file(b"a"))) == ["a"]
 
 
-def test_lines_keeps_blank_lines_by_default(reader, make_file):
-    path = make_file(b"foo\n\nbar\n")
-
-    assert list(reader.lines(path)) == ["foo", "", "bar"]
-
-
 def test_lines_skip_empty_skips_blank_lines(reader, make_file):
     path = make_file(b"foo\n\nbar\n")
 
@@ -176,16 +225,24 @@ def test_lines_skip_empty_with_keepends(reader, make_file):
     ids=["both", "keepends", "skip_empty", "defaults"],
 )
 def test_lines_attributes(reader, tmp_file, keepends, skip_empty):
-    iterator = reader.lines(tmp_file, keepends=keepends, skip_empty=skip_empty)
+    options = IteratorOptions(skip=1)
+    iterator = reader.lines(tmp_file, options=options, keepends=keepends, skip_empty=skip_empty)
 
     assert iterator.keepends is keepends
     assert iterator.skip_empty is skip_empty
+    assert iterator.skip_remaining == options.skip
 
 
-def test_delimiter_splits_on_byte(reader, make_file):
-    path = make_file(b"foo,bar,baz")
-
-    assert list(reader.delimiter(path, delimiter=",")) == [b"foo", b"bar", b"baz"]
+@pytest.mark.parametrize(
+    ("content", "expected"),
+    [
+        (b"foo,bar,baz", [b"foo", b"bar", b"baz"]),
+        (b"foo,,bar,", [b"foo", b"", b"bar"]),
+    ],
+    ids=["plain", "with_a_blank_segment"],
+)
+def test_delimiter_splits_on_byte(reader, make_file, content, expected):
+    assert list(reader.delimiter(make_file(content), delimiter=",")) == expected
 
 
 def test_delimiter_keep_delimiter_preserves_byte(reader, make_file):
@@ -210,12 +267,6 @@ def test_delimiter_yields_one_item_for_a_single_byte_file(reader, make_file):
     assert list(reader.delimiter(make_file(b"a"), delimiter=",")) == [b"a"]
 
 
-def test_delimiter_keeps_blank_segments_by_default(reader, make_file):
-    path = make_file(b"foo,,bar,")
-
-    assert list(reader.delimiter(path, delimiter=",")) == [b"foo", b"", b"bar"]
-
-
 def test_delimiter_skip_empty_skips_blank_segments(reader, make_file):
     path = make_file(b"foo,,bar,")
 
@@ -236,13 +287,19 @@ def test_delimiter_skip_empty_with_keep_delimiter(reader, make_file):
     ids=["both", "keep_delimiter", "skip_empty", "defaults"],
 )
 def test_delimiter_attributes(reader, tmp_file, keep_delimiter, skip_empty):
+    options = IteratorOptions(skip=1)
     iterator = reader.delimiter(
-        tmp_file, delimiter=",", keep_delimiter=keep_delimiter, skip_empty=skip_empty
+        tmp_file,
+        delimiter=",",
+        options=options,
+        keep_delimiter=keep_delimiter,
+        skip_empty=skip_empty,
     )
 
     assert iterator.delimiter == ord(",")
     assert iterator.keep_delimiter is keep_delimiter
     assert iterator.skip_empty is skip_empty
+    assert iterator.skip_remaining == options.skip
 
 
 def test_delimiter_accepts_codepoint_up_to_255(reader, make_file):
@@ -256,14 +313,13 @@ def test_delimiter_raises_when_codepoint_above_255(reader, tmp_file):
         reader.delimiter(tmp_file, delimiter="€")
 
 
-def test_bytes_reads_a_unicode_path(reader, make_file):
-    path = make_file(b"foo", name="café-日本語.bin")
-
-    assert b"".join(reader.bytes(path)) == b"foo"
-
-
-def test_bytes_reads_a_path_with_special_characters(reader, make_file):
-    path = make_file(b"foo", name="foo bar; $baz & `qux`.bin")
+@pytest.mark.parametrize(
+    "name",
+    ["café-日本語.bin", "foo bar; $baz & `qux`.bin"],
+    ids=["unicode", "special_characters"],
+)
+def test_bytes_reads_an_unusual_path(reader, make_file, name):
+    path = make_file(b"foo", name=name)
 
     assert b"".join(reader.bytes(path)) == b"foo"
 

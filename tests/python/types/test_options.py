@@ -24,6 +24,17 @@ def test_iterator_options_mutation_affects_reads(reader, make_file):
     assert b"".join(reader.bytes(path, options=options)) == TEST_ALPHABET[5:]
 
 
+def test_iterator_options_are_snapshotted_at_construction(reader, make_file):
+    path = make_file(TEST_ALPHABET)
+    options = IteratorOptions(end=5)
+    iterator = reader.bytes(path, options=options)
+
+    options.end = len(TEST_ALPHABET)
+    options.limit = 1
+
+    assert b"".join(iterator) == TEST_ALPHABET[:5]
+
+
 @pytest.mark.parametrize(
     "value",
     [-1, -2, -100, -(2**31), -(2**63)],

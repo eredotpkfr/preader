@@ -42,6 +42,31 @@ def test_options_narrow_the_output(reader, data_file, options, expected):
     assert list(reader.lines(data_file, options=options)) == expected
 
 
+def test_end_yields_a_crossing_line_whole(reader, data_file):
+    options = IteratorOptions(end=17)
+    iterator = reader.lines(data_file, options=options)
+
+    assert list(iterator) == LINES[:3]
+    assert iterator.state.position > options.end
+
+
+def test_skip_stops_at_a_truncation(make_reader, data_file):
+    reader = make_reader(verify_state=False, auto_load_state=True)
+    reader.bytes(data_file, state=TEST_STATE_NAME).state.save()
+
+    os.truncate(data_file, 8)
+
+    options = IteratorOptions(skip=3)
+
+    assert list(reader.lines(data_file, state=TEST_STATE_NAME, options=options)) == []
+
+
+def test_skip_past_the_end_yields_nothing(reader, data_file):
+    options = IteratorOptions(skip=1000)
+
+    assert list(reader.lines(data_file, options=options)) == []
+
+
 def test_align_start_skips_partial_line(reader, data_file):
     options = IteratorOptions(start=9)
 
@@ -75,6 +100,27 @@ def test_raises_when_content_is_invalid_utf8(reader, make_file):
 
     with pytest.raises(OSError, match="valid UTF-8"):
         list(reader.lines(path))
+
+
+def test_raises_when_skipped_content_is_invalid_utf8(reader, make_file):
+    path = make_file(bytes([0xFF, 0xFE]) + b"\nfoo\n")
+    options = IteratorOptions(skip=1)
+
+    with pytest.raises(OSError, match="valid UTF-8"):
+        list(reader.lines(path, options=options))
+
+
+@pytest.mark.parametrize(
+    ("keepends", "expected"),
+    [(False, ["foo", "bar"]), (True, ["foo\r\r\n", "bar\r\r\r\n"])],
+    ids=["stripped", "keepends"],
+)
+def test_repeated_carriage_returns_are_stripped_together(
+    reader, make_file, keepends, expected
+):
+    path = make_file(b"foo\r\r\nbar\r\r\r\n")
+
+    assert list(reader.lines(path, keepends=keepends)) == expected
 
 
 def test_crlf_strips_both_carriage_return_and_newline(reader, make_file):
@@ -214,16 +260,72 @@ def test_extra_next_after_exhaustion_does_not_resave(data_file, make_reader, con
     assert reader.states[TEST_STATE_NAME].path.stat().st_mtime == mtime_before
 
 
-def test_autosave_error_propagates_from_unbound_iteration(tmp_path, data_file):
-    blocking_file = tmp_path / "preader"
-    blocking_file.write_bytes(b"foo")
+def test_autosave_error_propagates_from_unbound_iteration(config, make_reader, data_file, capfd):
+    config.state_dir.write_bytes(b"foo")
 
-    config = Config(state_dir=blocking_file, auto_save_state=True, auto_save_state_bytes=5)
-    reader = PReader(config=config)
+    reader = make_reader(auto_save_state=True, auto_save_state_bytes=5)
 
     with pytest.raises(StateError, match="io failed"):
         for _ in reader.lines(data_file, state=TEST_STATE_NAME):
             pass
+
+    assert "preader: save failed" not in capfd.readouterr().err
+
+
+def test_save_error_at_finalize_propagates(data_file, make_reader):
+    reader = make_reader(auto_save_state=True)
+
+    with pytest.raises(StateError, match="path escapes root"):
+        for _ in reader.lines(data_file, state="../../etc/passwd"):
+            pass
+
+
+def test_save_error_propagates_after_a_truncation(data_file, make_reader):
+    reader = make_reader(auto_save_state=True, buffer_capacity=1)
+    iterator = reader.lines(data_file, state="../../etc/passwd")
+
+    next(iterator)
+
+    with open(data_file, "r+b") as file:
+        file.truncate(1)
+
+    with pytest.raises(StateError, match="path escapes root"):
+        list(iterator)
+
+
+def test_save_error_propagates_while_skipping(data_file, make_reader):
+    reader = make_reader(auto_save_state=True, buffer_capacity=1)
+    options = IteratorOptions(skip=3)
+    iterator = reader.lines(data_file, state="../../etc/passwd", options=options)
+
+    with open(data_file, "r+b") as file:
+        file.truncate(1)
+
+    with pytest.raises(StateError, match="path escapes root"):
+        list(iterator)
+
+
+def test_save_error_propagates_on_a_skipped_item(data_file, make_reader):
+    reader = make_reader(auto_save_state=True, auto_save_state_bytes=1)
+    options = IteratorOptions(skip=2)
+    iterator = reader.lines(data_file, state="../../etc/passwd", options=options)
+
+    with pytest.raises(StateError, match="path escapes root"):
+        list(iterator)
+
+    assert iterator.state.position == len(LINES[0]) + 1
+
+
+def test_save_error_propagates_on_a_filtered_blank(make_file, make_reader):
+    reader = make_reader(auto_save_state=True, auto_save_state_bytes=1)
+    path = make_file(b"\nfoo\n")
+
+    iterator = reader.lines(path, state="../../etc/passwd", skip_empty=True)
+
+    with pytest.raises(StateError, match="path escapes root"):
+        list(iterator)
+
+    assert iterator.state.position == 1
 
 
 def test_line_iterator_repr(reader, tmp_file, reindent, expected_repr):
@@ -326,7 +428,7 @@ def test_raises_when_state_object_file_argument_mismatches(reader, make_file):
     state = reader.lines(tracked, state=TEST_STATE_NAME).state
     state.save()
 
-    with pytest.raises(StateError, match="resync"):
+    with pytest.raises(StateError, match=r"file path mismatch .*resync"):
         reader.lines(untracked, state=state)
 
 
@@ -371,6 +473,20 @@ def test_raises_when_file_deleted_and_verify_disabled(data_file, make_reader):
 
     with pytest.raises(FileNotFoundError):
         reader.lines(data_file, state=state)
+
+
+def test_raises_when_the_tracked_file_is_deleted(make_file, make_reader):
+    reader = make_reader(verify_state=False)
+    tracked = make_file(LINE_CONTENT, name="tracked.bin")
+    untracked = make_file(LINE_CONTENT, name="untracked.bin")
+
+    state = reader.lines(tracked, state=TEST_STATE_NAME).state
+
+    state.save()
+    tracked.unlink()
+
+    with pytest.raises(FileNotFoundError):
+        reader.lines(untracked, state=state)
 
 
 def test_resync_allows_resuming_moved_file(reader, tmp_path, data_file, consume):
@@ -476,6 +592,30 @@ def test_clear_does_not_affect_live_iterator(reader, data_file):
     assert reader.lines(data_file, state=TEST_STATE_NAME).state.position == 0
 
 
+def test_raises_when_reading_a_directory(data_file, make_reader):
+    reader = make_reader(verify_state=False)
+    state = reader.lines(data_file, state=TEST_STATE_NAME).state
+    state.save()
+
+    data_file.unlink()
+    data_file.mkdir()
+
+    with pytest.raises(OSError):
+        list(reader.lines(data_file, state=state))
+
+
+def test_raises_when_aligning_on_a_directory(data_file, make_reader):
+    reader = make_reader(verify_state=False)
+    state = reader.lines(data_file, state=TEST_STATE_NAME).state
+    state.save()
+
+    data_file.unlink()
+    data_file.mkdir()
+
+    with pytest.raises(OSError):
+        reader.lines(data_file, state=state, options=IteratorOptions(start=5), align_start=True)
+
+
 def test_raises_when_resumed_file_replaced_by_directory(reader, data_file):
     state = reader.lines(data_file, state=TEST_STATE_NAME).state
     state.save()
@@ -512,6 +652,19 @@ def test_state_dir_change_creates_fresh_state(data_file, make_reader, tmp_path):
     other_reader = PReader(config=Config(state_dir=tmp_path / "other-preader"))
 
     assert other_reader.lines(data_file, state=TEST_STATE_NAME).state.position == 0
+
+
+def test_state_object_keeps_its_own_state_dir(data_file, make_reader, tmp_path):
+    owner = make_reader(auto_save_state=True)
+    state = owner.bytes(data_file, state=TEST_STATE_NAME).state
+
+    config = Config(state_dir=tmp_path / "other-preader", auto_save_state=True, verify_state=False)
+    reader = PReader(config=config)
+
+    list(reader.lines(data_file, state=state))
+
+    assert (owner.config.state_dir / f"{TEST_STATE_NAME}.state.json").is_file()
+    assert not (config.state_dir / f"{TEST_STATE_NAME}.state.json").exists()
 
 
 def test_resume_ignores_align_start_and_skip(reader, data_file, consume):
@@ -603,7 +756,7 @@ def test_auto_load_state_ignores_a_corrupt_payload(data_file, make_reader):
     next(iterator)
 
     state_path = iterator.state.save()
-    state_path.write_text("{ not valid json")
+    state_path.write_text("not valid json")
 
     assert reader.lines(data_file).state.position == 0
 

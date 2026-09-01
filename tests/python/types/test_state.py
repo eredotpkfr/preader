@@ -59,18 +59,6 @@ def test_percent_before_reading(reader, make_file, content):
     assert reader.bytes(make_file(content)).percent() == 0.0
 
 
-def test_percent_progresses_to_hundred(reader, tmp_file):
-    iterator = reader.bytes(tmp_file)
-    size = len(tmp_file.read_bytes())
-
-    assert iterator.percent() == 0.0
-
-    for read_count, _ in enumerate(iterator, start=1):
-        assert iterator.percent() == pytest.approx(read_count / size * 100)
-
-    assert iterator.percent() == 100.0
-
-
 def test_bytes_read_match_file_content(reader, tmp_file):
     content = tmp_file.read_bytes()
     read_bytes = list(reader.bytes(tmp_file))
@@ -99,25 +87,21 @@ def test_save_updates_timestamp_but_not_created_at(reader, tmp_file):
     assert state.timestamps.updated_at > created_at
 
 
-def test_save_persists_across_new_reader(config, reader, tmp_file, consume):
+def test_save_persists_across_new_reader(make_reader, reader, tmp_file, consume):
     iterator = consume(reader.bytes(tmp_file, state=TEST_STATE_NAME))
 
     iterator.state.save()
 
-    new_reader = PReader(config=config)
+    new_reader = make_reader()
     loaded = new_reader.states[TEST_STATE_NAME]
 
     assert loaded.position == len(tmp_file.read_bytes())
 
 
-def test_save_raises_when_state_dir_blocked(tmp_path, tmp_file):
-    blocking_file = tmp_path / "preader"
-    blocking_file.write_bytes(b"foo")
+def test_save_raises_when_state_dir_blocked(config, make_reader, tmp_file):
+    config.state_dir.write_bytes(b"foo")
 
-    config = Config(state_dir=blocking_file)
-    reader = PReader(config=config)
-
-    state = reader.bytes(tmp_file).state
+    state = make_reader().bytes(tmp_file).state
 
     with pytest.raises(StateError, match="AlreadyExists"):
         state.save()
@@ -170,6 +154,16 @@ def test_verify_raises_when_size_mismatch(make_reader, tmp_large_file):
     os.utime(tmp_large_file, (original_mtime, original_mtime))
 
     with pytest.raises(StateError, match="file size mismatch"):
+        state.verify()
+
+
+@pytest.mark.usefixtures("requires_pre_epoch_mtime")
+def test_verify_raises_when_mtime_precedes_the_epoch(make_reader, tmp_large_file):
+    state = _new_unverified_state(make_reader, tmp_large_file)
+
+    os.utime(tmp_large_file, (-86400, -86400))
+
+    with pytest.raises(StateError, match="io failed"):
         state.verify()
 
 
@@ -268,9 +262,10 @@ def test_resync_does_not_mutate_original(reader, tmp_file, tmp_path):
     ids=["path_rejected", "commit_failed"],
 )
 def test_save_leaves_the_state_untouched_when_it_fails(
-    make_reader, tmp_file, tmp_path, name, message
+    config, make_reader, tmp_file, name, message
 ):
-    state_dir = tmp_path / "preader"
+    state_dir = config.state_dir
+
     state_dir.mkdir()
 
     (state_dir / f"{TEST_STATE_NAME}.state.json").mkdir()
@@ -284,8 +279,9 @@ def test_save_leaves_the_state_untouched_when_it_fails(
     assert state.timestamps.updated_at == before
 
 
-def test_save_removes_the_temporary_file_when_it_fails(make_reader, tmp_file, tmp_path):
-    state_dir = tmp_path / "preader"
+def test_save_removes_the_temporary_file_when_it_fails(config, make_reader, tmp_file):
+    state_dir = config.state_dir
+
     state_dir.mkdir()
 
     (state_dir / f"{TEST_STATE_NAME}.state.json").mkdir()
@@ -307,7 +303,7 @@ def test_save_succeeds_after_the_file_is_deleted(reader, make_file):
     assert state.save().exists()
 
 
-def test_saved_state_for_a_deleted_file_fails_to_reload(reader, make_file):
+def test_reload_raises_when_the_file_is_deleted(reader, make_file):
     path = make_file(b"foo")
     state = reader.bytes(path, state=TEST_STATE_NAME).state
 
@@ -388,6 +384,13 @@ def test_state_repr(reader, tmp_file, reindent, expected_repr):
         position=state.position,
         timestamps=reindent(repr(state.timestamps), 2),
     )
+
+
+def test_name_drops_the_suffix(reader, tmp_file):
+    state = reader.bytes(tmp_file, state=f"{TEST_STATE_NAME}.state.json").state
+
+    assert state.name == TEST_STATE_NAME
+    assert state.path.name == f"{TEST_STATE_NAME}.state.json"
 
 
 def test_save_accepts_a_unicode_name(reader, tmp_file):

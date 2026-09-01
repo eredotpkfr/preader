@@ -29,6 +29,7 @@ def data_file(make_file):
         (IteratorOptions(start=5, skip=3), TEST_ALPHABET[8:]),
         (IteratorOptions(start=10, limit=3), TEST_ALPHABET[10:13]),
         (IteratorOptions(start=5, end=10), TEST_ALPHABET[5:10]),
+        (IteratorOptions(start=5, skip=3, limit=4), TEST_ALPHABET[8:12]),
     ],
     ids=[
         "start_skips_to_position",
@@ -37,6 +38,7 @@ def data_file(make_file):
         "start_and_skip_combine",
         "limit_caps_yielded_items",
         "start_and_end_define_window",
+        "start_skip_and_limit_combine",
     ],
 )
 def test_options_narrow_the_output(reader, data_file, options, expected):
@@ -175,6 +177,20 @@ def test_raises_when_file_deleted_and_verify_disabled(data_file, make_reader):
         reader.bytes(data_file, state=state)
 
 
+def test_raises_when_the_tracked_file_is_deleted(make_file, make_reader):
+    reader = make_reader(verify_state=False)
+    tracked = make_file(b"foo", name="tracked.bin")
+    untracked = make_file(b"foo", name="untracked.bin")
+
+    state = reader.bytes(tracked, state=TEST_STATE_NAME).state
+
+    state.save()
+    tracked.unlink()
+
+    with pytest.raises(FileNotFoundError):
+        reader.bytes(untracked, state=state)
+
+
 def test_raises_when_state_object_file_argument_mismatches(reader, make_file):
     tracked = make_file(b"foo", name="tracked.bin")
     untracked = make_file(b"foo", name="untracked.bin")
@@ -182,7 +198,7 @@ def test_raises_when_state_object_file_argument_mismatches(reader, make_file):
     state = reader.bytes(tracked, state=TEST_STATE_NAME).state
     state.save()
 
-    with pytest.raises(StateError, match="resync"):
+    with pytest.raises(StateError, match=r"file path mismatch .*resync"):
         reader.bytes(untracked, state=state)
 
 
@@ -291,16 +307,37 @@ def test_extra_next_after_exhaustion_does_not_resave(data_file, make_reader, con
     assert reader.states[TEST_STATE_NAME].path.stat().st_mtime == mtime_before
 
 
-def test_autosave_error_propagates_from_unbound_iteration(tmp_path, data_file):
-    blocking_file = tmp_path / "preader"
-    blocking_file.write_bytes(b"foo")
+def test_autosave_error_propagates_from_unbound_iteration(config, make_reader, data_file, capfd):
+    config.state_dir.write_bytes(b"foo")
 
-    config = Config(state_dir=blocking_file, auto_save_state=True, auto_save_state_bytes=5)
-    reader = PReader(config=config)
+    reader = make_reader(auto_save_state=True, auto_save_state_bytes=5)
 
     with pytest.raises(StateError, match="io failed"):
         for _ in reader.bytes(data_file, state=TEST_STATE_NAME):
             pass
+
+    assert "preader: save failed" not in capfd.readouterr().err
+
+
+def test_save_error_at_finalize_propagates(data_file, make_reader):
+    reader = make_reader(auto_save_state=True)
+
+    with pytest.raises(StateError, match="path escapes root"):
+        for _ in reader.bytes(data_file, state="../../etc/passwd"):
+            pass
+
+
+def test_save_error_propagates_after_a_truncation(data_file, make_reader):
+    reader = make_reader(auto_save_state=True, buffer_capacity=1)
+    iterator = reader.bytes(data_file, state="../../etc/passwd")
+
+    next(iterator)
+
+    with open(data_file, "r+b") as file:
+        file.truncate(1)
+
+    with pytest.raises(StateError, match="path escapes root"):
+        list(iterator)
 
 
 def test_byte_iterator_repr(reader, tmp_file, reindent, expected_repr):
@@ -440,6 +477,18 @@ def test_resume_with_smaller_threshold_saves_early(data_file, make_reader, consu
     assert second_reader.states[TEST_STATE_NAME].position == 9
 
 
+def test_raises_when_reading_a_directory(data_file, make_reader):
+    reader = make_reader(verify_state=False)
+    state = reader.bytes(data_file, state=TEST_STATE_NAME).state
+    state.save()
+
+    data_file.unlink()
+    data_file.mkdir()
+
+    with pytest.raises(OSError):
+        list(reader.bytes(data_file, state=state))
+
+
 def test_raises_when_resumed_file_replaced_by_directory(reader, data_file):
     state = reader.bytes(data_file, state=TEST_STATE_NAME).state
     state.save()
@@ -479,6 +528,19 @@ def test_state_dir_change_creates_fresh_state(data_file, make_reader, tmp_path):
     assert other_reader.bytes(data_file, state=TEST_STATE_NAME).state.position == 0
 
 
+def test_state_object_keeps_its_own_state_dir(data_file, make_reader, tmp_path):
+    owner = make_reader(auto_save_state=True)
+    state = owner.bytes(data_file, state=TEST_STATE_NAME).state
+
+    config = Config(state_dir=tmp_path / "other-preader", auto_save_state=True, verify_state=False)
+    reader = PReader(config=config)
+
+    list(reader.bytes(data_file, state=state))
+
+    assert (owner.config.state_dir / f"{TEST_STATE_NAME}.state.json").is_file()
+    assert not (config.state_dir / f"{TEST_STATE_NAME}.state.json").exists()
+
+
 def test_auto_load_state_ignores_a_corrupt_payload(data_file, make_reader):
     reader = make_reader(auto_load_state=True)
     iterator = reader.bytes(data_file)
@@ -486,7 +548,7 @@ def test_auto_load_state_ignores_a_corrupt_payload(data_file, make_reader):
     next(iterator)
 
     state_path = iterator.state.save()
-    state_path.write_text("{ not valid json")
+    state_path.write_text("not valid json")
 
     assert reader.bytes(data_file).state.position == 0
 

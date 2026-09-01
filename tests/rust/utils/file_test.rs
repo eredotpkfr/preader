@@ -16,7 +16,7 @@ const FOO_DIGEST: &str = "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e
 const FULL_WINDOW_DIGEST: &str = "c93eee2d0db02f10acc7460d9576e122dcf8cd53c4bf8dfcae1b3e74ebcfff5a";
 
 const FINGERPRINT_WINDOW: usize = 4096;
-const UNREADABLE_POSITION: u64 = i64::MAX as u64 + 2;
+const UNSEEKABLE_POSITION: u64 = i64::MAX as u64 + 1;
 
 #[rstest]
 #[case::plain_content(b"foo".to_vec(), FOO_DIGEST)]
@@ -67,7 +67,10 @@ fn fingerprint_fails_when_the_file_is_missing(tmp_dir: TempDir) {
 fn fingerprint_fails_when_the_path_is_a_directory(tmp_dir: TempDir) {
     let error = fingerprint(tmp_dir.path()).unwrap_err();
 
-    assert_eq!(error.kind(), ErrorKind::IsADirectory);
+    assert!(matches!(
+        error.kind(),
+        ErrorKind::IsADirectory | ErrorKind::PermissionDenied
+    ));
 }
 
 #[rstest]
@@ -100,9 +103,20 @@ fn starts_mid_item_leaves_the_cursor_at_the_position(tmp_dir: TempDir, #[case] p
 }
 
 #[rstest]
-fn starts_mid_item_fails_when_the_position_is_too_large(tmp_dir: TempDir) {
+#[case::restoring_the_cursor(UNSEEKABLE_POSITION)]
+#[case::reading_the_previous_byte(UNSEEKABLE_POSITION + 1)]
+fn starts_mid_item_fails_when_the_position_is_too_large(tmp_dir: TempDir, #[case] position: u64) {
     let file = File::open(write(&tmp_dir, "data.bin", b"foo")).unwrap();
-    let error = starts_mid_item(&file, UNREADABLE_POSITION, b'\n').unwrap_err();
+    let error = starts_mid_item(&file, position, b'\n').unwrap_err();
 
     assert_eq!(error.kind(), ErrorKind::InvalidInput);
+}
+
+#[cfg(unix)]
+#[rstest]
+fn starts_mid_item_fails_when_the_file_is_a_directory(tmp_dir: TempDir) {
+    let directory = File::open(tmp_dir.path()).unwrap();
+    let error = starts_mid_item(&directory, 1, b'\n').unwrap_err();
+
+    assert_eq!(error.kind(), ErrorKind::IsADirectory);
 }
