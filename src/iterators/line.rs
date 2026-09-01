@@ -11,7 +11,7 @@ use crate::{
     utils::file::starts_mid_item,
 };
 
-#[pyclass(extends = IteratorBase)]
+#[pyclass(module = "preader", extends = IteratorBase)]
 pub struct LineIterator {
     reader: BufReader<File>,
     buffer: String,

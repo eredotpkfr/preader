@@ -1,43 +1,54 @@
-use std::{fs, path::Path};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use pyo3::prelude::*;
 use regex::Regex;
+use walkdir::{IntoIter, WalkDir};
 
-use crate::StateError;
+use crate::{Error, utils::path::has_no_symlinks};
 
 pub(crate) const STATE_FILE_EXT: &str = ".state.json";
 
-#[pyclass]
+#[pyclass(module = "preader")]
 pub struct StateIterator {
-    entries: fs::ReadDir,
+    root: PathBuf,
+    entries: IntoIter,
     pattern: Option<Regex>,
 }
 
 impl StateIterator {
-    pub(crate) fn new(dir: &Path, pattern: Option<&str>) -> PyResult<Self> {
-        fs::create_dir_all(dir).map_err(StateError::from_io)?;
+    pub(crate) fn new(dir: &Path, pattern: Option<&str>) -> Result<Self, Error> {
+        fs::create_dir_all(dir)?;
 
-        let pattern = pattern.map(Regex::new).transpose().map_err(StateError::from_regex)?;
-        let entries = fs::read_dir(dir).map_err(StateError::from_io)?;
-
-        Ok(Self { entries, pattern })
+        Ok(Self {
+            root: dir.to_path_buf(),
+            entries: WalkDir::new(dir).min_depth(1).into_iter(),
+            pattern: pattern.map(Regex::new).transpose()?,
+        })
     }
 }
 
 impl Iterator for StateIterator {
-    type Item = PyResult<String>;
+    type Item = Result<String, Error>;
 
-    fn next(&mut self) -> Option<PyResult<String>> {
-        let pattern = self.pattern.as_ref();
+    fn next(&mut self) -> Option<Self::Item> {
+        let (root, pattern) = (&self.root, self.pattern.as_ref());
 
-        self.entries.find_map(|entry| match entry {
-            Err(err) => Some(Err(StateError::from_io(err))),
-            Ok(entry) => {
-                let file_name = entry.file_name().to_string_lossy().into_owned();
-                let name = file_name.strip_suffix(STATE_FILE_EXT)?.to_string();
+        self.entries.find_map(|entry| {
+            let entry = match entry {
+                Err(error) => return Some(Err(Error::Io(error.into()))),
+                Ok(entry) => entry,
+            };
+            let path = entry.path();
+            let name =
+                path.strip_prefix(root).ok()?.to_str()?.strip_suffix(STATE_FILE_EXT)?.to_owned();
 
-                pattern.is_none_or(|re| re.is_match(&name)).then_some(Ok(name))
-            }
+            (path.is_file()
+                && has_no_symlinks(root, path)
+                && pattern.is_none_or(|regex| regex.is_match(&name)))
+            .then_some(Ok(name))
         })
     }
 }
@@ -48,7 +59,7 @@ impl StateIterator {
         slf
     }
 
-    fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<String>> {
+    fn __next__(mut slf: PyRefMut<'_, Self>) -> Result<Option<String>, Error> {
         slf.next().transpose()
     }
 }

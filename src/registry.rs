@@ -1,13 +1,13 @@
 use std::{fs, path::PathBuf};
 
-use pyo3::{exceptions::PyKeyError, prelude::*};
+use pyo3::prelude::*;
 
 use crate::{
-    State, StateError, iterators::state::StateIterator, manager::StateManager,
+    Error, State, iterators::state::StateIterator, manager::StateManager,
     types::config::reader::Config,
 };
 
-#[pyclass]
+#[pyclass(module = "preader")]
 pub struct StateRegistry {
     manager: StateManager,
 }
@@ -22,11 +22,11 @@ impl From<&Config> for StateRegistry {
 
 #[pymethods]
 impl StateRegistry {
-    fn __iter__(&self) -> PyResult<StateIterator> {
+    fn __iter__(&self) -> Result<StateIterator, Error> {
         self.names()
     }
 
-    fn __getitem__(&self, name: &str) -> PyResult<State> {
+    fn __getitem__(&self, name: &str) -> Result<State, Error> {
         self.load(name)
     }
 
@@ -34,55 +34,55 @@ impl StateRegistry {
         self.exists(name)
     }
 
-    fn __len__(&self) -> PyResult<usize> {
+    fn __len__(&self) -> Result<usize, Error> {
         self.names()?.try_fold(0_usize, |acc, name| name.map(|_| acc + 1))
     }
 
-    fn __delitem__(&self, name: &str) -> PyResult<()> {
+    fn __delitem__(&self, name: &str) -> Result<(), Error> {
         self.delete(name)
     }
 
-    fn names(&self) -> PyResult<StateIterator> {
+    fn names(&self) -> Result<StateIterator, Error> {
         StateIterator::new(&self.manager.config.state_dir, None)
     }
 
-    fn load(&self, name: &str) -> PyResult<State> {
+    fn load(&self, name: &str) -> Result<State, Error> {
         if !self.exists(name) {
-            return Err(PyKeyError::new_err(name.to_string()));
+            return Err(Error::Missing(name.to_string()));
         }
 
-        self.manager.load(name).map_err(StateError::from_anyhow)
+        self.manager.load(name)
     }
 
-    fn find(&self, name: &str) -> PyResult<Option<State>> {
+    fn find(&self, name: &str) -> Result<Option<State>, Error> {
         self.exists(name).then(|| self.load(name)).transpose()
     }
 
-    fn search(&self, pattern: &str) -> PyResult<StateIterator> {
+    fn search(&self, pattern: &str) -> Result<StateIterator, Error> {
         StateIterator::new(&self.manager.config.state_dir, Some(pattern))
     }
 
-    fn delete(&self, name: &str) -> PyResult<()> {
+    fn delete(&self, name: &str) -> Result<(), Error> {
         if !self.exists(name) {
-            return Err(PyKeyError::new_err(name.to_string()));
+            return Err(Error::Missing(name.to_string()));
         }
 
-        fs::remove_file(self.path(name)?).map_err(StateError::from_io)
+        Ok(fs::remove_file(self.path(name)?)?)
     }
 
     fn exists(&self, name: &str) -> bool {
         self.manager.path(name).map(|path| path.exists()).unwrap_or(false)
     }
 
-    fn all(&self) -> PyResult<Vec<State>> {
+    fn all(&self) -> Result<Vec<State>, Error> {
         self.names()?.map(|name| self.load(&name?)).collect()
     }
 
-    fn clear(&self) -> PyResult<()> {
+    fn clear(&self) -> Result<(), Error> {
         self.names()?.try_for_each(|name| self.delete(&name?))
     }
 
-    fn path(&self, name: &str) -> PyResult<PathBuf> {
-        self.manager.path(name).map_err(StateError::from_anyhow)
+    fn path(&self, name: &str) -> Result<PathBuf, Error> {
+        self.manager.path(name)
     }
 }

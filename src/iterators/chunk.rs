@@ -10,7 +10,7 @@ use crate::{
     types::{config::iterator::IteratorConfig, core::Item, options::IteratorOptions, state::State},
 };
 
-#[pyclass(extends = IteratorBase)]
+#[pyclass(module = "preader", extends = IteratorBase)]
 pub struct ChunkIterator {
     reader: BufReader<File>,
     buffer: Vec<u8>,

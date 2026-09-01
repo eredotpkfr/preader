@@ -2,8 +2,8 @@ use chrono::{DateTime, Utc};
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 
-#[pyclass(from_py_object)]
-#[derive(Clone, Serialize, Deserialize)]
+#[pyclass(module = "preader", skip_from_py_object)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct Timestamps {
     #[pyo3(get)]
     #[serde(with = "chrono::serde::ts_seconds")]

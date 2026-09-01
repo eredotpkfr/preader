@@ -11,6 +11,7 @@ mod registry;
 mod types;
 mod utils;
 
+pub use enums::error::Error;
 pub use exceptions::StateError;
 pub use iterators::{
     base::IteratorBase, byte::ByteIterator, chunk::ChunkIterator, delimiter::DelimiterIterator,
@@ -34,7 +35,10 @@ pub use types::{
 };
 pub use utils::{
     file::{fingerprint, starts_mid_item},
-    path::{DEFAULT_STATE_DIRECTORY, default_state_dir, scoped_join, strip_extension},
+    path::{
+        DEFAULT_STATE_DIRECTORY, default_state_dir, has_no_symlinks, normalize_path, path_stem,
+        scoped_join, strip_extensions,
+    },
     text::indent_lines,
 };
 

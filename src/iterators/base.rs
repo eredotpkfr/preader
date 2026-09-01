@@ -1,8 +1,8 @@
 use pyo3::prelude::*;
 
-use crate::{State, types::config::iterator::IteratorConfig};
+use crate::{Error, State, types::config::iterator::IteratorConfig};
 
-#[pyclass(subclass)]
+#[pyclass(module = "preader", subclass)]
 pub struct IteratorBase {
     pub config: IteratorConfig,
     pub state: State,
@@ -40,7 +40,7 @@ impl IteratorBase {
     }
 
     #[inline]
-    pub fn advance(&mut self, bytes: u64) -> PyResult<()> {
+    pub fn advance(&mut self, bytes: u64) -> Result<(), Error> {
         self.state.advance(bytes);
 
         if self.config.auto_save_state_bytes == 0 {
@@ -51,12 +51,12 @@ impl IteratorBase {
     }
 
     #[inline]
-    pub fn finalize(&mut self) -> PyResult<()> {
+    pub fn finalize(&mut self) -> Result<(), Error> {
         self.autosave(0)
     }
 
     #[inline]
-    fn autosave(&mut self, threshold: u64) -> PyResult<()> {
+    fn autosave(&mut self, threshold: u64) -> Result<(), Error> {
         if !self.config.auto_save_state {
             return Ok(());
         }

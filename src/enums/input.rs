@@ -1,11 +1,13 @@
 use std::path::Path;
 
 use anyhow::anyhow;
-use pyo3::{Borrowed, FromPyObject, PyAny, PyErr, PyResult, exceptions::PyTypeError, prelude::*};
+use pyo3::{Borrowed, FromPyObject, PyAny, PyErr, exceptions::PyTypeError, prelude::*};
 
 use crate::{
-    State, StateError, StateManager,
+    Error, State, StateManager,
+    manager::STATE_FILE_SUFFIX,
     types::{config::reader::Config, state::RESYNC_HINT},
+    utils::path::path_stem,
 };
 
 pub(crate) enum StateInput {
@@ -37,7 +39,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for StateInput {
 }
 
 impl StateInput {
-    pub(crate) fn resolve(self, config: &Config, file: &Path) -> PyResult<State> {
+    pub(crate) fn resolve(self, config: &Config, file: &Path) -> Result<State, Error> {
         let manager = StateManager::from(config);
 
         let name = match self {
@@ -47,7 +49,7 @@ impl StateInput {
                 }
 
                 if state.file.path != file {
-                    return Err(StateError::from_anyhow(anyhow!(
+                    return Err(Error::Message(anyhow!(
                         "file path mismatch (saved: '{}', current: '{}') {}",
                         state.file.path.display(),
                         file.display(),
@@ -56,9 +58,10 @@ impl StateInput {
                 }
 
                 state.verify()?;
+
                 return Ok(state);
             }
-            Self::Name(name) => name,
+            Self::Name(name) => path_stem(&name, STATE_FILE_SUFFIX),
             Self::Auto => manager.name(file),
         };
 
@@ -69,6 +72,6 @@ impl StateInput {
             return Ok(state);
         }
 
-        State::new(config, file, name).map_err(StateError::from_anyhow)
+        State::new(config, file, name)
     }
 }

@@ -2,7 +2,7 @@ use pyo3::{exceptions::PyValueError, prelude::*};
 
 use crate::types::window::Window;
 
-#[pyclass(from_py_object)]
+#[pyclass(module = "preader", from_py_object)]
 #[derive(Clone)]
 pub struct IteratorOptions {
     #[pyo3(get, set)]

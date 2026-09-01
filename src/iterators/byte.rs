@@ -11,7 +11,7 @@ use crate::{
     types::{config::iterator::IteratorConfig, core::Item, options::IteratorOptions},
 };
 
-#[pyclass(extends = IteratorBase)]
+#[pyclass(module = "preader", extends = IteratorBase)]
 pub struct ByteIterator {
     bytes: Bytes<BufReader<File>>,
 }

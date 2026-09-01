@@ -13,7 +13,7 @@ pub const DEFAULT_AUTO_SAVE_STATE_BYTES: u64 = 100 * 1024 * 1024;
 // Verify saved state on load + explicit state resume by default
 pub const DEFAULT_VERIFY_STATE: bool = true;
 
-#[pyclass(from_py_object)]
+#[pyclass(module = "preader", from_py_object)]
 #[derive(Clone, Deserialize)]
 pub struct Config {
     #[pyo3(get)]

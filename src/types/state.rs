@@ -1,32 +1,33 @@
 use std::{
-    fs,
-    ops::{Deref, DerefMut},
+    fs, io,
     path::{Path, PathBuf},
     time::UNIX_EPOCH,
 };
 
-use anyhow::{Error, anyhow};
+use anyhow::anyhow;
+use derive_more::{Deref, DerefMut};
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::to_string_pretty;
 
 use crate::{
-    Config, StateManager,
-    exceptions::StateError,
+    Config, Error, StateManager,
     types::{checksum::ChecksumBody, file::FileMetadata, time::Timestamps},
     utils::file::fingerprint,
 };
 
 pub(crate) const RESYNC_HINT: &str = "(call state.resync(file) if this is expected)";
 
-#[pyclass(from_py_object)]
-#[derive(Clone)]
+#[pyclass(module = "preader", from_py_object)]
+#[derive(Clone, Deref, DerefMut)]
 pub struct State {
+    #[deref]
+    #[deref_mut]
     pub(crate) data: StateData,
     pub manager: StateManager,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct StateData {
     pub name: String,
     pub file: FileMetadata,
@@ -34,20 +35,6 @@ pub struct StateData {
     pub timestamps: Timestamps,
     #[serde(rename = "_checksum")]
     pub checksum: String,
-}
-
-impl Deref for State {
-    type Target = StateData;
-
-    fn deref(&self) -> &Self::Target {
-        &self.data
-    }
-}
-
-impl DerefMut for State {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.data
-    }
 }
 
 impl From<(StateData, StateManager)> for State {
@@ -84,18 +71,19 @@ impl State {
         self.position += bytes
     }
 
-    pub(crate) fn refresh(mut self) -> PyResult<Self> {
+    pub(crate) fn refresh(mut self) -> Result<Self, Error> {
         self.timestamps.updated_at = chrono::Utc::now();
         self.checksum = self.checksum()?;
 
         Ok(self)
     }
 
-    fn commit(&self, tmp: &Path, path: &Path, serialized: &str) -> PyResult<()> {
+    fn commit(&self, tmp: &Path, path: &Path, serialized: &str) -> Result<(), Error> {
         fs::write(tmp, serialized)
             .and_then(|()| fs::rename(tmp, path))
-            .inspect_err(|_| drop(fs::remove_file(tmp)))
-            .map_err(StateError::from_io)
+            .inspect_err(|_| drop(fs::remove_file(tmp)))?;
+
+        Ok(())
     }
 }
 
@@ -122,28 +110,28 @@ impl State {
     }
 
     #[getter]
-    fn path(&self) -> PyResult<PathBuf> {
-        self.manager.path(&self.name).map_err(StateError::from_anyhow)
+    fn path(&self) -> Result<PathBuf, Error> {
+        self.manager.path(&self.name)
     }
 
-    fn checksum(&self) -> PyResult<String> {
-        ChecksumBody::from(self).compute().map_err(StateError::from_anyhow)
+    fn checksum(&self) -> Result<String, Error> {
+        ChecksumBody::from(self).compute()
     }
 
     pub fn percent(&self) -> f64 {
         self.position as f64 * 100.0 / self.file.size.max(1) as f64
     }
 
-    pub fn save(&mut self) -> PyResult<PathBuf> {
+    pub fn save(&mut self) -> Result<PathBuf, Error> {
         let path = self.path()?;
-        let tmp = self.manager.tmp(&self.name).map_err(StateError::from_anyhow)?;
+        let tmp = self.manager.tmp(&self.name)?;
 
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(StateError::from_io)?;
+            fs::create_dir_all(parent)?;
         }
 
         let refreshed = self.clone().refresh()?;
-        let serialized = to_string_pretty(&refreshed.data).map_err(StateError::from_serde)?;
+        let serialized = to_string_pretty(&refreshed.data)?;
 
         self.commit(&tmp, &path, &serialized)?;
 
@@ -153,15 +141,18 @@ impl State {
         Ok(path)
     }
 
-    pub fn verify(&self) -> PyResult<()> {
+    pub fn verify(&self) -> Result<(), Error> {
         let computed = self.checksum()?;
-        let metadata = fs::metadata(&self.file.path).map_err(StateError::from_io)?;
-        let current_mtime = metadata.modified()?.duration_since(UNIX_EPOCH)?.as_secs() as i64;
+        let metadata = fs::metadata(&self.file.path)?;
+        let current_mtime = metadata
+            .modified()
+            .and_then(|time| time.duration_since(UNIX_EPOCH).map_err(io::Error::other))?
+            .as_secs() as i64;
         let saved_mtime = self.file.mtime.timestamp();
-        let current_fingerprint = fingerprint(&self.file.path).map_err(StateError::from_io)?;
+        let current_fingerprint = fingerprint(&self.file.path)?;
 
         if computed != self.checksum {
-            return Err(StateError::from_anyhow(anyhow!(
+            return Err(Error::Message(anyhow!(
                 "state checksum mismatch (saved: {}, computed: {})",
                 self.checksum,
                 computed
@@ -169,7 +160,7 @@ impl State {
         }
 
         if self.file.size != metadata.len() {
-            return Err(StateError::from_anyhow(anyhow!(
+            return Err(Error::Message(anyhow!(
                 "file size mismatch (saved: {}, current: {}) {RESYNC_HINT}",
                 self.file.size,
                 metadata.len(),
@@ -177,7 +168,7 @@ impl State {
         }
 
         if saved_mtime != current_mtime {
-            return Err(StateError::from_anyhow(anyhow!(
+            return Err(Error::Message(anyhow!(
                 "file mtime mismatch (saved: {}, current: {}) {RESYNC_HINT}",
                 saved_mtime,
                 current_mtime,
@@ -185,7 +176,7 @@ impl State {
         }
 
         if self.file.fingerprint != current_fingerprint {
-            return Err(StateError::from_anyhow(anyhow!(
+            return Err(Error::Message(anyhow!(
                 "file fingerprint mismatch (saved: {}, current: {}) {RESYNC_HINT}",
                 self.file.fingerprint,
                 current_fingerprint,
@@ -195,9 +186,9 @@ impl State {
         Ok(())
     }
 
-    pub fn resync(&self, path: PathBuf) -> PyResult<Self> {
-        let path = path.canonicalize().map_err(StateError::from_io)?;
-        let file = FileMetadata::try_from(path.as_path()).map_err(StateError::from_anyhow)?;
+    pub fn resync(&self, path: PathBuf) -> Result<Self, Error> {
+        let path = path.canonicalize()?;
+        let file = FileMetadata::try_from(path.as_path())?;
         let mut resynced = self.clone();
 
         resynced.file = file;

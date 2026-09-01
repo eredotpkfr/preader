@@ -1,9 +1,8 @@
-use anyhow::Error;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use crate::{
-    State,
+    Error, State,
     types::{file::FileMetadata, time::Timestamps},
 };
 

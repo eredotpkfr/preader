@@ -3,17 +3,17 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Error, anyhow};
+use anyhow::anyhow;
 use chrono::Utc;
 use sha2::{Digest, Sha256};
 
 use crate::{
-    State,
+    Error, State,
     types::{
         config::{manager::StateManagerConfig, reader::Config},
         state::StateData,
     },
-    utils::path::{scoped_join, strip_extension},
+    utils::path::{has_no_symlinks, path_stem, scoped_join},
 };
 
 pub const STATE_FILE_SUFFIX: &str = "state.json";
@@ -40,32 +40,31 @@ impl StateManager {
     }
 
     pub fn path(&self, name: &str) -> Result<PathBuf, Error> {
-        let path = scoped_join(
-            &self.config.state_dir,
-            strip_extension(name, STATE_FILE_SUFFIX),
-        )?;
+        let path = scoped_join(&self.config.state_dir, &path_stem(name, STATE_FILE_SUFFIX))?
+            .with_added_extension(STATE_FILE_SUFFIX);
 
-        Ok(path.with_added_extension(STATE_FILE_SUFFIX))
+        has_no_symlinks(&self.config.state_dir, &path)
+            .then_some(path)
+            .ok_or_else(|| Error::Message(anyhow!("path escapes root: {name}")))
     }
 
     pub fn tmp(&self, name: &str) -> Result<PathBuf, Error> {
-        let path = scoped_join(
-            &self.config.state_dir,
-            strip_extension(name, STATE_FILE_SUFFIX),
-        )?;
-        let timestamp_nanos = Utc::now().timestamp_nanos_opt().unwrap_or(0);
-
-        Ok(path
-            .with_added_extension(timestamp_nanos.to_string())
+        let stamp = Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let path = scoped_join(&self.config.state_dir, &path_stem(name, STATE_FILE_SUFFIX))?
+            .with_added_extension(stamp.to_string())
             .with_added_extension(STATE_FILE_SUFFIX)
-            .with_added_extension(TMP_STATE_FILE_SUFFIX))
+            .with_added_extension(TMP_STATE_FILE_SUFFIX);
+
+        has_no_symlinks(&self.config.state_dir, &path)
+            .then_some(path)
+            .ok_or_else(|| Error::Message(anyhow!("path escapes root: {name}")))
     }
 
     pub fn load(&self, name: &str) -> Result<State, Error> {
         let path = self.path(name)?;
 
         if !path.is_file() {
-            return Err(anyhow!("state not found: {name}"));
+            return Err(Error::Message(anyhow!("state not found: {name}")));
         }
 
         let content = fs::read_to_string(&path)?;

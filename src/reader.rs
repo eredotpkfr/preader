@@ -4,7 +4,7 @@ use pyo3::{exceptions::PyValueError, prelude::*};
 
 use crate::{
     StateRegistry,
-    enums::StateInput,
+    enums::input::StateInput,
     iterators::{
         byte::ByteIterator, chunk::ChunkIterator, delimiter::DelimiterIterator, line::LineIterator,
     },
@@ -13,7 +13,7 @@ use crate::{
 
 pub const DEFAULT_CHUNK_SIZE: usize = 1024;
 
-#[pyclass]
+#[pyclass(module = "preader")]
 pub struct PReader {
     #[pyo3(get)]
     pub config: Config,
