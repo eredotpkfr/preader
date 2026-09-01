@@ -252,12 +252,12 @@ def test_extra_next_after_exhaustion_does_not_resave(data_file, make_reader, con
 
     consume(iterator)
 
-    mtime_before = reader.states[TEST_STATE_NAME].path.stat().st_mtime
+    mtime_before = reader.states[TEST_STATE_NAME].path().stat().st_mtime
 
     with pytest.raises(StopIteration):
         next(iterator)
 
-    assert reader.states[TEST_STATE_NAME].path.stat().st_mtime == mtime_before
+    assert reader.states[TEST_STATE_NAME].path().stat().st_mtime == mtime_before
 
 
 def test_autosave_error_propagates_from_unbound_iteration(config, make_reader, data_file, capfd):

@@ -448,8 +448,8 @@ def test_clear_removes_saved_states(reader, registry, tmp_file):
     registry.clear()
 
     assert len(registry) == 0
-    assert not state1.path.exists()
-    assert not state2.path.exists()
+    assert not state1.path().exists()
+    assert not state2.path().exists()
 
 
 def test_clear_removes_corrupted_states(reader, registry, tmp_file):

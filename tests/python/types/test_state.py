@@ -21,7 +21,7 @@ def test_state_fields(config, reader, tmp_file):
     assert state.name == TEST_STATE_NAME
     assert state.position == 0
     assert state.file.path == tmp_file
-    assert state.path == config.state_dir / f"{state.name}.state.json"
+    assert state.path() == config.state_dir / f"{state.name}.state.json"
     assert state.timestamps.created_at == state.timestamps.updated_at
 
 
@@ -32,7 +32,7 @@ def test_path_raises_when_name_is_unsafe(reader, tmp_file, name, message):
     state = reader.bytes(tmp_file, state=name).state
 
     with pytest.raises(StateError, match=message):
-        state.path
+        state.path()
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows path syntax is only unsafe on Windows")
@@ -43,7 +43,7 @@ def test_path_raises_when_a_windows_name_is_unsafe(reader, tmp_file, name):
     state = reader.bytes(tmp_file, state=name).state
 
     with pytest.raises(StateError, match="path escapes root"):
-        state.path
+        state.path()
 
 
 def test_checksum_is_stable(reader, tmp_file):
@@ -69,10 +69,10 @@ def test_bytes_read_match_file_content(reader, tmp_file):
 
 def test_save_returns_created_path(reader, tmp_file):
     state = reader.bytes(tmp_file).state
-    assert not state.path.exists()
+    assert not state.path().exists()
 
-    assert state.save() == state.path
-    assert state.path.exists()
+    assert state.save() == state.path()
+    assert state.path().exists()
 
 
 @pytest.mark.repeat(10)
@@ -109,7 +109,7 @@ def test_save_raises_when_state_dir_blocked(config, make_reader, tmp_file):
 
 def test_save_raises_when_state_path_is_a_directory(reader, tmp_file):
     state = reader.bytes(tmp_file).state
-    state.path.mkdir(parents=True)
+    state.path().mkdir(parents=True)
 
     with pytest.raises(StateError, match="io failed"):
         state.save()
@@ -133,10 +133,10 @@ def test_verify_passes_when_untouched(make_reader, tmp_large_file):
 
 def test_verify_raises_when_checksum_mismatch(make_reader, tmp_large_file):
     state = _new_unverified_state(make_reader, tmp_large_file)
-    payload = json.loads(state.path.read_text())
+    payload = json.loads(state.path().read_text())
 
     payload.update(position=999)
-    state.path.write_text(json.dumps(payload))
+    state.path().write_text(json.dumps(payload))
 
     tampered = _get_unverified_state(make_reader, state.name)
 
@@ -390,7 +390,7 @@ def test_name_drops_the_suffix(reader, tmp_file):
     state = reader.bytes(tmp_file, state=f"{TEST_STATE_NAME}.state.json").state
 
     assert state.name == TEST_STATE_NAME
-    assert state.path.name == f"{TEST_STATE_NAME}.state.json"
+    assert state.path().name == f"{TEST_STATE_NAME}.state.json"
 
 
 def test_save_accepts_a_unicode_name(reader, tmp_file):
@@ -484,10 +484,10 @@ def test_save_is_relative_without_a_state_dir(tmp_file, tmp_path, monkeypatch):
 def test_verify_reports_the_checksum_first(make_reader, tmp_large_file):
     state = _new_unverified_state(make_reader, tmp_large_file)
     original_mtime = os.stat(tmp_large_file).st_mtime
-    payload = json.loads(state.path.read_text())
+    payload = json.loads(state.path().read_text())
 
     payload.update(position=999)
-    state.path.write_text(json.dumps(payload))
+    state.path().write_text(json.dumps(payload))
 
     with open(tmp_large_file, "r+b") as f:
         f.truncate(4500)

@@ -109,7 +109,6 @@ impl State {
         self.timestamps.clone()
     }
 
-    #[getter]
     fn path(&self) -> Result<PathBuf, Error> {
         self.manager.path(&self.name)
     }
