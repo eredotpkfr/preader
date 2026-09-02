@@ -2,16 +2,14 @@ import json
 import os
 
 import pytest
-
-from preader import Config, PReader, StateError
-
 from constants import (
     TEST_STATE_NAME,
-    TEST_UNSAFE_STATE_NAMES,
     TEST_UNSAFE_STATE_NAME_IDS,
-    TEST_WINDOWS_UNSAFE_STATE_NAMES,
+    TEST_UNSAFE_STATE_NAMES,
     TEST_WINDOWS_UNSAFE_STATE_NAME_IDS,
+    TEST_WINDOWS_UNSAFE_STATE_NAMES,
 )
+from preader import Config, PReader, StateError
 
 MISSING_STATE_NAME = "job-missing"
 OTHER_STATE_NAME = "job-2"
@@ -36,7 +34,9 @@ def test_contains(reader, registry, tmp_file):
     assert TEST_STATE_NAME in registry
 
 
-@pytest.mark.parametrize("name", TEST_UNSAFE_STATE_NAMES, ids=TEST_UNSAFE_STATE_NAME_IDS)
+@pytest.mark.parametrize(
+    "name", TEST_UNSAFE_STATE_NAMES, ids=TEST_UNSAFE_STATE_NAME_IDS
+)
 def test_contains_returns_false_when_name_is_unsafe(registry, name):
     assert name not in registry
 
@@ -112,7 +112,9 @@ def test_lookups_raise_when_missing(registry, lookup):
         lookup(registry)
 
 
-@pytest.mark.parametrize("name", TEST_UNSAFE_STATE_NAMES, ids=TEST_UNSAFE_STATE_NAME_IDS)
+@pytest.mark.parametrize(
+    "name", TEST_UNSAFE_STATE_NAMES, ids=TEST_UNSAFE_STATE_NAME_IDS
+)
 def test_getitem_raises_when_name_is_unsafe(registry, name):
     with pytest.raises(KeyError):
         registry[name]
@@ -209,7 +211,9 @@ def test_save_raises_when_the_name_reduces_to_nothing(reader, tmp_file, state):
         reader.bytes(tmp_file, state=state).state.save()
 
 
-def test_save_keeps_a_suffix_shaped_directory_in_the_name(reader, registry, config, tmp_file):
+def test_save_keeps_a_suffix_shaped_directory_in_the_name(
+    reader, registry, config, tmp_file
+):
     name = os.path.join("sub-1", ".state.json", "sub-2", "job-1")
 
     path = reader.bytes(tmp_file, state=f"{name}.state.json").state.save()
@@ -232,14 +236,18 @@ def test_names_ignores_a_symlinked_state(reader, registry, config, tmp_file):
 def test_names_ignores_a_broken_symlink(reader, registry, config, tmp_file):
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
 
-    (config.state_dir / "broken.state.json").symlink_to(config.state_dir / "gone.state.json")
+    (config.state_dir / "broken.state.json").symlink_to(
+        config.state_dir / "gone.state.json"
+    )
 
     assert list(registry.names()) == [TEST_STATE_NAME]
     assert "broken" not in registry
 
 
 @pytest.mark.usefixtures("requires_symlinks")
-def test_names_does_not_descend_into_a_symlinked_directory(reader, registry, config, tmp_file):
+def test_names_does_not_descend_into_a_symlinked_directory(
+    reader, registry, config, tmp_file
+):
     outside = config.state_dir.parent / "outside"
     outside.mkdir(parents=True)
 
@@ -254,7 +262,9 @@ def test_names_does_not_descend_into_a_symlinked_directory(reader, registry, con
 
 
 @pytest.mark.usefixtures("requires_symlinks")
-def test_save_raises_when_the_name_escapes_through_a_symlink(reader, config, tmp_path, tmp_file):
+def test_save_raises_when_the_name_escapes_through_a_symlink(
+    reader, config, tmp_path, tmp_file
+):
     outside = tmp_path / "outside"
     outside.mkdir(parents=True)
 
@@ -268,7 +278,9 @@ def test_save_raises_when_the_name_escapes_through_a_symlink(reader, config, tmp
 
 
 @pytest.mark.usefixtures("requires_symlinks")
-def test_delete_raises_when_the_name_escapes_through_a_symlink(registry, config, tmp_path):
+def test_delete_raises_when_the_name_escapes_through_a_symlink(
+    registry, config, tmp_path
+):
     outside = tmp_path / "outside"
     outside.mkdir(parents=True)
 
@@ -370,7 +382,9 @@ def test_find_returns_none_when_missing(registry):
     assert registry.find("missing") is None
 
 
-@pytest.mark.parametrize("name", TEST_UNSAFE_STATE_NAMES, ids=TEST_UNSAFE_STATE_NAME_IDS)
+@pytest.mark.parametrize(
+    "name", TEST_UNSAFE_STATE_NAMES, ids=TEST_UNSAFE_STATE_NAME_IDS
+)
 def test_find_returns_none_when_name_is_unsafe(registry, name):
     assert registry.find(name) is None
 
@@ -399,14 +413,18 @@ def test_delitem_removes_saved_state(reader, registry, tmp_file):
     assert TEST_STATE_NAME not in registry
 
 
-@pytest.mark.parametrize("name", TEST_UNSAFE_STATE_NAMES, ids=TEST_UNSAFE_STATE_NAME_IDS)
+@pytest.mark.parametrize(
+    "name", TEST_UNSAFE_STATE_NAMES, ids=TEST_UNSAFE_STATE_NAME_IDS
+)
 def test_delitem_raises_when_name_is_unsafe(registry, name):
     with pytest.raises(KeyError):
         del registry[name]
 
 
 def test_path_accepts_an_already_suffixed_name(registry):
-    assert registry.path(f"{TEST_STATE_NAME}.state.json") == registry.path(TEST_STATE_NAME)
+    assert registry.path(f"{TEST_STATE_NAME}.state.json") == registry.path(
+        TEST_STATE_NAME
+    )
 
 
 @pytest.mark.parametrize(
@@ -417,7 +435,9 @@ def test_path_raises_when_name_is_unsafe(registry, name, message):
         registry.path(name)
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Windows path syntax is only unsafe on Windows")
+@pytest.mark.skipif(
+    os.name != "nt", reason="Windows path syntax is only unsafe on Windows"
+)
 @pytest.mark.parametrize(
     "name", TEST_WINDOWS_UNSAFE_STATE_NAMES, ids=TEST_WINDOWS_UNSAFE_STATE_NAME_IDS
 )
@@ -560,8 +580,12 @@ def test_search_treats_the_pattern_as_a_regex(reader, registry, tmp_file):
     assert set(registry.search("foo.1")) == {"foo-1", "foo.1", "fooX1"}
 
 
-@pytest.mark.parametrize("corrupted", ["foo-1", "foo-2", "foo-3"], ids=["first", "middle", "last"])
-def test_all_raises_when_any_state_is_corrupt(reader, registry, tmp_file, config, corrupted):
+@pytest.mark.parametrize(
+    "corrupted", ["foo-1", "foo-2", "foo-3"], ids=["first", "middle", "last"]
+)
+def test_all_raises_when_any_state_is_corrupt(
+    reader, registry, tmp_file, config, corrupted
+):
     for name in ("foo-1", "foo-2", "foo-3"):
         reader.bytes(tmp_file, state=name).state.save()
 

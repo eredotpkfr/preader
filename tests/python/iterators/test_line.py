@@ -2,20 +2,18 @@ import json
 import os
 
 import pytest
-
-from preader import Config, IteratorOptions, PReader, StateError
-
 from constants import (
     TEST_STATE_NAME,
-    TEST_UNSAFE_STATE_NAMES,
     TEST_UNSAFE_STATE_NAME_IDS,
-    TEST_WINDOWS_UNSAFE_STATE_NAMES,
+    TEST_UNSAFE_STATE_NAMES,
     TEST_WINDOWS_UNSAFE_STATE_NAME_IDS,
+    TEST_WINDOWS_UNSAFE_STATE_NAMES,
 )
+from preader import Config, IteratorOptions, PReader, StateError
 
 LINES = [f"line-{i}" for i in range(6)]
 LINE_CONTENT = "\n".join(LINES).encode()
-BLANK_LINE_CONTENT = "\n".join(["line-0", "", "line-2", ""]).encode()
+BLANK_LINE_CONTENT = "\n".join([LINES[0], "", LINES[2], ""]).encode()
 
 
 @pytest.fixture
@@ -89,7 +87,9 @@ def test_keeps_partial_line_by_default(reader, data_file):
 
 
 @pytest.mark.parametrize("buffer_capacity", (0, 2), ids=["zero", "tiny"])
-def test_buffer_capacity_smaller_than_line_length(data_file, make_reader, buffer_capacity):
+def test_buffer_capacity_smaller_than_line_length(
+    data_file, make_reader, buffer_capacity
+):
     reader = make_reader(buffer_capacity=buffer_capacity)
 
     assert list(reader.lines(data_file)) == LINES
@@ -155,7 +155,9 @@ def test_resume_with_different_keepends(reader, make_file):
     assert list(resumed) == ["bar\n", "baz\n"]
 
 
-def test_resume_applies_skip_when_the_position_equals_the_start(reader, data_file, consume):
+def test_resume_applies_skip_when_the_position_equals_the_start(
+    reader, data_file, consume
+):
     saved = consume(reader.lines(data_file, state=TEST_STATE_NAME), 2).state
     saved.save()
 
@@ -170,13 +172,17 @@ def test_resume_ignores_options_when_already_past_start(reader, data_file, consu
     state = consume(iterator, 3).state
     state.save()
 
-    resumed = reader.lines(data_file, state=state, options=IteratorOptions(start=6, skip=1))
+    resumed = reader.lines(
+        data_file, state=state, options=IteratorOptions(start=6, skip=1)
+    )
 
     assert list(resumed) == LINES[3:]
 
 
 def test_end_below_the_position_does_not_rewind_the_state(data_file, make_reader):
-    reader = make_reader(auto_save_state=True, auto_save_state_bytes=64, auto_load_state=True)
+    reader = make_reader(
+        auto_save_state=True, auto_save_state_bytes=64, auto_load_state=True
+    )
 
     list(reader.lines(data_file, state=TEST_STATE_NAME))
 
@@ -260,7 +266,9 @@ def test_extra_next_after_exhaustion_does_not_resave(data_file, make_reader, con
     assert reader.states[TEST_STATE_NAME].path().stat().st_mtime == mtime_before
 
 
-def test_autosave_error_propagates_from_unbound_iteration(config, make_reader, data_file, capfd):
+def test_autosave_error_propagates_from_unbound_iteration(
+    config, make_reader, data_file, capfd
+):
     config.state_dir.write_bytes(b"foo")
 
     reader = make_reader(auto_save_state=True, auto_save_state_bytes=5)
@@ -364,7 +372,9 @@ def test_auto_load_state_ignores_an_unverifiable_state(data_file, make_reader, a
     assert reader.lines(data_file).state.position == 0
 
 
-def test_auto_load_state_resumes_stale_state_without_verification(data_file, make_reader, append):
+def test_auto_load_state_resumes_stale_state_without_verification(
+    data_file, make_reader, append
+):
     reader = make_reader(auto_load_state=True, verify_state=False)
     iterator = reader.lines(data_file)
 
@@ -409,7 +419,9 @@ def test_unsafe_name_defers_rejection_to_save(reader, tmp_file, name, message):
         iterator.state.save()
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Windows path syntax is only unsafe on Windows")
+@pytest.mark.skipif(
+    os.name != "nt", reason="Windows path syntax is only unsafe on Windows"
+)
 @pytest.mark.parametrize(
     "name", TEST_WINDOWS_UNSAFE_STATE_NAMES, ids=TEST_WINDOWS_UNSAFE_STATE_NAME_IDS
 )
@@ -561,7 +573,9 @@ def test_raises_when_resumed_after_file_grows(reader, data_file, consume, append
         reader.lines(data_file, state=state)
 
 
-def test_recorded_file_size_never_refreshes_after_file_grows(data_file, make_reader, consume, append):
+def test_recorded_file_size_never_refreshes_after_file_grows(
+    data_file, make_reader, consume, append
+):
     reader = make_reader(verify_state=False)
 
     state = consume(reader.lines(data_file, state=TEST_STATE_NAME)).state
@@ -613,7 +627,9 @@ def test_raises_when_aligning_on_a_directory(data_file, make_reader):
     data_file.mkdir()
 
     with pytest.raises(OSError):
-        reader.lines(data_file, state=state, options=IteratorOptions(start=5), align_start=True)
+        reader.lines(
+            data_file, state=state, options=IteratorOptions(start=5), align_start=True
+        )
 
 
 def test_raises_when_resumed_file_replaced_by_directory(reader, data_file):
@@ -658,7 +674,9 @@ def test_state_object_keeps_its_own_state_dir(data_file, make_reader, tmp_path):
     owner = make_reader(auto_save_state=True)
     state = owner.bytes(data_file, state=TEST_STATE_NAME).state
 
-    config = Config(state_dir=tmp_path / "other-preader", auto_save_state=True, verify_state=False)
+    config = Config(
+        state_dir=tmp_path / "other-preader", auto_save_state=True, verify_state=False
+    )
     reader = PReader(config=config)
 
     list(reader.lines(data_file, state=state))
@@ -669,13 +687,17 @@ def test_state_object_keeps_its_own_state_dir(data_file, make_reader, tmp_path):
 
 def test_resume_ignores_align_start_and_skip(reader, data_file, consume):
     options = IteratorOptions(start=9)
-    iterator = reader.lines(data_file, options=options, align_start=True, state=TEST_STATE_NAME)
+    iterator = reader.lines(
+        data_file, options=options, align_start=True, state=TEST_STATE_NAME
+    )
 
     state = consume(iterator, 1).state
     state.save()
 
     resumed_options = IteratorOptions(start=0, skip=5)
-    resumed = reader.lines(data_file, state=state, options=resumed_options, align_start=True)
+    resumed = reader.lines(
+        data_file, state=state, options=resumed_options, align_start=True
+    )
 
     assert list(resumed) == LINES[3:]
 
@@ -743,7 +765,11 @@ def test_flag_combinations_narrow_the_output(
     options = IteratorOptions(start=3)
 
     items = reader.lines(
-        path, options=options, align_start=align_start, keepends=keepends, skip_empty=skip_empty
+        path,
+        options=options,
+        align_start=align_start,
+        keepends=keepends,
+        skip_empty=skip_empty,
     )
 
     assert list(items) == expected

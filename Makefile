@@ -18,6 +18,7 @@ all: \
 	cargo-udeps \
 	clippy \
 	coverage \
+	coverage-lcov \
 	deny \
 	develop \
 	install-cargo-clippy \
@@ -38,11 +39,16 @@ all: \
 	live-book \
 	maturin-generate-ci \
 	pytest \
+	ruff-check \
+	ruff-check-fix \
+	ruff-format \
+	ruff-format-check \
 	rustfmt \
 	rustfmt-check \
 	rustup \
 	shell \
 	update-pre-commit-hooks \
+	uv-audit \
 	uv-create-venv
 
 book-build:
@@ -52,17 +58,17 @@ book-test:
 cargo-build:
 	@uv run cargo build
 cargo-check:
-	@cargo check
+	@uv run cargo check
 cargo-clean:
 	@cargo clean
 cargo-doc:
-	@cargo doc
+	@uv run cargo doc
 cargo-doc-rs:
-	@cargo +nightly docs-rs
+	@uv run cargo +nightly docs-rs
 cargo-doc-test:
 	@uv run cargo test --doc
 cargo-fix:
-	@cargo fix --allow-dirty --allow-staged
+	@uv run cargo fix --allow-dirty --allow-staged
 cargo-machete:
 	@cargo machete
 cargo-nextest:
@@ -70,16 +76,18 @@ cargo-nextest:
 cargo-test:
 	@uv run cargo test
 cargo-udeps:
-	@cargo +nightly udeps
+	@uv run cargo +nightly udeps --all-targets
 clippy:
-	@cargo clippy --all-targets --all-features
-coverage:
-	@uv run cargo +nightly llvm-cov \
-		--all-features \
-		--workspace \
-		--doctests \
-		--html \
-		--open
+	@uv run cargo clippy --all-targets --all-features
+coverage: COVERAGE_REPORT := --html --open
+coverage-lcov: COVERAGE_REPORT := --lcov --output-path lcov.info
+coverage coverage-lcov:
+	@( eval "$$(cargo llvm-cov show-env --sh)" && \
+		cargo llvm-cov clean --workspace && \
+		$(MAKE) --no-print-directory cargo-test pytest && \
+		cargo llvm-cov report $(COVERAGE_REPORT) ); \
+	status=$$?; cargo clean -p preader >/dev/null; \
+		$(MAKE) --no-print-directory develop; exit $$status
 deny:
 	@cargo deny --all-features --log-level error check
 develop:
@@ -129,6 +137,14 @@ maturin-generate-ci:
 	@uv run maturin generate-ci github
 pytest: develop
 	@uv run pytest
+ruff-check:
+	@uv run ruff check tests
+ruff-check-fix:
+	@uv run ruff check --fix tests
+ruff-format:
+	@uv run ruff format tests
+ruff-format-check:
+	@uv run ruff format --check tests
 rustfmt: cargo-fix
 	@cargo +nightly fmt --all
 rustfmt-check:
@@ -140,5 +156,7 @@ shell: develop
 	@uv run python3
 update-pre-commit-hooks:
 	@pre-commit autoupdate
+uv-audit:
+	@uv audit
 uv-create-venv:
 	@uv venv --python $(shell python3 --version | cut -d" " -f2)

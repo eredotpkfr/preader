@@ -1,0 +1,9 @@
+title = "preader"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Test constant name, not a credential"
+targetRules = ["generic-api-key"]
+stopwords = ["TEST_DEFAULT_DELIMITER"]

@@ -1,0 +1,18 @@
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        "actions/*": ref-pin
+        "astral-sh/*": ref-pin
+        "bnjbvr/*": ref-pin
+        "codecov/*": ref-pin
+        "crate-ci/*": ref-pin
+        "dtolnay/*": ref-pin
+        "EmbarkStudios/*": ref-pin
+        "gitleaks/*": ref-pin
+        "peaceiris/*": ref-pin
+        "PyO3/*": ref-pin
+        "Swatinem/*": ref-pin
+        "taiki-e/*": ref-pin
+        "zizmorcore/*": ref-pin
+        "*": hash-pin

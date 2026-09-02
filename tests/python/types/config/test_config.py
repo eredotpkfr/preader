@@ -1,5 +1,4 @@
 import pytest
-
 from preader import Config
 
 

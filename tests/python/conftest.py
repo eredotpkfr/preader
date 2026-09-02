@@ -1,10 +1,8 @@
 import hashlib
 import itertools
-
 import os
 
 import pytest
-
 from preader import Config, PReader
 
 FINGERPRINT_BYTES = 4096

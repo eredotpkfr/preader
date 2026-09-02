@@ -3,16 +3,14 @@ import os
 import re
 
 import pytest
-
-from preader import Config, PReader, StateError
-
 from constants import (
     TEST_STATE_NAME,
-    TEST_UNSAFE_STATE_NAMES,
     TEST_UNSAFE_STATE_NAME_IDS,
-    TEST_WINDOWS_UNSAFE_STATE_NAMES,
+    TEST_UNSAFE_STATE_NAMES,
     TEST_WINDOWS_UNSAFE_STATE_NAME_IDS,
+    TEST_WINDOWS_UNSAFE_STATE_NAMES,
 )
+from preader import Config, PReader, StateError
 
 
 def test_state_fields(config, reader, tmp_file):
@@ -35,7 +33,9 @@ def test_path_raises_when_name_is_unsafe(reader, tmp_file, name, message):
         state.path()
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Windows path syntax is only unsafe on Windows")
+@pytest.mark.skipif(
+    os.name != "nt", reason="Windows path syntax is only unsafe on Windows"
+)
 @pytest.mark.parametrize(
     "name", TEST_WINDOWS_UNSAFE_STATE_NAMES, ids=TEST_WINDOWS_UNSAFE_STATE_NAME_IDS
 )
@@ -230,7 +230,9 @@ def test_resync_updates_file_metadata(reader, tmp_file, tmp_path, fingerprint):
     assert resynced.file.fingerprint == fingerprint(moved)
 
 
-def test_resync_preserves_name_position_and_created_at(reader, tmp_file, tmp_path, consume):
+def test_resync_preserves_name_position_and_created_at(
+    reader, tmp_file, tmp_path, consume
+):
     state = consume(reader.bytes(tmp_file, state=TEST_STATE_NAME), 1).state
     state.save()
 
@@ -314,7 +316,9 @@ def test_reload_raises_when_the_file_is_deleted(reader, make_file):
         reader.states[TEST_STATE_NAME]
 
 
-def test_verify_suggests_resync_when_the_file_changed(make_reader, tmp_large_file, append):
+def test_verify_suggests_resync_when_the_file_changed(
+    make_reader, tmp_large_file, append
+):
     state = _new_unverified_state(make_reader, tmp_large_file)
 
     append(tmp_large_file, b"more")
@@ -454,7 +458,9 @@ def test_save_does_not_disturb_the_iterator(reader, tmp_large_file, consume):
 
 
 def test_saved_payload_has_the_expected_keys(reader, tmp_file):
-    payload = json.loads(reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save().read_text())
+    payload = json.loads(
+        reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save().read_text()
+    )
 
     assert sorted(payload) == ["_checksum", "file", "name", "position", "timestamps"]
     assert sorted(payload["file"]) == ["fingerprint", "mtime", "path", "size"]

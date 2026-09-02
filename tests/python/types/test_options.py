@@ -1,8 +1,6 @@
 import pytest
-
-from preader import IteratorOptions
-
 from constants import TEST_ALPHABET
+from preader import IteratorOptions
 
 
 def test_iterator_options_defaults():

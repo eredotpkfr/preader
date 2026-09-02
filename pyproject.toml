@@ -14,7 +14,7 @@ authors = [
 maintainers = [
     { name = "Erdoğan YOKSUL", email = "erdoganyoksul3@gmail.com" },
 ]
-requires-python = ">=3.8"
+requires-python = ">=3.12"
 keywords = ["file-reader", "resumable", "iterator", "checksum", "progress-tracking"]
 classifiers = [
     "Programming Language :: Rust",
@@ -40,7 +40,6 @@ changelog = "https://github.com/eredotpkfr/preader/blob/main/CHANGELOG.md"
 issues = "https://github.com/eredotpkfr/preader/issues"
 
 [tool.maturin]
-features = ["pyo3/extension-module"]
 
 [tool.maturin.generate-ci.github.all]
 
@@ -51,7 +50,6 @@ package = false
 dev = [
     "maturin>=1.15.0,<2.0",
     "pytest",
-    "pytest-cov",
     "pytest-xdist",
     "pytest-randomly",
     "pytest-timeout",
@@ -59,7 +57,7 @@ dev = [
     "pytest-socket",
     "pytest-icdiff",
     "pytest-sugar",
-    "coverage",
+    "ruff",
 ]
 
 [tool.pytest.ini_options]

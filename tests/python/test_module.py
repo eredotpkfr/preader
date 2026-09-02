@@ -1,6 +1,5 @@
-import pytest
-
 import preader
+import pytest
 
 EXPORTS = (
     "ByteIterator",
@@ -26,6 +25,8 @@ def test_module_exports_the_public_api(name):
 
 
 def test_module_exports_nothing_unexpected():
-    exported = {name for name, value in vars(preader).items() if isinstance(value, type)}
+    exported = {
+        name for name, value in vars(preader).items() if isinstance(value, type)
+    }
 
     assert exported == set(EXPORTS)

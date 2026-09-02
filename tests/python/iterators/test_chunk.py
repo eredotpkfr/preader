@@ -2,17 +2,15 @@ import json
 import os
 
 import pytest
-
-from preader import Config, IteratorOptions, PReader, StateError
-
 from constants import (
     TEST_ALPHABET,
     TEST_STATE_NAME,
-    TEST_UNSAFE_STATE_NAMES,
     TEST_UNSAFE_STATE_NAME_IDS,
-    TEST_WINDOWS_UNSAFE_STATE_NAMES,
+    TEST_UNSAFE_STATE_NAMES,
     TEST_WINDOWS_UNSAFE_STATE_NAME_IDS,
+    TEST_WINDOWS_UNSAFE_STATE_NAMES,
 )
+from preader import Config, IteratorOptions, PReader, StateError
 
 
 @pytest.fixture
@@ -40,7 +38,9 @@ def test_options_narrow_the_output(reader, data_file, options, expected):
 
 
 @pytest.mark.parametrize("buffer_capacity", (0, 2), ids=["zero", "tiny"])
-def test_buffer_capacity_smaller_than_chunk_size(data_file, make_reader, buffer_capacity):
+def test_buffer_capacity_smaller_than_chunk_size(
+    data_file, make_reader, buffer_capacity
+):
     reader = make_reader(buffer_capacity=buffer_capacity)
 
     assert b"".join(reader.chunks(data_file, chunk_size=10)) == TEST_ALPHABET
@@ -52,7 +52,9 @@ def test_zero_chunk_size_yields_nothing(reader, tmp_file):
 
 def test_drop_partial_discards_chunk_cut_short_by_end(reader, data_file):
     options = IteratorOptions(end=12)
-    iterator = reader.chunks(data_file, options=options, chunk_size=5, drop_partial=True)
+    iterator = reader.chunks(
+        data_file, options=options, chunk_size=5, drop_partial=True
+    )
 
     assert list(iterator) == [TEST_ALPHABET[0:5], TEST_ALPHABET[5:10]]
     assert iterator.state.position == 10
@@ -67,7 +69,9 @@ def test_keeps_partial_chunk_cut_by_end(reader, data_file):
 
 
 def test_resume_with_different_chunk_size(reader, data_file, consume):
-    state = consume(reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=4), 1).state
+    state = consume(
+        reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=4), 1
+    ).state
     state.save()
 
     resumed = list(reader.chunks(data_file, state=state, chunk_size=3))
@@ -91,7 +95,9 @@ def test_resume_ignores_options_when_already_past_start(reader, data_file, consu
 
 
 def test_end_below_the_position_does_not_rewind_the_state(data_file, make_reader):
-    reader = make_reader(auto_save_state=True, auto_save_state_bytes=64, auto_load_state=True)
+    reader = make_reader(
+        auto_save_state=True, auto_save_state_bytes=64, auto_load_state=True
+    )
 
     list(reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=3))
 
@@ -99,7 +105,14 @@ def test_end_below_the_position_does_not_rewind_the_state(data_file, make_reader
 
     assert saved == len(data_file.read_bytes())
 
-    list(reader.chunks(data_file, state=TEST_STATE_NAME, options=IteratorOptions(end=5), chunk_size=3))
+    list(
+        reader.chunks(
+            data_file,
+            state=TEST_STATE_NAME,
+            options=IteratorOptions(end=5),
+            chunk_size=3,
+        )
+    )
 
     assert reader.states[TEST_STATE_NAME].position == saved
 
@@ -175,7 +188,9 @@ def test_extra_next_after_exhaustion_does_not_resave(data_file, make_reader, con
     assert reader.states[TEST_STATE_NAME].path().stat().st_mtime == mtime_before
 
 
-def test_autosave_error_propagates_from_unbound_iteration(config, make_reader, data_file, capfd):
+def test_autosave_error_propagates_from_unbound_iteration(
+    config, make_reader, data_file, capfd
+):
     config.state_dir.write_bytes(b"foo")
 
     reader = make_reader(auto_save_state=True, auto_save_state_bytes=5)
@@ -225,12 +240,16 @@ def test_save_error_propagates_when_end_drops_a_chunk(data_file, make_reader):
 
 
 @pytest.mark.parametrize("threshold", [4, 1000], ids=["at_the_threshold", "at_the_end"])
-def test_save_error_propagates_on_a_dropped_short_chunk(make_file, make_reader, threshold):
+def test_save_error_propagates_on_a_dropped_short_chunk(
+    make_file, make_reader, threshold
+):
     reader = make_reader(
         auto_save_state=True, auto_save_state_bytes=threshold, buffer_capacity=1
     )
     path = make_file(b"foobarbaz")
-    iterator = reader.chunks(path, chunk_size=3, drop_partial=True, state="../../etc/passwd")
+    iterator = reader.chunks(
+        path, chunk_size=3, drop_partial=True, state="../../etc/passwd"
+    )
 
     next(iterator)
 
@@ -276,7 +295,9 @@ def test_auto_load_state_ignores_an_unverifiable_state(data_file, make_reader, a
     assert reader.chunks(data_file, chunk_size=5).state.position == 0
 
 
-def test_auto_load_state_resumes_stale_state_without_verification(data_file, make_reader, append):
+def test_auto_load_state_resumes_stale_state_without_verification(
+    data_file, make_reader, append
+):
     reader = make_reader(auto_load_state=True, verify_state=False)
     iterator = reader.chunks(data_file, chunk_size=5)
 
@@ -321,7 +342,9 @@ def test_unsafe_name_defers_rejection_to_save(reader, tmp_file, name, message):
         iterator.state.save()
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Windows path syntax is only unsafe on Windows")
+@pytest.mark.skipif(
+    os.name != "nt", reason="Windows path syntax is only unsafe on Windows"
+)
 @pytest.mark.parametrize(
     "name", TEST_WINDOWS_UNSAFE_STATE_NAMES, ids=TEST_WINDOWS_UNSAFE_STATE_NAME_IDS
 )
@@ -402,7 +425,9 @@ def test_raises_when_the_tracked_file_is_deleted(make_file, make_reader):
 
 
 def test_resync_allows_resuming_moved_file(reader, tmp_path, data_file, consume):
-    state = consume(reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=5), 1).state
+    state = consume(
+        reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=5), 1
+    ).state
     state.save()
 
     moved = data_file.rename(tmp_path / "moved.bin")
@@ -473,7 +498,9 @@ def test_raises_when_resumed_after_file_grows(reader, data_file, consume, append
         reader.chunks(data_file, state=state)
 
 
-def test_recorded_file_size_never_refreshes_after_file_grows(data_file, make_reader, consume, append):
+def test_recorded_file_size_never_refreshes_after_file_grows(
+    data_file, make_reader, consume, append
+):
     reader = make_reader(verify_state=False)
 
     state = consume(reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=5)).state
@@ -501,7 +528,10 @@ def test_clear_does_not_affect_live_iterator(reader, data_file):
     next(iterator)
 
     assert iterator.state.position == 10
-    assert reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=5).state.position == 0
+    assert (
+        reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=5).state.position
+        == 0
+    )
 
 
 def test_raises_when_reading_a_directory(data_file, make_reader):
@@ -551,14 +581,21 @@ def test_state_dir_change_creates_fresh_state(data_file, make_reader, tmp_path):
 
     other_reader = PReader(config=Config(state_dir=tmp_path / "other-preader"))
 
-    assert other_reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=5).state.position == 0
+    assert (
+        other_reader.chunks(
+            data_file, state=TEST_STATE_NAME, chunk_size=5
+        ).state.position
+        == 0
+    )
 
 
 def test_state_object_keeps_its_own_state_dir(data_file, make_reader, tmp_path):
     owner = make_reader(auto_save_state=True)
     state = owner.bytes(data_file, state=TEST_STATE_NAME).state
 
-    config = Config(state_dir=tmp_path / "other-preader", auto_save_state=True, verify_state=False)
+    config = Config(
+        state_dir=tmp_path / "other-preader", auto_save_state=True, verify_state=False
+    )
     reader = PReader(config=config)
 
     list(reader.chunks(data_file, state=state))
@@ -707,7 +744,9 @@ def test_two_iterators_with_the_same_name_advance_independently(reader, data_fil
 def test_yields_every_byte_value(reader, make_file):
     path = make_file(bytes(range(256)))
 
-    assert list(reader.chunks(path, chunk_size=1)) == [bytes([value]) for value in range(256)]
+    assert list(reader.chunks(path, chunk_size=1)) == [
+        bytes([value]) for value in range(256)
+    ]
 
 
 def test_drop_partial_reads_past_a_buffer_refill(make_reader, make_file):

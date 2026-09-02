@@ -1,8 +1,6 @@
 import pytest
-
-from preader import StateError
-
 from constants import TEST_STATE_NAME
+from preader import StateError
 
 
 def test_io_errors_get_prefixed(reader, tmp_file):

@@ -5,40 +5,106 @@ on:
     branches:
       - main
 
+permissions: {}
+
 env:
-  RUSTDOCFLAGS: "-Dwarnings"
-  RUSTFLAGS: "-Dwarnings"
   CARGO_TERM_COLOR: "always"
 
 jobs:
-  rust-lint-checks:
+  python-ruff:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@nightly
         with:
-          components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          python-version: "3.14"
+          enable-cache: true
 
-      - name: Run rustfmt
-        run: make rustfmt-check
+      - name: Sync dependencies
+        run: uv sync --locked
 
-      - name: Run clippy
-        run: make clippy
+      - name: Run ruff check
+        run: make ruff-check
 
-  rust-lint-docs:
+      - name: Run ruff format
+        run: make ruff-format-check
+
+  rust-cargo-doc-rs:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      RUSTDOCFLAGS: "-Dwarnings"
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
       - uses: dtolnay/install@cargo-docs-rs
 
-      - name: Run doc-rs
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          python-version: "3.14"
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --locked
+
+      - name: Run cargo docs-rs
         run: make cargo-doc-rs
+
+  rust-clippy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      RUSTFLAGS: "-Dwarnings"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          python-version: "3.14"
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --locked
+
+      - name: Run clippy
+        run: make clippy
+
+  rust-rustfmt:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt
+
+      - name: Run rustfmt
+        run: make rustfmt-check
 
   typos:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
-      - uses: crate-ci/typos@master
+        with:
+          persist-credentials: false
+      - uses: crate-ci/typos@v1

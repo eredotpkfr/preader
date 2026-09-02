@@ -1,10 +1,8 @@
 import os
 
 import pytest
-
-from preader import Config, IteratorOptions, PReader, StateError
-
 from constants import TEST_ALPHABET, TEST_DEFAULT_DELIMITER, TEST_STATE_NAME
+from preader import Config, IteratorOptions, PReader, StateError
 
 
 def test_preader_defaults():
@@ -116,7 +114,10 @@ def test_raises_when_start_exceeds_end(reader, tmp_file, iterate):
 
 
 def test_bytes_treats_an_explicit_none_state_as_auto(reader, tmp_file):
-    assert reader.bytes(tmp_file, state=None).state.name == reader.bytes(tmp_file).state.name
+    assert (
+        reader.bytes(tmp_file, state=None).state.name
+        == reader.bytes(tmp_file).state.name
+    )
 
 
 def test_chunks_splits_into_fixed_size_pieces(reader, make_file):
@@ -124,7 +125,10 @@ def test_chunks_splits_into_fixed_size_pieces(reader, make_file):
     chunk_size = 3
 
     chunks = list(reader.chunks(path, chunk_size=chunk_size))
-    expected = [TEST_ALPHABET[i : i + chunk_size] for i in range(0, len(TEST_ALPHABET), chunk_size)]
+    expected = [
+        TEST_ALPHABET[i : i + chunk_size]
+        for i in range(0, len(TEST_ALPHABET), chunk_size)
+    ]
 
     assert chunks == expected
 
@@ -136,7 +140,9 @@ def test_chunks_drop_partial_discards_partial_chunk(reader, make_file):
     chunks = list(reader.chunks(path, chunk_size=chunk_size, drop_partial=True))
 
     full_length = (len(TEST_ALPHABET) // chunk_size) * chunk_size
-    expected = [TEST_ALPHABET[i : i + chunk_size] for i in range(0, full_length, chunk_size)]
+    expected = [
+        TEST_ALPHABET[i : i + chunk_size] for i in range(0, full_length, chunk_size)
+    ]
 
     assert chunks == expected
 
@@ -144,7 +150,10 @@ def test_chunks_drop_partial_discards_partial_chunk(reader, make_file):
 def test_chunks_drop_partial_keeps_exact_chunk(reader, make_file):
     path = make_file(b"abcdef")
 
-    assert list(reader.chunks(path, chunk_size=3, drop_partial=True)) == [b"abc", b"def"]
+    assert list(reader.chunks(path, chunk_size=3, drop_partial=True)) == [
+        b"abc",
+        b"def",
+    ]
 
 
 def test_chunks_single_chunk_for_large_chunk_size(reader, tmp_file):
@@ -155,19 +164,27 @@ def test_chunks_drop_partial_empty_for_large_chunk_size(reader, tmp_file):
     assert list(reader.chunks(tmp_file, chunk_size=1024, drop_partial=True)) == []
 
 
-@pytest.mark.parametrize("drop_partial", [True, False], ids=["drop_partial", "defaults"])
+@pytest.mark.parametrize(
+    "drop_partial", [True, False], ids=["drop_partial", "defaults"]
+)
 def test_chunks_yields_nothing_for_empty_file(reader, empty_file, drop_partial):
     assert list(reader.chunks(empty_file, drop_partial=drop_partial)) == []
 
 
 @pytest.mark.parametrize(
-    ("drop_partial", "expected"), [(True, []), (False, [b"a"])], ids=["drop_partial", "defaults"]
+    ("drop_partial", "expected"),
+    [(True, []), (False, [b"a"])],
+    ids=["drop_partial", "defaults"],
 )
-def test_chunks_yields_one_item_for_a_single_byte_file(reader, make_file, drop_partial, expected):
+def test_chunks_yields_one_item_for_a_single_byte_file(
+    reader, make_file, drop_partial, expected
+):
     assert list(reader.chunks(make_file(b"a"), drop_partial=drop_partial)) == expected
 
 
-@pytest.mark.parametrize("drop_partial", [True, False], ids=["drop_partial", "defaults"])
+@pytest.mark.parametrize(
+    "drop_partial", [True, False], ids=["drop_partial", "defaults"]
+)
 def test_chunks_attributes(reader, tmp_file, drop_partial):
     iterator = reader.chunks(tmp_file, chunk_size=1024, drop_partial=drop_partial)
 
@@ -216,7 +233,10 @@ def test_lines_skip_empty_skips_blank_lines(reader, make_file):
 def test_lines_skip_empty_with_keepends(reader, make_file):
     path = make_file(b"foo\n\nbar\n")
 
-    assert list(reader.lines(path, keepends=True, skip_empty=True)) == ["foo\n", "bar\n"]
+    assert list(reader.lines(path, keepends=True, skip_empty=True)) == [
+        "foo\n",
+        "bar\n",
+    ]
 
 
 @pytest.mark.parametrize(
@@ -226,7 +246,9 @@ def test_lines_skip_empty_with_keepends(reader, make_file):
 )
 def test_lines_attributes(reader, tmp_file, keepends, skip_empty):
     options = IteratorOptions(skip=1)
-    iterator = reader.lines(tmp_file, options=options, keepends=keepends, skip_empty=skip_empty)
+    iterator = reader.lines(
+        tmp_file, options=options, keepends=keepends, skip_empty=skip_empty
+    )
 
     assert iterator.keepends is keepends
     assert iterator.skip_empty is skip_empty
@@ -248,7 +270,10 @@ def test_delimiter_splits_on_byte(reader, make_file, content, expected):
 def test_delimiter_keep_delimiter_preserves_byte(reader, make_file):
     path = make_file(b"foo,bar,")
 
-    assert list(reader.delimiter(path, delimiter=",", keep_delimiter=True)) == [b"foo,", b"bar,"]
+    assert list(reader.delimiter(path, delimiter=",", keep_delimiter=True)) == [
+        b"foo,",
+        b"bar,",
+    ]
 
 
 def test_delimiter_keep_delimiter_keeps_blank_segments(reader, make_file):
@@ -270,13 +295,18 @@ def test_delimiter_yields_one_item_for_a_single_byte_file(reader, make_file):
 def test_delimiter_skip_empty_skips_blank_segments(reader, make_file):
     path = make_file(b"foo,,bar,")
 
-    assert list(reader.delimiter(path, delimiter=",", skip_empty=True)) == [b"foo", b"bar"]
+    assert list(reader.delimiter(path, delimiter=",", skip_empty=True)) == [
+        b"foo",
+        b"bar",
+    ]
 
 
 def test_delimiter_skip_empty_with_keep_delimiter(reader, make_file):
     path = make_file(b"foo,,bar,")
 
-    segments = list(reader.delimiter(path, delimiter=",", keep_delimiter=True, skip_empty=True))
+    segments = list(
+        reader.delimiter(path, delimiter=",", keep_delimiter=True, skip_empty=True)
+    )
 
     assert segments == [b"foo,", b"bar,"]
 
@@ -364,7 +394,9 @@ def test_bytes_raises_when_the_maximum_start_exceeds_the_end(reader, tmp_file):
         reader.bytes(tmp_file, options=options)
 
 
-def test_bytes_resolves_a_relative_path_to_the_same_name(reader, make_file, monkeypatch):
+def test_bytes_resolves_a_relative_path_to_the_same_name(
+    reader, make_file, monkeypatch
+):
     path = make_file(b"foo")
     monkeypatch.chdir(path.parent)
 

@@ -5,10 +5,8 @@ import random
 import zipfile
 
 import pytest
-
-from preader import IteratorOptions
-
 from constants import TEST_DEFAULT_DELIMITER, TEST_STATE_NAME
+from preader import IteratorOptions
 
 SEEDS = (1, 2, 3)
 SIZES = (512, 4096, 51_200)
@@ -17,9 +15,20 @@ CHUNK_SIZES = (1, 4096)
 BUFFER_CAPACITIES = (1024, 65_536)
 CYCLES = 5
 WORDS = (
-    "preader", "iterator", "state", "foo", "bar", "baz",
-    "café", "Ünicode", "日本語", "🦀",
-    "$qux", "`quux`", "a;b", ",",
+    "preader",
+    "iterator",
+    "state",
+    "foo",
+    "bar",
+    "baz",
+    "café",
+    "Ünicode",
+    "日本語",
+    "🦀",
+    "$qux",
+    "`quux`",
+    "a;b",
+    ",",
 )
 
 
@@ -60,7 +69,11 @@ CONTENTS = {
     for size in SIZES
     for seed in SEEDS
 }
-TEXTS = {name: content.decode() for name, content in CONTENTS.items() if name.startswith("text")}
+TEXTS = {
+    name: content.decode()
+    for name, content in CONTENTS.items()
+    if name.startswith("text")
+}
 ARCHIVES = {
     name: content
     for name, content in CONTENTS.items()
@@ -68,11 +81,15 @@ ARCHIVES = {
 }
 ITERATORS = {
     "bytes": lambda reader, path, **options: reader.bytes(path, **options),
-    "chunks": lambda reader, path, **options: reader.chunks(path, chunk_size=7, **options),
+    "chunks": lambda reader, path, **options: reader.chunks(
+        path, chunk_size=7, **options
+    ),
     "delimiter": lambda reader, path, **options: reader.delimiter(
         path, delimiter=TEST_DEFAULT_DELIMITER, keep_delimiter=True, **options
     ),
-    "lines": lambda reader, path, **options: reader.lines(path, keepends=True, **options),
+    "lines": lambda reader, path, **options: reader.lines(
+        path, keepends=True, **options
+    ),
 }
 
 
@@ -141,7 +158,9 @@ def test_percent_tracks_the_position(reader, make_file, make_iterator, content):
     iterator = make_iterator(reader, make_file(content))
 
     for _ in iterator:
-        assert iterator.percent() == pytest.approx(iterator.state.position / len(content) * 100)
+        assert iterator.percent() == pytest.approx(
+            iterator.state.position / len(content) * 100
+        )
 
     assert iterator.state.position == len(content)
     assert iterator.percent() == 100.0
@@ -159,7 +178,9 @@ def test_resume_rebuilds_the_file_in_cycles(
     rebuilt = [
         item
         for _ in range(CYCLES)
-        for item in itertools.islice(make_iterator(resuming, path, state=TEST_STATE_NAME), cycle)
+        for item in itertools.islice(
+            make_iterator(resuming, path, state=TEST_STATE_NAME), cycle
+        )
     ]
 
     assert rebuilt == expected

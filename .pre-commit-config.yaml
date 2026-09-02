@@ -8,10 +8,11 @@ repos:
       - id: end-of-file-fixer
       - id: check-added-large-files
       - id: check-shebang-scripts-are-executable
-        # exclude: |
-        #   (?x)^(
-        #     src/lib.rs
-        #   )$
+        exclude: |
+          (?x)^(
+            src/lib\.rs|
+            tests/rust/main\.rs
+          )$
       - id: check-case-conflict
       - id: check-executables-have-shebangs
       - id: check-merge-conflict
@@ -31,20 +32,6 @@ repos:
     rev: v4.6.0
     hooks:
       - id: validate_manifest
-
-  - repo: https://github.com/doublify/pre-commit-rust
-    rev: v1.0
-    hooks:
-      - id: fmt
-        entry: cargo +nightly fmt --all
-      - id: clippy
-        args: ["--all-targets", "--all-features"]
-      - id: cargo-check
-
-  - repo: https://github.com/est31/cargo-udeps
-    rev: v0.1.61
-    hooks:
-    - id: udeps
 
   - repo: https://github.com/EmbarkStudios/cargo-deny
     rev: 0.19.6
@@ -71,7 +58,7 @@ repos:
       - id: codespell
         exclude: |
           (?x)^(
-            Cargo.lock
+            Cargo\.lock
           )$
 
   - repo: https://github.com/markdownlint/markdownlint
@@ -81,7 +68,7 @@ repos:
         name: markdownlint
         exclude: |
           (?x)^(
-            CHANGELOG.md
+            CHANGELOG\.md
           )$
 
   - repo: https://github.com/gitleaks/gitleaks
@@ -89,3 +76,80 @@ repos:
     hooks:
       - id: gitleaks
         name: gitleaks
+
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: v1.30.0
+    hooks:
+      - id: zizmor
+
+  - repo: local
+    hooks:
+      - id: rustfmt-check
+        name: rustfmt-check
+        entry: make rustfmt-check
+        language: system
+        files: \.(lock|rs|toml)$
+        pass_filenames: false
+
+      - id: cargo-check
+        name: cargo-check
+        entry: make cargo-check
+        language: system
+        files: \.(lock|rs|toml)$
+        pass_filenames: false
+
+      - id: clippy
+        name: clippy
+        entry: make clippy
+        language: system
+        files: \.(lock|rs|toml)$
+        pass_filenames: false
+
+      - id: cargo-udeps
+        name: cargo-udeps
+        entry: make cargo-udeps
+        language: system
+        files: \.(lock|rs|toml)$
+        pass_filenames: false
+
+      - id: ruff-check
+        name: ruff-check
+        entry: make ruff-check
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      - id: ruff-format-check
+        name: ruff-format-check
+        entry: make ruff-format-check
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      - id: uv-audit
+        name: uv-audit
+        entry: make uv-audit
+        language: system
+        files: ^(pyproject\.toml|uv\.lock)$
+        pass_filenames: false
+
+      - id: cargo-test
+        name: cargo-test
+        entry: make cargo-test
+        language: system
+        files: \.(lock|rs|toml)$
+        pass_filenames: false
+
+      - id: cargo-nextest
+        name: cargo-nextest
+        entry: make cargo-nextest
+        language: system
+        files: \.(lock|rs|toml)$
+        pass_filenames: false
+
+      - id: pytest
+        name: pytest
+        entry: make pytest
+        language: system
+        files: \.(lock|py|rs|toml)$
+        pass_filenames: false

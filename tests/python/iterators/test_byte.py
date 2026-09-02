@@ -2,17 +2,15 @@ import json
 import os
 
 import pytest
-
-from preader import Config, IteratorOptions, PReader, StateError
-
 from constants import (
     TEST_ALPHABET,
     TEST_STATE_NAME,
-    TEST_UNSAFE_STATE_NAMES,
     TEST_UNSAFE_STATE_NAME_IDS,
-    TEST_WINDOWS_UNSAFE_STATE_NAMES,
+    TEST_UNSAFE_STATE_NAMES,
     TEST_WINDOWS_UNSAFE_STATE_NAME_IDS,
+    TEST_WINDOWS_UNSAFE_STATE_NAMES,
 )
+from preader import Config, IteratorOptions, PReader, StateError
 
 
 @pytest.fixture
@@ -50,8 +48,13 @@ def test_options_narrow_the_output(reader, data_file, options, expected):
     [(IteratorOptions(end=5, limit=100), 5), (IteratorOptions(end=100, limit=2), 2)],
     ids=["end_is_tighter", "limit_is_tighter"],
 )
-def test_options_end_and_limit_whichever_is_tighter_wins(reader, data_file, options, expected_length):
-    assert b"".join(reader.bytes(data_file, options=options)) == TEST_ALPHABET[:expected_length]
+def test_options_end_and_limit_whichever_is_tighter_wins(
+    reader, data_file, options, expected_length
+):
+    assert (
+        b"".join(reader.bytes(data_file, options=options))
+        == TEST_ALPHABET[:expected_length]
+    )
 
 
 @pytest.mark.parametrize("buffer_capacity", (0, 2), ids=["zero", "tiny"])
@@ -74,7 +77,9 @@ def test_resume_ignores_options_when_already_past_start(reader, data_file, consu
 
 
 def test_end_below_the_position_does_not_rewind_the_state(data_file, make_reader):
-    reader = make_reader(auto_save_state=True, auto_save_state_bytes=64, auto_load_state=True)
+    reader = make_reader(
+        auto_save_state=True, auto_save_state_bytes=64, auto_load_state=True
+    )
 
     list(reader.bytes(data_file, state=TEST_STATE_NAME))
 
@@ -271,7 +276,9 @@ def test_unsafe_name_defers_rejection_to_save(reader, tmp_file, name, message):
         iterator.state.save()
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Windows path syntax is only unsafe on Windows")
+@pytest.mark.skipif(
+    os.name != "nt", reason="Windows path syntax is only unsafe on Windows"
+)
 @pytest.mark.parametrize(
     "name", TEST_WINDOWS_UNSAFE_STATE_NAMES, ids=TEST_WINDOWS_UNSAFE_STATE_NAME_IDS
 )
@@ -307,7 +314,9 @@ def test_extra_next_after_exhaustion_does_not_resave(data_file, make_reader, con
     assert reader.states[TEST_STATE_NAME].path().stat().st_mtime == mtime_before
 
 
-def test_autosave_error_propagates_from_unbound_iteration(config, make_reader, data_file, capfd):
+def test_autosave_error_propagates_from_unbound_iteration(
+    config, make_reader, data_file, capfd
+):
     config.state_dir.write_bytes(b"foo")
 
     reader = make_reader(auto_save_state=True, auto_save_state_bytes=5)
@@ -373,7 +382,9 @@ def test_auto_load_state_ignores_an_unverifiable_state(data_file, make_reader, a
     assert reader.bytes(data_file).state.position == 0
 
 
-def test_auto_load_state_resumes_stale_state_without_verification(data_file, make_reader, append):
+def test_auto_load_state_resumes_stale_state_without_verification(
+    data_file, make_reader, append
+):
     reader = make_reader(auto_load_state=True, verify_state=False)
     iterator = reader.bytes(data_file)
 
@@ -435,7 +446,9 @@ def test_raises_when_resumed_after_file_grows(reader, data_file, consume, append
         reader.bytes(data_file, state=state)
 
 
-def test_recorded_file_size_never_refreshes_after_file_grows(data_file, make_reader, consume, append):
+def test_recorded_file_size_never_refreshes_after_file_grows(
+    data_file, make_reader, consume, append
+):
     reader = make_reader(verify_state=False)
 
     state = consume(reader.bytes(data_file, state=TEST_STATE_NAME)).state
@@ -532,7 +545,9 @@ def test_state_object_keeps_its_own_state_dir(data_file, make_reader, tmp_path):
     owner = make_reader(auto_save_state=True)
     state = owner.bytes(data_file, state=TEST_STATE_NAME).state
 
-    config = Config(state_dir=tmp_path / "other-preader", auto_save_state=True, verify_state=False)
+    config = Config(
+        state_dir=tmp_path / "other-preader", auto_save_state=True, verify_state=False
+    )
     reader = PReader(config=config)
 
     list(reader.bytes(data_file, state=state))
