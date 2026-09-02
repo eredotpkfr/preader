@@ -42,6 +42,8 @@ htmlcov/
 nosetests.xml
 coverage.xml
 lcov.info
+*.profraw
+*.profdata
 
 # Translations
 *.mo
@@ -74,3 +76,12 @@ docs/_build/
 
 # preader state directory
 .preader/
+
+# Secrets and credentials
+.env
+.env.*
+*.pem
+*.key
+id_rsa
+id_ed25519
+credentials.json
