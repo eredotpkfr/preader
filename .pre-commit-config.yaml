@@ -10,6 +10,7 @@ repos:
       - id: check-shebang-scripts-are-executable
         exclude: |
           (?x)^(
+            build\.rs|
             src/lib\.rs|
             tests/rust/main\.rs
           )$

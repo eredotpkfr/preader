@@ -96,10 +96,9 @@ jobs:
     permissions:
       contents: read
       actions: read
+      security-events: write
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: zizmorcore/zizmor-action@v0.6.3
-        with:
-          advanced-security: false

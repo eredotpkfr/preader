@@ -418,6 +418,7 @@ dependencies = [
  "dirs",
  "hex",
  "pyo3",
+ "pyo3-build-config",
  "regex",
  "rstest",
  "serde",
