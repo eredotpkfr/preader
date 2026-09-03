@@ -62,9 +62,12 @@ dev = [
 
 [tool.mypy]
 files = ["python/preader", "tests/python"]
-exclude = ['python/preader/preader\.pyi$']
 python_version = "3.12"
 strict = true
+
+[[tool.mypy.overrides]]
+module = "preader.preader"
+disable_error_code = ["no-untyped-def"]
 
 [tool.pytest.ini_options]
 addopts = "-n auto -ra --disable-socket --strict-config --strict-markers"
