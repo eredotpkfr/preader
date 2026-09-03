@@ -119,9 +119,8 @@ def requires_symlinks(tmp_path: Path) -> None:
 
 @pytest.fixture
 def requires_non_utf8_names(tmp_path: Path) -> None:
-    probe = tmp_path / os.fsdecode(b"probe-\xff.bin")
-
     try:
+        probe = tmp_path / os.fsdecode(b"probe-\xff.bin")
         probe.write_bytes(b"")
     except (OSError, UnicodeError):
         pytest.skip("a non-UTF-8 file name cannot be created here")

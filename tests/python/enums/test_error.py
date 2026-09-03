@@ -5,6 +5,8 @@ import pytest
 from constants import TEST_STATE_NAME
 from preader import PReader, StateError, StateRegistry
 
+UNSAFE_STATE_NAME = "../../etc/passwd"
+
 
 def test_io_errors_get_prefixed(reader: PReader, tmp_file: Path) -> None:
     state = reader.bytes(tmp_file, state=TEST_STATE_NAME).state
@@ -33,9 +35,9 @@ def test_regex_errors_get_prefixed(registry: StateRegistry) -> None:
 
 def test_anyhow_errors_are_not_prefixed(registry: StateRegistry) -> None:
     with pytest.raises(StateError) as exc_info:
-        registry.path("../../etc/passwd")
+        registry.path(UNSAFE_STATE_NAME)
 
     message = str(exc_info.value)
 
-    assert message == "path escapes root: ../../etc/passwd"
+    assert message == f"path escapes root: {Path(UNSAFE_STATE_NAME)}"
     assert not message.startswith(("io failed", "regex failed", "serde failed"))
