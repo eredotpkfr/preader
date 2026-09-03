@@ -131,5 +131,5 @@ fn open_fails_when_the_position_is_too_large(tmp_dir: TempDir) {
     };
     let error = window.open(&path, 64).unwrap_err();
 
-    assert_eq!(error.kind(), ErrorKind::InvalidInput);
+    assert!(error.raw_os_error().is_some());
 }

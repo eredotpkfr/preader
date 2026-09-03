@@ -192,7 +192,7 @@ impl State {
     }
 
     pub fn resync(&self, path: PathBuf) -> Result<Self, Error> {
-        let path = path.canonicalize()?;
+        let path = dunce::canonicalize(path)?;
         let file = FileMetadata::try_from(path.as_path())?;
         let mut resynced = self.clone();
 
