@@ -82,7 +82,7 @@ impl ChunkIterator {
         let chunk_size = slf.chunk_size;
         let position = slf.as_super().state.position;
         let end = slf.as_super().end;
-        let max_bytes = ((end - position) as usize).min(chunk_size);
+        let max_bytes = (end - position).min(chunk_size as u64) as usize;
         let drop_partial = slf.drop_partial;
 
         if drop_partial && max_bytes < chunk_size {
