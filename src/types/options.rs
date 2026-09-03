@@ -2,16 +2,16 @@ use pyo3::{exceptions::PyValueError, prelude::*};
 
 use crate::types::window::Window;
 
-#[pyclass(module = "preader", from_py_object)]
-#[derive(Clone)]
+#[pyclass(module = "preader", eq, from_py_object)]
+#[derive(Clone, PartialEq)]
 pub struct IteratorOptions {
-    #[pyo3(get, set)]
+    #[pyo3(get)]
     pub start: u64,
-    #[pyo3(get, set)]
+    #[pyo3(get)]
     pub end: u64,
-    #[pyo3(get, set)]
+    #[pyo3(get)]
     pub skip: u64,
-    #[pyo3(get, set)]
+    #[pyo3(get)]
     pub limit: u64,
 }
 

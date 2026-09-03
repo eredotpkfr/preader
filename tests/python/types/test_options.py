@@ -1,9 +1,11 @@
+from collections.abc import Callable
+
 import pytest
-from constants import TEST_ALPHABET
+
 from preader import IteratorOptions
 
 
-def test_iterator_options_defaults():
+def test_iterator_options_defaults() -> None:
     options = IteratorOptions()
 
     assert options.start == 0
@@ -12,25 +14,11 @@ def test_iterator_options_defaults():
     assert options.limit == 2**64 - 1
 
 
-def test_iterator_options_mutation_affects_reads(reader, make_file):
-    path = make_file(TEST_ALPHABET)
-    options = IteratorOptions(start=2)
+def test_iterator_options_compares_by_value() -> None:
+    options = IteratorOptions(start=10, end=100)
 
-    assert b"".join(reader.bytes(path, options=options)) == TEST_ALPHABET[2:]
-
-    options.start = 5
-    assert b"".join(reader.bytes(path, options=options)) == TEST_ALPHABET[5:]
-
-
-def test_iterator_options_are_snapshotted_at_construction(reader, make_file):
-    path = make_file(TEST_ALPHABET)
-    options = IteratorOptions(end=5)
-    iterator = reader.bytes(path, options=options)
-
-    options.end = len(TEST_ALPHABET)
-    options.limit = 1
-
-    assert b"".join(iterator) == TEST_ALPHABET[:5]
+    assert options == IteratorOptions(start=10, end=100)
+    assert options != IteratorOptions(start=10, end=101)
 
 
 @pytest.mark.parametrize(
@@ -38,12 +26,12 @@ def test_iterator_options_are_snapshotted_at_construction(reader, make_file):
     [-1, -2, -100, -(2**31), -(2**63)],
     ids=["minus_one", "minus_two", "minus_hundred", "i32_min", "i64_min"],
 )
-def test_iterator_options_raises_when_negative(value):
+def test_iterator_options_raises_when_negative(value: int) -> None:
     with pytest.raises((OverflowError, TypeError)):
         IteratorOptions(start=value)
 
 
-def test_iterator_options_repr(expected_repr):
+def test_iterator_options_repr(expected_repr: Callable[..., str]) -> None:
     options = IteratorOptions(start=10, end=100, skip=5, limit=50)
 
     assert repr(options) == expected_repr(

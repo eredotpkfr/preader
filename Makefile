@@ -38,6 +38,7 @@ all: \
 	install-uv-mac \
 	live-book \
 	maturin-generate-ci \
+	mypy \
 	pytest \
 	ruff-check \
 	ruff-check-fix \
@@ -47,6 +48,9 @@ all: \
 	rustfmt-check \
 	rustup \
 	shell \
+	stubs \
+	stubtest \
+	stubtest-allowlist \
 	update-pre-commit-hooks \
 	uv-audit \
 	uv-create-venv
@@ -78,13 +82,13 @@ cargo-test:
 cargo-udeps:
 	@uv run cargo +nightly udeps --all-targets
 clippy:
-	@uv run cargo clippy --all-targets --all-features
+	@uv run cargo clippy --all-targets --all-features -- -D warnings
 coverage: COVERAGE_REPORT := --html --open
 coverage-lcov: COVERAGE_REPORT := --lcov --output-path lcov.info
 coverage coverage-lcov:
 	@( eval "$$(cargo llvm-cov show-env --sh)" && \
 		cargo llvm-cov clean --workspace && \
-		$(MAKE) --no-print-directory cargo-test pytest && \
+		$(MAKE) --no-print-directory cargo-test cargo-doc-test pytest && \
 		cargo llvm-cov report $(COVERAGE_REPORT) ); \
 	status=$$?; cargo clean -p preader >/dev/null; \
 		$(MAKE) --no-print-directory develop; exit $$status
@@ -135,16 +139,18 @@ live-book: book-test
 	@mdbook serve book
 maturin-generate-ci:
 	@uv run maturin generate-ci github
+mypy:
+	@uv run mypy
 pytest: develop
 	@uv run pytest
 ruff-check:
-	@uv run ruff check tests
+	@uv run ruff check
 ruff-check-fix:
-	@uv run ruff check --fix tests
+	@uv run ruff check --fix
 ruff-format:
-	@uv run ruff format tests
+	@uv run ruff format
 ruff-format-check:
-	@uv run ruff format --check tests
+	@uv run ruff format --check
 rustfmt: cargo-fix
 	@cargo +nightly fmt --all
 rustfmt-check:
@@ -154,6 +160,12 @@ rustup:
 	@rustup update
 shell: develop
 	@uv run python3
+stubs:
+	@uv run maturin generate-stubs -q --out python -F experimental-inspect
+stubtest: develop
+	@uv run stubtest preader --concise --allowlist stubtest-allowlist.txt
+stubtest-allowlist: develop
+	@uv run stubtest preader --generate-allowlist > stubtest-allowlist.txt
 update-pre-commit-hooks:
 	@pre-commit autoupdate
 uv-audit:

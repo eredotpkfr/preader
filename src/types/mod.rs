@@ -1,6 +1,5 @@
 pub(crate) mod checksum;
 pub mod config;
-pub(crate) mod core;
 pub mod file;
 pub mod options;
 pub mod state;

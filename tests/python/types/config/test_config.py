@@ -1,13 +1,17 @@
+from collections.abc import Callable
+from pathlib import Path
+
 import pytest
+
 from preader import Config
 
 
-def test_config_raises_when_positional():
+def test_config_raises_when_positional() -> None:
     with pytest.raises(TypeError):
-        Config(65536)
+        Config(65536)  # type: ignore[call-arg]
 
 
-def test_config_defaults():
+def test_config_defaults() -> None:
     config = Config()
 
     assert config.buffer_capacity == 64 * 1024
@@ -17,7 +21,14 @@ def test_config_defaults():
     assert config.verify_state is True
 
 
-def test_config_repr(tmp_path, expected_repr):
+def test_config_compares_by_value(tmp_path: Path) -> None:
+    config = Config(state_dir=tmp_path, buffer_capacity=1024)
+
+    assert config == Config(state_dir=tmp_path, buffer_capacity=1024)
+    assert config != Config(state_dir=tmp_path, buffer_capacity=2048)
+
+
+def test_config_repr(tmp_path: Path, expected_repr: Callable[..., str]) -> None:
     config = Config(
         state_dir=tmp_path / "preader-test",
         buffer_capacity=1024,

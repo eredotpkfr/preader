@@ -1,3 +1,13 @@
-use pyo3::{create_exception, exceptions::PyException};
+use pyo3::{exceptions::PyException, prelude::*, types::PyTuple};
 
-create_exception!(preader, StateError, PyException);
+#[pyclass(module = "preader", extends = PyException, subclass)]
+pub struct StateError;
+
+#[pymethods]
+impl StateError {
+    #[new]
+    #[pyo3(signature = (*_args))]
+    fn new(_args: &Bound<'_, PyTuple>) -> Self {
+        Self
+    }
+}
