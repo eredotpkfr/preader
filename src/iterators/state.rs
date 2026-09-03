@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use pyo3::prelude::*;
+use pyo3::{exceptions::PyStopIteration, prelude::*};
 use regex::Regex;
 use walkdir::{IntoIter, WalkDir};
 
@@ -13,7 +13,7 @@ pub(crate) const STATE_FILE_EXT: &str = ".state.json";
 
 #[pyclass(module = "preader")]
 pub struct StateIterator {
-    root: PathBuf,
+    state_dir: PathBuf,
     entries: IntoIter,
     pattern: Option<Regex>,
 }
@@ -23,7 +23,7 @@ impl StateIterator {
         fs::create_dir_all(dir)?;
 
         Ok(Self {
-            root: dir.to_path_buf(),
+            state_dir: dir.to_path_buf(),
             entries: WalkDir::new(dir).min_depth(1).into_iter(),
             pattern: pattern.map(Regex::new).transpose()?,
         })
@@ -34,7 +34,7 @@ impl Iterator for StateIterator {
     type Item = Result<String, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (root, pattern) = (&self.root, self.pattern.as_ref());
+        let (root, pattern) = (&self.state_dir, self.pattern.as_ref());
 
         self.entries.find_map(|entry| {
             let entry = match entry {
@@ -59,7 +59,14 @@ impl StateIterator {
         slf
     }
 
-    fn __next__(mut slf: PyRefMut<'_, Self>) -> Result<Option<String>, Error> {
-        slf.next().transpose()
+    fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<String> {
+        slf.next().transpose()?.ok_or_else(|| PyStopIteration::new_err(()))
+    }
+
+    fn __repr__(&self) -> String {
+        crate::macros::pyrepr!("StateIterator" {
+            state_dir = format!("'{}'", self.state_dir.display()),
+            pattern = self.pattern.as_ref().map_or_else(|| "None".to_owned(), |regex| format!("'{regex}'")),
+        })
     }
 }

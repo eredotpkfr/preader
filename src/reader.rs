@@ -40,7 +40,7 @@ impl PReader {
         state: StateInput,
         options: IteratorOptions,
     ) -> PyResult<Py<ByteIterator>> {
-        let file = file.canonicalize()?;
+        let file = dunce::canonicalize(file)?;
         let state = state.resolve(&self.config, &file)?;
         let iterator = ByteIterator::new((&self.config).into(), state, options)?;
 
@@ -64,7 +64,7 @@ impl PReader {
         chunk_size: usize,
         drop_partial: bool,
     ) -> PyResult<Py<ChunkIterator>> {
-        let file = file.canonicalize()?;
+        let file = dunce::canonicalize(file)?;
         let state = state.resolve(&self.config, &file)?;
         let iterator = ChunkIterator::new(
             (&self.config).into(),
@@ -97,7 +97,7 @@ impl PReader {
         align_start: bool,
         skip_empty: bool,
     ) -> PyResult<Py<LineIterator>> {
-        let file = file.canonicalize()?;
+        let file = dunce::canonicalize(file)?;
         let state = state.resolve(&self.config, &file)?;
         let iterator = LineIterator::new(
             (&self.config).into(),
@@ -133,7 +133,7 @@ impl PReader {
         align_start: bool,
         skip_empty: bool,
     ) -> PyResult<Py<DelimiterIterator>> {
-        let file = file.canonicalize()?;
+        let file = dunce::canonicalize(file)?;
         let state = state.resolve(&self.config, &file)?;
         let delimiter = u8::try_from(delimiter)
             .map_err(|_| PyValueError::new_err("delimiter must fit in a single byte"))?;

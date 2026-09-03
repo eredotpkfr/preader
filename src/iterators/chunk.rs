@@ -7,7 +7,7 @@ use pyo3::{prelude::*, types::PyBytes};
 
 use crate::{
     iterators::base::IteratorBase,
-    types::{config::iterator::IteratorConfig, core::Item, options::IteratorOptions, state::State},
+    types::{config::iterator::IteratorConfig, options::IteratorOptions, state::State},
 };
 
 #[pyclass(module = "preader", extends = IteratorBase)]
@@ -72,48 +72,41 @@ impl ChunkIterator {
         slf
     }
 
-    fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<Item>> {
+    fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Py<PyBytes>> {
         let py = slf.py();
 
         if slf.as_super().should_stop() {
-            slf.as_super().finalize()?;
-
-            return Ok(None);
+            return Err(slf.as_super().stop());
         }
 
         let chunk_size = slf.chunk_size;
         let position = slf.as_super().state.position;
         let end = slf.as_super().end;
-        let max_bytes = ((end - position) as usize).min(chunk_size);
+        let max_bytes = (end - position).min(chunk_size as u64) as usize;
         let drop_partial = slf.drop_partial;
 
         if drop_partial && max_bytes < chunk_size {
-            slf.as_super().finalize()?;
-
-            return Ok(None);
+            return Err(slf.as_super().stop());
         }
 
         let Some(chunk) = slf.read_chunk(max_bytes)? else {
-            slf.as_super().finalize()?;
-
-            return Ok(None);
+            return Err(slf.as_super().stop());
         };
 
         let chunk_len = chunk.len();
 
         if drop_partial && chunk_len < chunk_size {
             slf.as_super().advance(chunk_len as u64)?;
-            slf.as_super().finalize()?;
 
-            return Ok(None);
+            return Err(slf.as_super().stop());
         }
 
-        let value = PyBytes::new(py, chunk).unbind().into_any();
+        let value = PyBytes::new(py, chunk).unbind();
 
         slf.as_super().count_yield();
         slf.as_super().advance(chunk_len as u64)?;
 
-        Ok(Some(value))
+        Ok(value)
     }
 
     fn __repr__(slf: PyRef<'_, Self>) -> String {

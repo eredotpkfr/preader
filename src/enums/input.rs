@@ -2,6 +2,13 @@ use std::path::Path;
 
 use anyhow::anyhow;
 use pyo3::{Borrowed, FromPyObject, PyAny, PyErr, exceptions::PyTypeError, prelude::*};
+#[cfg(feature = "experimental-inspect")]
+use pyo3::{
+    PyTypeInfo,
+    inspect::PyStaticExpr,
+    type_hint_union,
+    types::{PyNone, PyString},
+};
 
 use crate::{
     Error, State, StateManager,
@@ -18,6 +25,10 @@ pub(crate) enum StateInput {
 
 impl<'a, 'py> FromPyObject<'a, 'py> for StateInput {
     type Error = PyErr;
+
+    #[cfg(feature = "experimental-inspect")]
+    const INPUT_TYPE: PyStaticExpr =
+        type_hint_union!(State::TYPE_HINT, PyString::TYPE_HINT, PyNone::TYPE_HINT);
 
     fn extract(ob: Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
         if ob.is_none() {

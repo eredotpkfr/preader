@@ -1,9 +1,8 @@
 use pyo3::{PyErr, exceptions::PyKeyError};
-use thiserror::Error as ThisError;
 
 use crate::StateError;
 
-#[derive(Debug, ThisError)]
+#[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("io failed ({:?}): {}", .0.kind(), .0)]
     Io(#[from] std::io::Error),
@@ -21,7 +20,7 @@ impl From<Error> for PyErr {
     fn from(error: Error) -> Self {
         match error {
             Error::Missing(name) => PyKeyError::new_err(name),
-            error => StateError::new_err(error.to_string()),
+            error => PyErr::new::<StateError, _>(error.to_string()),
         }
     }
 }

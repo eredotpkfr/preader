@@ -7,7 +7,7 @@ use pyo3::{prelude::*, types::PyString};
 
 use crate::{
     iterators::base::IteratorBase,
-    types::{config::iterator::IteratorConfig, core::Item, options::IteratorOptions, state::State},
+    types::{config::iterator::IteratorConfig, options::IteratorOptions, state::State},
     utils::file::starts_mid_item,
 };
 
@@ -87,21 +87,17 @@ impl LineIterator {
         slf
     }
 
-    fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<Item>> {
+    fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Py<PyString>> {
         let py = slf.py();
 
         loop {
             if slf.as_super().should_stop() {
-                slf.as_super().finalize()?;
-
-                return Ok(None);
+                return Err(slf.as_super().stop());
             }
 
             if slf.skip_remaining > 0 {
                 let Some((_, read_count)) = slf.read_line()? else {
-                    slf.as_super().finalize()?;
-
-                    return Ok(None);
+                    return Err(slf.as_super().stop());
                 };
 
                 slf.skip_remaining -= 1;
@@ -114,9 +110,7 @@ impl LineIterator {
             let skip_empty = slf.skip_empty;
 
             let Some((line, read_count)) = slf.read_line()? else {
-                slf.as_super().finalize()?;
-
-                return Ok(None);
+                return Err(slf.as_super().stop());
             };
 
             let is_blank = if keepends {
@@ -131,12 +125,12 @@ impl LineIterator {
                 continue;
             }
 
-            let value = PyString::new(py, line).unbind().into_any();
+            let value = PyString::new(py, line).unbind();
 
             slf.as_super().count_yield();
             slf.as_super().advance(read_count)?;
 
-            return Ok(Some(value));
+            return Ok(value);
         }
     }
 

@@ -11,8 +11,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::utils::file::fingerprint;
 
-#[pyclass(module = "preader", skip_from_py_object)]
-#[derive(Clone, Deserialize, Serialize)]
+#[pyclass(module = "preader", eq, skip_from_py_object)]
+#[derive(Clone, Deserialize, PartialEq, Serialize)]
 pub struct FileMetadata {
     #[pyo3(get)]
     pub path: PathBuf,

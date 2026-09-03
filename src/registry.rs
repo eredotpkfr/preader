@@ -42,6 +42,11 @@ impl StateRegistry {
         self.delete(name)
     }
 
+    #[getter]
+    fn state_dir(&self) -> PathBuf {
+        self.manager.config.state_dir.clone()
+    }
+
     fn names(&self) -> Result<StateIterator, Error> {
         StateIterator::new(&self.manager.config.state_dir, None)
     }
@@ -84,5 +89,11 @@ impl StateRegistry {
 
     fn path(&self, name: &str) -> Result<PathBuf, Error> {
         self.manager.path(name)
+    }
+
+    fn __repr__(&self) -> String {
+        crate::macros::pyrepr!("StateRegistry" {
+            state_dir = format!("'{}'", self.manager.config.state_dir.display()),
+        })
     }
 }
