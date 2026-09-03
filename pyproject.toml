@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "preader"
-description = "A Python package for reading files with live read-percentage tracking"
+description = "A Python package that reads a file along with its read percentage"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -19,7 +19,6 @@ keywords = ["file-reader", "resumable", "iterator", "checksum", "progress-tracki
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
-    "Programming Language :: Python :: Implementation :: PyPy",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -41,8 +40,7 @@ issues = "https://github.com/eredotpkfr/preader/issues"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
-
-[tool.maturin.generate-ci.github.all]
+python-source = "python"
 
 [tool.uv]
 package = false
@@ -58,10 +56,45 @@ dev = [
     "pytest-socket",
     "pytest-icdiff",
     "pytest-sugar",
+    "mypy",
     "ruff",
 ]
 
+[tool.mypy]
+files = ["python/preader", "tests/python"]
+exclude = ['python/preader/preader\.pyi$']
+python_version = "3.12"
+strict = true
+
 [tool.pytest.ini_options]
-addopts = "-n auto -ra --disable-socket"
+addopts = "-n auto -ra --disable-socket --strict-config --strict-markers"
+filterwarnings = ["error"]
 testpaths = ["tests/python"]
 timeout = 10
+
+[tool.ruff]
+extend-exclude = ["python/preader/preader.pyi"]
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "COM812",
+    "CPY001",
+    "D203",
+    "D213",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["constants", "preader"]
+lines-between-types = 1
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+    "D1",
+    "FBT001",
+    "INP001",
+    "PLR0913",
+    "PLR0917",
+    "PLR2004",
+    "S101",
+]

@@ -49,7 +49,7 @@ repos:
         additional_dependencies: ['@commitlint/config-conventional']
 
   - repo: https://github.com/crate-ci/typos
-    rev: v1
+    rev: v1.50.1
     hooks:
       - id: typos
 
@@ -89,42 +89,49 @@ repos:
         name: rustfmt-check
         entry: make rustfmt-check
         language: system
-        files: \.(lock|rs|toml)$
+        files: (Cargo\.lock|\.(rs|toml))$
         pass_filenames: false
 
       - id: cargo-check
         name: cargo-check
         entry: make cargo-check
         language: system
-        files: \.(lock|rs|toml)$
+        files: (Cargo\.lock|\.(rs|toml))$
         pass_filenames: false
 
       - id: clippy
         name: clippy
         entry: make clippy
         language: system
-        files: \.(lock|rs|toml)$
+        files: (Cargo\.lock|\.(rs|toml))$
         pass_filenames: false
 
       - id: cargo-udeps
         name: cargo-udeps
         entry: make cargo-udeps
         language: system
-        files: \.(lock|rs|toml)$
+        files: (Cargo\.lock|\.(rs|toml))$
         pass_filenames: false
 
       - id: ruff-check
         name: ruff-check
         entry: make ruff-check
         language: system
-        types: [python]
+        types_or: [python, pyi]
         pass_filenames: false
 
       - id: ruff-format-check
         name: ruff-format-check
         entry: make ruff-format-check
         language: system
-        types: [python]
+        types_or: [python, pyi]
+        pass_filenames: false
+
+      - id: mypy
+        name: mypy
+        entry: make mypy
+        language: system
+        types_or: [python, pyi]
         pass_filenames: false
 
       - id: uv-audit
@@ -138,14 +145,21 @@ repos:
         name: cargo-test
         entry: make cargo-test
         language: system
-        files: \.(lock|rs|toml)$
+        files: (Cargo\.lock|\.(rs|toml))$
         pass_filenames: false
 
       - id: cargo-nextest
         name: cargo-nextest
         entry: make cargo-nextest
         language: system
-        files: \.(lock|rs|toml)$
+        files: (Cargo\.lock|\.(rs|toml))$
+        pass_filenames: false
+
+      - id: stubtest
+        name: stubtest
+        entry: make stubtest
+        language: system
+        files: (\.(lock|py|pyi|rs|toml)|stubtest-allowlist\.txt)$
         pass_filenames: false
 
       - id: pytest

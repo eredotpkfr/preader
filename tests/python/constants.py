@@ -4,7 +4,7 @@ TEST_STATE_NAME = "job-1"
 TEST_DEFAULT_DELIMITER = ","
 TEST_UNSAFE_STATE_NAMES = {
     "../../etc/passwd": "path escapes root",
-    "/tmp": "path escapes root",
+    "/tmp": "path escapes root",  # noqa: S108
     "": "path must not be empty",
     ".": "path must not be empty",
 }

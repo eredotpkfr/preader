@@ -1,4 +1,4 @@
-use pyo3::prelude::*;
+use pyo3::{exceptions::PyStopIteration, prelude::*};
 
 use crate::{Error, State, types::config::iterator::IteratorConfig};
 
@@ -53,6 +53,14 @@ impl IteratorBase {
     #[inline]
     pub fn finalize(&mut self) -> Result<(), Error> {
         self.autosave(0)
+    }
+
+    #[inline]
+    pub fn stop(&mut self) -> PyErr {
+        match self.finalize() {
+            Ok(()) => PyStopIteration::new_err(()),
+            Err(error) => error.into(),
+        }
     }
 
     #[inline]

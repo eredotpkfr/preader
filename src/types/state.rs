@@ -18,7 +18,7 @@ use crate::{
 
 pub(crate) const RESYNC_HINT: &str = "(call state.resync(file) if this is expected)";
 
-#[pyclass(module = "preader", from_py_object)]
+#[pyclass(module = "preader", eq, from_py_object)]
 #[derive(Clone, Deref, DerefMut)]
 pub struct State {
     #[deref]
@@ -27,7 +27,7 @@ pub struct State {
     pub manager: StateManager,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, PartialEq, Serialize)]
 pub struct StateData {
     pub name: String,
     pub file: FileMetadata,
@@ -40,6 +40,12 @@ pub struct StateData {
 impl From<(StateData, StateManager)> for State {
     fn from((data, manager): (StateData, StateManager)) -> Self {
         Self { data, manager }
+    }
+}
+
+impl PartialEq for State {
+    fn eq(&self, other: &Self) -> bool {
+        self.data == other.data
     }
 }
 

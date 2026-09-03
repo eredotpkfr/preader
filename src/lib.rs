@@ -44,6 +44,7 @@ pub use utils::{
     text::indent_lines,
 };
 
+/// A Python package that reads a file along with its read percentage.
 #[pymodule]
 mod preader {
     #[pymodule_export]

@@ -7,7 +7,7 @@ use pyo3::{prelude::*, types::PyBytes};
 
 use crate::{
     iterators::base::IteratorBase,
-    types::{config::iterator::IteratorConfig, core::Item, options::IteratorOptions, state::State},
+    types::{config::iterator::IteratorConfig, options::IteratorOptions, state::State},
     utils::file::starts_mid_item,
 };
 
@@ -91,21 +91,17 @@ impl DelimiterIterator {
         slf
     }
 
-    fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<Item>> {
+    fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Py<PyBytes>> {
         let py = slf.py();
 
         loop {
             if slf.as_super().should_stop() {
-                slf.as_super().finalize()?;
-
-                return Ok(None);
+                return Err(slf.as_super().stop());
             }
 
             if slf.skip_remaining > 0 {
                 let Some((_, read_count)) = slf.read_segment()? else {
-                    slf.as_super().finalize()?;
-
-                    return Ok(None);
+                    return Err(slf.as_super().stop());
                 };
 
                 slf.skip_remaining -= 1;
@@ -119,9 +115,7 @@ impl DelimiterIterator {
             let skip_empty = slf.skip_empty;
 
             let Some((segment, read_count)) = slf.read_segment()? else {
-                slf.as_super().finalize()?;
-
-                return Ok(None);
+                return Err(slf.as_super().stop());
             };
 
             let is_blank = if keep_delim {
@@ -136,12 +130,12 @@ impl DelimiterIterator {
                 continue;
             }
 
-            let value = PyBytes::new(py, segment).unbind().into_any();
+            let value = PyBytes::new(py, segment).unbind();
 
             slf.as_super().count_yield();
             slf.as_super().advance(read_count)?;
 
-            return Ok(Some(value));
+            return Ok(value);
         }
     }
 

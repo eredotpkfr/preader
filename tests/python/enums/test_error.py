@@ -1,9 +1,12 @@
+from pathlib import Path
+
 import pytest
+
 from constants import TEST_STATE_NAME
-from preader import StateError
+from preader import PReader, StateError, StateRegistry
 
 
-def test_io_errors_get_prefixed(reader, tmp_file):
+def test_io_errors_get_prefixed(reader: PReader, tmp_file: Path) -> None:
     state = reader.bytes(tmp_file, state=TEST_STATE_NAME).state
 
     state.save()
@@ -13,7 +16,7 @@ def test_io_errors_get_prefixed(reader, tmp_file):
         state.verify()
 
 
-def test_serde_errors_get_prefixed(registry):
+def test_serde_errors_get_prefixed(registry: StateRegistry) -> None:
     path = registry.path(TEST_STATE_NAME)
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -23,12 +26,12 @@ def test_serde_errors_get_prefixed(registry):
         registry[TEST_STATE_NAME]
 
 
-def test_regex_errors_get_prefixed(registry):
+def test_regex_errors_get_prefixed(registry: StateRegistry) -> None:
     with pytest.raises(StateError, match=r"^regex failed: "):
         registry.search("[invalid(")
 
 
-def test_anyhow_errors_are_not_prefixed(registry):
+def test_anyhow_errors_are_not_prefixed(registry: StateRegistry) -> None:
     with pytest.raises(StateError) as exc_info:
         registry.path("../../etc/passwd")
 

@@ -2,7 +2,7 @@
 name = "preader"
 version = "0.1.0"
 edition = "2024"
-description = "A Python package for reading files with live read-percentage tracking"
+description = "A Python package that reads a file along with its read percentage"
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/eredotpkfr/preader"
@@ -30,6 +30,9 @@ serde_json = { version = "1.0.151", features = ["preserve_order"] }
 sha2 = "0.11.0"
 thiserror = "2.0.20"
 walkdir = "2.5.0"
+
+[features]
+experimental-inspect = ["pyo3/experimental-inspect"]
 
 [build-dependencies]
 pyo3-build-config = "0.29.2"
