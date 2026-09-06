@@ -42,6 +42,8 @@ all: \
 	live-book \
 	maturin-generate-ci \
 	mypy \
+	pre-commit \
+	pre-commit-update-hooks \
 	pytest \
 	ruff-check \
 	ruff-check-fix \
@@ -52,7 +54,6 @@ all: \
 	stubs \
 	stubtest \
 	stubtest-allowlist \
-	update-pre-commit-hooks \
 	uv-audit \
 	uv-create-venv
 
@@ -148,6 +149,10 @@ maturin-generate-ci:
 	@uv run maturin generate-ci github
 mypy:
 	@uv run mypy
+pre-commit:
+	@pre-commit run -a
+pre-commit-update-hooks:
+	@pre-commit autoupdate
 pytest: develop
 	@uv run pytest
 ruff-check:
@@ -169,8 +174,6 @@ stubtest: develop
 	@uv run stubtest preader --concise --allowlist stubtest-allowlist.txt
 stubtest-allowlist: develop
 	@uv run stubtest preader --generate-allowlist > stubtest-allowlist.txt
-update-pre-commit-hooks:
-	@pre-commit autoupdate
 uv-audit:
 	@uv audit
 uv-create-venv:
