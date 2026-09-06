@@ -5,7 +5,7 @@ use crate::{
     utils::path::default_state_dir,
 };
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct StateManagerConfig {
     pub state_dir: PathBuf,
     pub verify_state: bool,

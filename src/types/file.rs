@@ -4,25 +4,45 @@ use std::{
     time::UNIX_EPOCH,
 };
 
-use anyhow::{Error, anyhow};
 use chrono::{DateTime, Utc};
-use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::utils::file::fingerprint;
+use crate::{Error, Mismatch, utils::file::fingerprint};
 
-#[pyclass(module = "preader", eq, skip_from_py_object)]
-#[derive(Clone, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct FileMetadata {
-    #[pyo3(get)]
     pub path: PathBuf,
-    #[pyo3(get)]
     pub size: u64,
-    #[pyo3(get)]
     #[serde(with = "chrono::serde::ts_seconds")]
     pub mtime: DateTime<Utc>,
-    #[pyo3(get)]
     pub fingerprint: String,
+}
+
+impl FileMetadata {
+    pub(crate) fn compare(&self, current: &Self) -> Result<(), Mismatch> {
+        if self.size != current.size {
+            return Err(Mismatch::Size {
+                saved: self.size,
+                current: current.size,
+            });
+        }
+
+        if self.mtime != current.mtime {
+            return Err(Mismatch::Mtime {
+                saved: self.mtime.timestamp(),
+                current: current.mtime.timestamp(),
+            });
+        }
+
+        if self.fingerprint != current.fingerprint {
+            return Err(Mismatch::Fingerprint {
+                saved: self.fingerprint.clone(),
+                current: current.fingerprint.clone(),
+            });
+        }
+
+        Ok(())
+    }
 }
 
 impl TryFrom<&Path> for FileMetadata {
@@ -32,7 +52,7 @@ impl TryFrom<&Path> for FileMetadata {
         let metadata = fs::metadata(path)?;
 
         if !metadata.is_file() {
-            return Err(anyhow!("not a file: {}", path.display()));
+            return Err(Error::NotAFile(path.to_path_buf()));
         }
 
         let seconds = metadata.modified()?.duration_since(UNIX_EPOCH)?.as_secs() as i64;
@@ -41,20 +61,8 @@ impl TryFrom<&Path> for FileMetadata {
         Ok(Self {
             path: path.to_path_buf(),
             size: metadata.len(),
-            mtime: mtime.ok_or_else(|| anyhow!("invalid mtime: {seconds}"))?,
+            mtime: mtime.ok_or(Error::Mtime(seconds))?,
             fingerprint: fingerprint(path)?,
-        })
-    }
-}
-
-#[pymethods]
-impl FileMetadata {
-    pub fn __repr__(&self) -> String {
-        crate::macros::pyrepr!("FileMetadata" {
-            path = format!("'{}'", self.path.display()),
-            size = self.size,
-            mtime = self.mtime.timestamp(),
-            fingerprint = format!("'{}'", self.fingerprint),
         })
     }
 }

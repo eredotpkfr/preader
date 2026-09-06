@@ -398,7 +398,7 @@ fn load_deserializes_the_payload_without_verification(#[with(false)] sandbox: Sa
 fn load_verifies_by_default(sandbox: Sandbox) {
     sandbox.write_state(TEST_STATE_NAME, unverifiable_payload(TEST_STATE_NAME));
 
-    assert!(sandbox.load_error(TEST_STATE_NAME).contains("io failed"));
+    assert!(sandbox.load_error(TEST_STATE_NAME).contains("state checksum mismatch"));
 }
 
 #[rstest]

@@ -1,6 +1,6 @@
 use std::io::{ErrorKind, Read};
 
-use preader::{IteratorOptions, Window};
+use preader::{Error, IteratorOptions, Skip, Window};
 use rstest::rstest;
 use tempfile::TempDir;
 
@@ -32,19 +32,19 @@ fn window_resolves_the_position(
     #[case] expected_position: u64,
     #[case] expected_from_start: bool,
 ) {
-    let window = options.window(position, FILE_SIZE, 0);
+    let window = options.window(position, FILE_SIZE, Skip::Bytes(0));
 
     assert_eq!(window.position, expected_position);
-    assert_eq!(window.from_start, expected_from_start);
+    assert_eq!(window.skipping.is_some(), expected_from_start);
 }
 
 #[rstest]
 fn window_resolves_an_empty_file() {
-    let window = IteratorOptions::default().window(0, 0, 0);
+    let window = IteratorOptions::default().window(0, 0, Skip::Bytes(0));
 
     assert_eq!(window.position, 0);
     assert_eq!(window.end, 0);
-    assert!(!window.from_start);
+    assert!(window.skipping.is_none());
 }
 
 #[rstest]
@@ -58,7 +58,7 @@ fn window_clamps_the_end_to_the_file_size(#[case] end: u64, #[case] expected: u6
         ..Default::default()
     };
 
-    assert_eq!(options.window(0, FILE_SIZE, 0).end, expected);
+    assert_eq!(options.window(0, FILE_SIZE, Skip::Bytes(0)).end, expected);
 }
 
 #[rstest]
@@ -73,7 +73,10 @@ fn window_folds_skip_bytes_into_the_start(#[case] skip_bytes: u64, #[case] expec
         ..Default::default()
     };
 
-    assert_eq!(options.window(0, FILE_SIZE, skip_bytes).position, expected);
+    assert_eq!(
+        options.window(0, FILE_SIZE, Skip::Bytes(skip_bytes)).position,
+        expected
+    );
 }
 
 #[rstest]
@@ -82,7 +85,7 @@ fn window_folds_skip_bytes_into_the_start(#[case] skip_bytes: u64, #[case] expec
 #[case::end_of_the_file(CONTENT_SIZE, b"")]
 fn open_reads_from_the_position(tmp_dir: TempDir, #[case] position: u64, #[case] expected: &[u8]) {
     let path = write(&tmp_dir, "data.bin", CONTENT);
-    let window = IteratorOptions::default().window(position, CONTENT_SIZE, 0);
+    let window = IteratorOptions::default().window(position, CONTENT_SIZE, Skip::Bytes(0));
 
     let mut content = Vec::new();
 
@@ -101,7 +104,7 @@ fn open_applies_the_buffer_capacity(
     #[case] expected: usize,
 ) {
     let path = write(&tmp_dir, "data.bin", CONTENT);
-    let window = IteratorOptions::default().window(0, CONTENT_SIZE, 0);
+    let window = IteratorOptions::default().window(0, CONTENT_SIZE, Skip::Bytes(0));
     let mut reader = window.open(&path, capacity).unwrap();
 
     assert_eq!(reader.capacity(), expected);
@@ -115,10 +118,10 @@ fn open_applies_the_buffer_capacity(
 
 #[rstest]
 fn open_fails_when_the_file_is_missing(tmp_dir: TempDir) {
-    let window = IteratorOptions::default().window(0, 0, 0);
+    let window = IteratorOptions::default().window(0, 0, Skip::Bytes(0));
     let error = window.open(&tmp_dir.path().join("missing.bin"), 64).unwrap_err();
 
-    assert_eq!(error.kind(), ErrorKind::NotFound);
+    assert!(matches!(error, Error::Io(error) if error.kind() == ErrorKind::NotFound));
 }
 
 #[rstest]
@@ -127,9 +130,9 @@ fn open_fails_when_the_position_is_too_large(tmp_dir: TempDir) {
     let window = Window {
         position: UNSEEKABLE_POSITION,
         end: 0,
-        from_start: false,
+        skipping: None,
     };
     let error = window.open(&path, 64).unwrap_err();
 
-    assert!(error.raw_os_error().is_some());
+    assert!(matches!(error, Error::Io(error) if error.raw_os_error().is_some()));
 }

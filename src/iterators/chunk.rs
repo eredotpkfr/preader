@@ -1,119 +1,70 @@
-use std::{
-    fs::File,
-    io::{BufReader, ErrorKind, Read},
-};
+use std::io::{ErrorKind, Read};
 
-use pyo3::{prelude::*, types::PyBytes};
+use crate::{ChunkIterator, Result, interfaces::iterator::IteratorRead, types::core::Reader};
 
-use crate::{
-    iterators::base::IteratorBase,
-    types::{config::iterator::IteratorConfig, options::IteratorOptions, state::State},
-};
+pub const DEFAULT_CHUNK_SIZE: usize = 1024;
 
-#[pyclass(module = "preader", extends = IteratorBase)]
-pub struct ChunkIterator {
-    reader: BufReader<File>,
-    buffer: Vec<u8>,
-    #[pyo3(get)]
-    chunk_size: usize,
-    #[pyo3(get)]
-    drop_partial: bool,
+#[derive(Debug)]
+pub struct Chunk {
+    pub(crate) buffer: Vec<u8>,
+    pub(crate) size: usize,
+    pub(crate) drop_partial: bool,
 }
 
-impl ChunkIterator {
-    pub(crate) fn new(
-        config: IteratorConfig,
-        mut state: State,
-        chunk_size: usize,
-        opts: IteratorOptions,
-        drop_partial: bool,
-    ) -> PyResult<PyClassInitializer<Self>> {
-        opts.validate()?;
-
-        let skip_bytes = opts.skip.saturating_mul(chunk_size as u64);
-        let window = opts.window(state.position, state.file.size, skip_bytes);
-        let reader = window.open(&state.file.path, config.buffer_capacity)?;
-
-        state.position = window.position;
-
-        let buffer = vec![0u8; chunk_size];
-        let base = IteratorBase::new(config, state, window.end, opts.limit);
-
-        let sub = Self {
-            reader,
-            buffer,
-            chunk_size,
-            drop_partial,
-        };
-
-        Ok(PyClassInitializer::from(base).add_subclass(sub))
+impl Default for Chunk {
+    fn default() -> Self {
+        Self {
+            size: DEFAULT_CHUNK_SIZE,
+            drop_partial: false,
+            buffer: vec![0; DEFAULT_CHUNK_SIZE],
+        }
     }
+}
 
-    #[inline]
-    fn read_chunk(&mut self, max_bytes: usize) -> std::io::Result<Option<&[u8]>> {
+impl Chunk {
+    fn fill(&mut self, reader: &mut Reader, max: usize) -> Result<usize> {
         let mut filled = 0;
 
-        while filled < max_bytes {
-            match self.reader.read(&mut self.buffer[filled..max_bytes]) {
+        while filled < max {
+            match reader.read(&mut self.buffer[filled..max]) {
                 Ok(0) => break,
-                Ok(read_count) => filled += read_count,
+                Ok(count) => filled += count,
                 Err(error) if error.kind() == ErrorKind::Interrupted => continue,
-                Err(error) => return Err(error),
+                Err(error) => return Err(error.into()),
             }
         }
 
-        Ok((filled > 0).then_some(&self.buffer[..filled]))
+        Ok(filled)
     }
 }
 
-#[pymethods]
-impl ChunkIterator {
-    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
-        slf
-    }
+impl IteratorRead for ChunkIterator {
+    type Borrowed<'a> = &'a [u8];
+    type Owned = Vec<u8>;
 
-    fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Py<PyBytes>> {
-        let py = slf.py();
-
-        if slf.as_super().should_stop() {
-            return Err(slf.as_super().stop());
+    fn read(&mut self) -> Result<Option<&[u8]>> {
+        if self.done() {
+            return self.stop();
         }
 
-        let chunk_size = slf.chunk_size;
-        let position = slf.as_super().state.position;
-        let end = slf.as_super().end;
-        let max_bytes = (end - position).min(chunk_size as u64) as usize;
-        let drop_partial = slf.drop_partial;
+        let size = self.fields.size;
+        let max = self.progress.remaining(self.state.position).min(size as u64) as usize;
 
-        if drop_partial && max_bytes < chunk_size {
-            return Err(slf.as_super().stop());
+        if self.fields.drop_partial && max < size {
+            return self.stop();
         }
 
-        let Some(chunk) = slf.read_chunk(max_bytes)? else {
-            return Err(slf.as_super().stop());
-        };
+        let filled = self.fields.fill(&mut self.reader, max)?;
 
-        let chunk_len = chunk.len();
+        if filled == 0 || (self.fields.drop_partial && filled < size) {
+            self.advance(filled)?;
 
-        if drop_partial && chunk_len < chunk_size {
-            slf.as_super().advance(chunk_len as u64)?;
-
-            return Err(slf.as_super().stop());
+            return self.stop();
         }
 
-        let value = PyBytes::new(py, chunk).unbind();
+        self.progress.count();
+        self.advance(filled)?;
 
-        slf.as_super().count_yield();
-        slf.as_super().advance(chunk_len as u64)?;
-
-        Ok(value)
-    }
-
-    fn __repr__(slf: PyRef<'_, Self>) -> String {
-        crate::macros::pyrepr!("ChunkIterator" {
-            state = slf.as_super().state.__repr__(),
-            chunk_size = slf.chunk_size,
-            drop_partial = slf.drop_partial,
-        })
+        Ok(Some(&self.fields.buffer[..filled]))
     }
 }

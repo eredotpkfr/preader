@@ -3,7 +3,7 @@ use std::path::{
     Path, PathBuf,
 };
 
-use anyhow::anyhow;
+use crate::PathError;
 
 pub const DEFAULT_STATE_DIRECTORY: &str = "preader";
 
@@ -15,9 +15,9 @@ pub fn default_state_dir() -> PathBuf {
     .unwrap()
 }
 
-pub fn scoped_join(root: &Path, unsafe_path: &str) -> anyhow::Result<PathBuf> {
+pub fn scoped_join(root: &Path, unsafe_path: &str) -> Result<PathBuf, PathError> {
     if unsafe_path.is_empty() {
-        return Err(anyhow!("path must not be empty"));
+        return Err(PathError::Empty);
     }
 
     let candidate = Path::new(unsafe_path);
@@ -26,11 +26,11 @@ pub fn scoped_join(root: &Path, unsafe_path: &str) -> anyhow::Result<PathBuf> {
         .any(|component| matches!(component, ParentDir | Prefix(_) | RootDir));
 
     if escapes {
-        return Err(anyhow!("path escapes root: {unsafe_path}"));
+        return Err(PathError::Escapes(unsafe_path.to_owned()));
     }
 
     if candidate.file_name().is_none() {
-        return Err(anyhow!("path must name an entry: {unsafe_path}"));
+        return Err(PathError::Nameless(unsafe_path.to_owned()));
     }
 
     Ok(root.join(unsafe_path))
