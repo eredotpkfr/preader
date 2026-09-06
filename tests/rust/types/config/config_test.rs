@@ -1,8 +1,6 @@
 use std::path::PathBuf;
 
-use preader::{
-    Config, DEFAULT_VERIFY_STATE, IteratorConfig, StateManagerConfig, default_state_dir,
-};
+use preader::{Autosave, Config, DEFAULT_VERIFY_STATE, StateManagerConfig, default_state_dir};
 use rstest::{fixture, rstest};
 
 #[fixture]
@@ -18,12 +16,20 @@ fn config() -> Config {
 }
 
 #[rstest]
-fn iterator_config_carries_its_fields(config: Config) {
-    let iterator = IteratorConfig::from(&config);
+#[case::disabled(false, 0, Autosave::Off)]
+#[case::disabled_with_a_threshold(false, 222, Autosave::Off)]
+#[case::only_at_the_end(true, 0, Autosave::Final)]
+#[case::every_threshold(true, 222, Autosave::Every(222))]
+fn autosave_collapses_the_config_pair(
+    mut config: Config,
+    #[case] enabled: bool,
+    #[case] threshold: u64,
+    #[case] expected: Autosave,
+) {
+    config.auto_save_state = enabled;
+    config.auto_save_state_bytes = threshold;
 
-    assert_eq!(iterator.buffer_capacity, config.buffer_capacity);
-    assert_eq!(iterator.auto_save_state, config.auto_save_state);
-    assert_eq!(iterator.auto_save_state_bytes, config.auto_save_state_bytes);
+    assert_eq!(Autosave::from(&config), expected);
 }
 
 #[rstest]
@@ -39,15 +45,7 @@ fn auto_load_state_reaches_neither_sub_config(config: Config) {
     let mut flipped = config.clone();
     flipped.auto_load_state = !config.auto_load_state;
 
-    let iterator = IteratorConfig::from(&config);
-    let flipped_iterator = IteratorConfig::from(&flipped);
-
-    assert_eq!(iterator.buffer_capacity, flipped_iterator.buffer_capacity);
-    assert_eq!(iterator.auto_save_state, flipped_iterator.auto_save_state);
-    assert_eq!(
-        iterator.auto_save_state_bytes,
-        flipped_iterator.auto_save_state_bytes
-    );
+    assert_eq!(Autosave::from(&config), Autosave::from(&flipped));
 
     let manager = StateManagerConfig::from(&config);
     let flipped_manager = StateManagerConfig::from(&flipped);

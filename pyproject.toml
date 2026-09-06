@@ -39,7 +39,7 @@ changelog = "https://github.com/eredotpkfr/preader/blob/main/CHANGELOG.md"
 issues = "https://github.com/eredotpkfr/preader/issues"
 
 [tool.maturin]
-features = ["pyo3/extension-module"]
+features = ["extension-module"]
 python-source = "python"
 
 [tool.uv]
