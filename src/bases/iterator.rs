@@ -1,22 +1,22 @@
 use std::ops::Range;
 
 use crate::{
-    Autosave, Progress, Result, State,
+    AutoSave, Progress, Result, State,
     interfaces::{iterator::IteratorRead, segmented::Segmented},
     types::core::Reader,
 };
 
 #[derive(Debug)]
-pub struct PReaderIterator<F> {
+pub struct PReaderIterator<I> {
     pub(crate) reader: Reader,
     pub(crate) progress: Progress,
-    pub(crate) autosave: Autosave,
+    pub(crate) autosave: AutoSave,
     pub(crate) failed: bool,
     pub(crate) state: State,
-    pub(crate) fields: F,
+    pub(crate) inner: I,
 }
 
-impl<F> PReaderIterator<F> {
+impl<I> PReaderIterator<I> {
     pub fn state(&self) -> &State {
         &self.state
     }
@@ -35,13 +35,13 @@ impl<F> PReaderIterator<F> {
         self.state.advance(bytes as u64);
 
         match self.autosave {
-            Autosave::Every(threshold) => self.save(threshold),
-            Autosave::Off | Autosave::Final => Ok(()),
+            AutoSave::Every(threshold) => self.save(threshold),
+            AutoSave::Off | AutoSave::Final => Ok(()),
         }
     }
 
     pub(crate) fn finish(&mut self) -> Result<()> {
-        if self.failed || self.autosave == Autosave::Off {
+        if self.failed || self.autosave == AutoSave::Off {
             return Ok(());
         }
 
@@ -59,7 +59,7 @@ impl<F> PReaderIterator<F> {
     }
 }
 
-impl<F> Iterator for PReaderIterator<F>
+impl<I> Iterator for PReaderIterator<I>
 where
     Self: IteratorRead,
 {
@@ -70,14 +70,14 @@ where
     }
 }
 
-impl<F: Segmented> PReaderIterator<F> {
+impl<I: Segmented> PReaderIterator<I> {
     pub(crate) fn segment(&mut self) -> Result<Option<Range<usize>>> {
         loop {
             if self.done() {
                 return self.stop();
             }
 
-            let read = self.fields.fill(&mut self.reader)?;
+            let read = self.inner.fill(&mut self.reader)?;
 
             if read == 0 {
                 return self.stop();
@@ -89,7 +89,7 @@ impl<F: Segmented> PReaderIterator<F> {
                 continue;
             }
 
-            if let Some(body) = self.fields.body() {
+            if let Some(body) = self.inner.body() {
                 self.progress.count();
 
                 return Ok(Some(body));
@@ -98,7 +98,7 @@ impl<F: Segmented> PReaderIterator<F> {
     }
 }
 
-impl<F> Drop for PReaderIterator<F> {
+impl<I> Drop for PReaderIterator<I> {
     fn drop(&mut self) {
         if let Err(error) = self.finish() {
             eprintln!("preader: save failed: {error}");

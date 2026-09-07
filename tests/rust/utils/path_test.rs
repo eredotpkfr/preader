@@ -3,8 +3,8 @@ use std::path::{MAIN_SEPARATOR_STR, Path};
 use std::{fs, os::unix::fs::symlink};
 
 use preader::{
-    DEFAULT_STATE_DIRECTORY, default_state_dir, has_no_symlinks, normalize_path, path_stem,
-    scoped_join, strip_extensions,
+    DEFAULT_STATE_DIR, default_state_dir, has_no_symlinks, normalize_path, path_stem, scoped_join,
+    strip_extensions,
 };
 use rstest::{fixture, rstest};
 use tempfile::TempDir;
@@ -59,9 +59,9 @@ fn scoped_join_fails_when_a_windows_path_is_unsafe(root: &Path, #[case] unsafe_p
 
 #[rstest]
 fn scoped_join_accepts_an_empty_root() {
-    let joined = scoped_join(Path::new(""), DEFAULT_STATE_DIRECTORY).unwrap();
+    let joined = scoped_join(Path::new(""), DEFAULT_STATE_DIR).unwrap();
 
-    assert_eq!(joined, Path::new(DEFAULT_STATE_DIRECTORY));
+    assert_eq!(joined, Path::new(DEFAULT_STATE_DIR));
 }
 
 #[rstest]
@@ -73,10 +73,7 @@ fn scoped_join_does_not_validate_the_root() {
 
 #[rstest]
 fn default_state_dir_ends_with_the_directory_name() {
-    assert_eq!(
-        default_state_dir().file_name().unwrap(),
-        DEFAULT_STATE_DIRECTORY
-    );
+    assert_eq!(default_state_dir().file_name().unwrap(), DEFAULT_STATE_DIR);
 }
 
 #[rstest]

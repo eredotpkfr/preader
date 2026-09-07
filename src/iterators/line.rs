@@ -1,10 +1,12 @@
 use std::{io::BufRead, ops::Range};
 
 use crate::{
-    LineIterator, Result,
-    interfaces::{iterator::IteratorRead, segmented::Segmented},
+    LineIterator, Result, Skip,
+    interfaces::{iterator::IteratorRead, segmented::Segmented, skippable::Skippable},
     types::core::Reader,
 };
+
+pub(crate) const LINE_BOUNDARY: u8 = b'\n';
 
 #[derive(Debug, Default)]
 pub struct Line {
@@ -22,19 +24,14 @@ impl Segmented for Line {
     }
 
     fn body(&self) -> Option<Range<usize>> {
+        let full = self.buffer.len();
         let trimmed = self.buffer.trim_end_matches('\n').trim_end_matches('\r').len();
 
         if self.skip_empty && trimmed == 0 {
             return None;
         }
 
-        Some(
-            0..if self.keepends {
-                self.buffer.len()
-            } else {
-                trimmed
-            },
-        )
+        Some(0..if self.keepends { full } else { trimmed })
     }
 }
 
@@ -43,10 +40,15 @@ impl IteratorRead for LineIterator {
     type Owned = String;
 
     fn read(&mut self) -> Result<Option<&str>> {
-        let Some(body) = self.segment()? else {
-            return Ok(None);
-        };
+        Ok(self.segment()?.map(|body| &self.inner.buffer[body]))
+    }
+}
 
-        Ok(Some(&self.fields.buffer[body]))
+impl Skippable for Line {
+    fn skip(&self, count: u64) -> Skip {
+        Skip::Items {
+            count,
+            boundary: self.align.then_some(LINE_BOUNDARY),
+        }
     }
 }

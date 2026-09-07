@@ -1,6 +1,9 @@
 use std::io::Read;
 
-use crate::{ByteIterator, Result, interfaces::iterator::IteratorRead};
+use crate::{
+    ByteIterator, Result, Skip,
+    interfaces::{iterator::IteratorRead, skippable::Skippable},
+};
 
 #[derive(Debug, Default)]
 pub struct Byte;
@@ -22,5 +25,11 @@ impl IteratorRead for ByteIterator {
         self.advance(1)?;
 
         Ok(Some(byte))
+    }
+}
+
+impl Skippable for Byte {
+    fn skip(&self, count: u64) -> Skip {
+        Skip::Bytes(count)
     }
 }

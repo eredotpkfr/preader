@@ -37,7 +37,7 @@ fn a_finished_read_reports_full_progress(tmp_dir: TempDir) {
 }
 
 #[rstest]
-fn autosave_disabled_writes_nothing(tmp_dir: TempDir) {
+fn auto_save_disabled_writes_nothing(tmp_dir: TempDir) {
     assert_eq!(drain(&tmp_dir, Config::default()), CONTENT.len() as u64);
     assert!(!reader(&tmp_dir, Config::default()).states().exists(TEST_STATE_NAME));
 }

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use preader::{Autosave, Config, DEFAULT_VERIFY_STATE, StateManagerConfig, default_state_dir};
+use preader::{AutoSave, Config, DEFAULT_VERIFY_STATE, StateManagerConfig, default_state_dir};
 use rstest::{fixture, rstest};
 
 #[fixture]
@@ -16,20 +16,20 @@ fn config() -> Config {
 }
 
 #[rstest]
-#[case::disabled(false, 0, Autosave::Off)]
-#[case::disabled_with_a_threshold(false, 222, Autosave::Off)]
-#[case::only_at_the_end(true, 0, Autosave::Final)]
-#[case::every_threshold(true, 222, Autosave::Every(222))]
-fn autosave_collapses_the_config_pair(
+#[case::disabled(false, 0, AutoSave::Off)]
+#[case::disabled_with_a_threshold(false, 222, AutoSave::Off)]
+#[case::only_at_the_end(true, 0, AutoSave::Final)]
+#[case::every_threshold(true, 222, AutoSave::Every(222))]
+fn auto_save_collapses_the_config_pair(
     mut config: Config,
     #[case] enabled: bool,
     #[case] threshold: u64,
-    #[case] expected: Autosave,
+    #[case] expected: AutoSave,
 ) {
     config.auto_save_state = enabled;
     config.auto_save_state_bytes = threshold;
 
-    assert_eq!(Autosave::from(&config), expected);
+    assert_eq!(AutoSave::from(&config), expected);
 }
 
 #[rstest]
@@ -45,7 +45,7 @@ fn auto_load_state_reaches_neither_sub_config(config: Config) {
     let mut flipped = config.clone();
     flipped.auto_load_state = !config.auto_load_state;
 
-    assert_eq!(Autosave::from(&config), Autosave::from(&flipped));
+    assert_eq!(AutoSave::from(&config), AutoSave::from(&flipped));
 
     let manager = StateManagerConfig::from(&config);
     let flipped_manager = StateManagerConfig::from(&flipped);
@@ -69,4 +69,31 @@ fn manager_config_default_and_conversion_agree() {
 
     assert_eq!(from_config.state_dir, standalone.state_dir);
     assert_eq!(from_config.verify_state, standalone.verify_state);
+}
+
+#[rstest]
+fn a_config_survives_a_json_round_trip(config: Config) {
+    let encoded = serde_json::to_string(&config).unwrap();
+
+    assert_eq!(serde_json::from_str::<Config>(&encoded).unwrap(), config);
+}
+
+#[rstest]
+fn a_serialized_config_names_every_field(config: Config) {
+    let encoded = serde_json::to_value(&config).unwrap();
+    let mut fields = encoded.as_object().unwrap().keys().cloned().collect::<Vec<_>>();
+
+    fields.sort();
+
+    assert_eq!(
+        fields,
+        [
+            "auto_load_state",
+            "auto_save_state",
+            "auto_save_state_bytes",
+            "buffer_capacity",
+            "state_dir",
+            "verify_state",
+        ]
+    );
 }

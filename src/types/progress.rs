@@ -1,9 +1,9 @@
 #[derive(Debug)]
 pub struct Progress {
-    end: u64,
-    limit: u64,
-    yielded: u64,
-    skipping: u64,
+    pub(crate) end: u64,
+    pub(crate) limit: u64,
+    pub(crate) yielded: u64,
+    pub(crate) skipping: u64,
 }
 
 impl Progress {

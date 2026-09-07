@@ -1,7 +1,3 @@
-use crate::{
-    ByteBuilder, ChunkBuilder, DelimiterBuilder, LineBuilder, builders::line::LINE_BOUNDARY,
-};
-
 #[derive(Clone, Copy, Debug)]
 pub enum Skip {
     Bytes(u64),
@@ -27,35 +23,6 @@ impl Skip {
         match self {
             Self::Bytes(_) => None,
             Self::Items { boundary, .. } => boundary,
-        }
-    }
-}
-impl From<&ByteBuilder<'_>> for Skip {
-    fn from(builder: &ByteBuilder<'_>) -> Self {
-        Self::Bytes(builder.options.skip)
-    }
-}
-
-impl From<&ChunkBuilder<'_>> for Skip {
-    fn from(builder: &ChunkBuilder<'_>) -> Self {
-        Self::Bytes(builder.options.skip.saturating_mul(builder.fields.size as u64))
-    }
-}
-
-impl From<&LineBuilder<'_>> for Skip {
-    fn from(builder: &LineBuilder<'_>) -> Self {
-        Self::Items {
-            count: builder.options.skip,
-            boundary: builder.fields.align.then_some(LINE_BOUNDARY),
-        }
-    }
-}
-
-impl From<&DelimiterBuilder<'_>> for Skip {
-    fn from(builder: &DelimiterBuilder<'_>) -> Self {
-        Self::Items {
-            count: builder.options.skip,
-            boundary: builder.fields.align.then_some(builder.fields.character),
         }
     }
 }

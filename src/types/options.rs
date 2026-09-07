@@ -22,7 +22,7 @@ impl Default for IteratorOptions {
 impl IteratorOptions {
     pub(crate) fn validate(&self) -> Result<()> {
         if self.start > self.end {
-            return Err(Error::Bounds {
+            return Err(Error::InvalidRange {
                 start: self.start,
                 end: self.end,
             });

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-pub const RESYNC_HINT: &str = "(call state.resync(file) if this is expected)";
+const RESYNC_HINT: &str = "(call state.resync(file) if this is expected)";
 
 #[derive(Debug, thiserror::Error)]
 pub enum Mismatch {

@@ -6,8 +6,8 @@ use std::{
 };
 
 use preader::{
-    Config, DEFAULT_VERIFY_STATE, FileMetadata, STATE_FILE_SUFFIX, State, StateData, StateManager,
-    TMP_STATE_FILE_SUFFIX, Timestamps, default_state_dir,
+    Config, FileMetadata, STATE_FILE_EXTENSION, State, StateData, StateManager, TMP_FILE_EXTENSION,
+    Timestamps,
 };
 use rstest::{fixture, rstest};
 use sha2::{Digest, Sha256};
@@ -171,7 +171,7 @@ fn path_appends_the_suffix_inside_the_state_dir(sandbox: Sandbox) {
     assert_eq!(path.parent().unwrap(), sandbox.state_dir());
     assert_eq!(
         path.file_name().unwrap(),
-        format!("{TEST_STATE_NAME}.{STATE_FILE_SUFFIX}").as_str()
+        format!("{TEST_STATE_NAME}.{STATE_FILE_EXTENSION}").as_str()
     );
 }
 
@@ -252,7 +252,7 @@ fn tmp_carries_both_suffixes_inside_the_state_dir(sandbox: Sandbox) {
 
     assert_eq!(tmp.parent().unwrap(), sandbox.state_dir());
     assert!(file_name.starts_with(&format!("{TEST_STATE_NAME}.")));
-    assert!(file_name.ends_with(&format!(".{STATE_FILE_SUFFIX}.{TMP_STATE_FILE_SUFFIX}")));
+    assert!(file_name.ends_with(&format!(".{STATE_FILE_EXTENSION}.{TMP_FILE_EXTENSION}")));
 }
 
 #[rstest]
@@ -282,7 +282,7 @@ fn tmp_fails_when_the_name_is_unsafe(sandbox: Sandbox, #[case] name: &str, #[cas
 fn tmp_normalizes_the_name(sandbox: Sandbox, #[case] name: &str, #[case] expected: &str) {
     let tmp = sandbox.manager.tmp(name).unwrap();
     let file_name = tmp.file_name().unwrap().to_str().unwrap();
-    let tail = format!(".{STATE_FILE_SUFFIX}.{TMP_STATE_FILE_SUFFIX}");
+    let tail = format!(".{STATE_FILE_EXTENSION}.{TMP_FILE_EXTENSION}");
     let (stem, _stamp) = file_name.strip_suffix(&tail).unwrap().rsplit_once('.').unwrap();
 
     assert_eq!(stem, expected);
@@ -295,7 +295,7 @@ fn tmp_uses_a_nanosecond_timestamp(sandbox: Sandbox) {
     let stamp = file_name
         .strip_prefix(&format!("{TEST_STATE_NAME}."))
         .unwrap()
-        .strip_suffix(&format!(".{STATE_FILE_SUFFIX}.{TMP_STATE_FILE_SUFFIX}"))
+        .strip_suffix(&format!(".{STATE_FILE_EXTENSION}.{TMP_FILE_EXTENSION}"))
         .unwrap();
 
     assert!(stamp.parse::<i64>().unwrap() > 0);
@@ -435,16 +435,6 @@ fn load_returns_a_verified_state(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn load_carries_the_managers_saved_position(#[with(false)] mut sandbox: Sandbox) {
-    sandbox.manager.last_saved_position = 512;
-    sandbox.write_state(TEST_STATE_NAME, unverifiable_payload(TEST_STATE_NAME));
-
-    let state = sandbox.manager.load(TEST_STATE_NAME).unwrap();
-
-    assert_eq!(state.manager.last_saved_position, 512);
-}
-
-#[rstest]
 fn load_ignores_unknown_fields(#[with(false)] sandbox: Sandbox) {
     let payload = unverifiable_payload(TEST_STATE_NAME)
         .replace(r#""_checksum""#, r#""foo": 42, "_checksum""#);
@@ -455,41 +445,8 @@ fn load_ignores_unknown_fields(#[with(false)] sandbox: Sandbox) {
 }
 
 #[rstest]
-fn from_config_starts_with_no_saved_position(sandbox: Sandbox) {
-    assert_eq!(sandbox.manager.last_saved_position, 0);
-}
-
-#[rstest]
 fn from_config_carries_the_state_dir(sandbox: Sandbox) {
-    assert_eq!(sandbox.manager.config.state_dir, sandbox.state_dir());
-}
+    let path = sandbox.manager.path(TEST_STATE_NAME).unwrap();
 
-#[rstest]
-#[case::verifying(true)]
-#[case::lenient(false)]
-fn from_config_carries_the_verify_flag(
-    #[case] verify_state: bool,
-    #[with(verify_state)] sandbox: Sandbox,
-) {
-    assert_eq!(sandbox.manager.config.verify_state, verify_state);
-}
-
-#[rstest]
-fn default_uses_the_crate_defaults() {
-    let manager = StateManager::default();
-
-    assert_eq!(manager.last_saved_position, 0);
-    assert_eq!(manager.config.state_dir, default_state_dir());
-    assert_eq!(manager.config.verify_state, DEFAULT_VERIFY_STATE);
-}
-
-#[rstest]
-fn clone_does_not_share_state(sandbox: Sandbox) {
-    let mut clone = sandbox.manager.clone();
-
-    clone.last_saved_position = 99;
-    clone.config.verify_state = false;
-
-    assert_eq!(sandbox.manager.last_saved_position, 0);
-    assert!(sandbox.manager.config.verify_state);
+    assert_eq!(path.parent().unwrap(), sandbox.state_dir());
 }

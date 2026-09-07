@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::utils::path::default_state_dir;
 
@@ -12,7 +12,7 @@ pub const DEFAULT_AUTO_SAVE_STATE_BYTES: u64 = 100 * 1024 * 1024;
 // Verify saved state on load + explicit state resume by default
 pub const DEFAULT_VERIFY_STATE: bool = true;
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Config {
     pub buffer_capacity: usize,
     pub state_dir: PathBuf,
