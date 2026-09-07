@@ -17,11 +17,11 @@ pub enum Error {
     #[error(transparent)]
     Mismatch(#[from] Mismatch),
     #[error("state not found: {0}")]
-    Missing(String),
+    NotFound(String),
     #[error("start ({start}) must be <= end ({end})")]
-    Bounds { start: u64, end: u64 },
+    InvalidRange { start: u64, end: u64 },
     #[error("not a file: {}", .0.display())]
     NotAFile(PathBuf),
     #[error("invalid mtime: {0}")]
-    Mtime(i64),
+    InvalidMtime(i64),
 }

@@ -12,9 +12,8 @@ mod types;
 mod utils;
 
 pub use bases::{builder::PReaderIteratorBuilder, iterator::PReaderIterator};
-pub use builders::line::LINE_BOUNDARY;
 pub use enums::{
-    autosave::Autosave,
+    autosave::AutoSave,
     error::{core::Error, mismatch::Mismatch, path::PathError},
     input::StateInput,
     skip::Skip,
@@ -26,14 +25,16 @@ pub use iterators::{
     delimiter::{DEFAULT_DELIMITER, Delimiter},
     line::Line,
 };
-pub use manager::{STATE_FILE_SUFFIX, StateManager, TMP_STATE_FILE_SUFFIX};
+pub use manager::{STATE_FILE_EXTENSION, StateManager, TMP_FILE_EXTENSION};
 pub use reader::PReader;
 pub use registry::{StateIterator, StateRegistry};
 pub use types::{
     checksum::ChecksumBody,
     config::{
         manager::StateManagerConfig,
-        reader::{Config, DEFAULT_VERIFY_STATE},
+        reader::{
+            Config, DEFAULT_AUTO_SAVE_STATE_BYTES, DEFAULT_BUFFER_CAPACITY, DEFAULT_VERIFY_STATE,
+        },
     },
     core::{
         ByteBuilder, ByteIterator, ChunkBuilder, ChunkIterator, DelimiterBuilder,
@@ -49,7 +50,7 @@ pub use types::{
 pub use utils::{
     file::{fingerprint, starts_mid_item},
     path::{
-        DEFAULT_STATE_DIRECTORY, default_state_dir, has_no_symlinks, normalize_path, path_stem,
+        DEFAULT_STATE_DIR, default_state_dir, has_no_symlinks, normalize_path, path_stem,
         scoped_join, strip_extensions,
     },
 };

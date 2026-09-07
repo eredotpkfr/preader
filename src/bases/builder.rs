@@ -1,94 +1,60 @@
 use std::path::PathBuf;
 
 use crate::{
-    Autosave, Config, IteratorOptions, Result, Skip, StateInput,
+    AutoSave, Config, IteratorOptions, Result, StateInput,
     bases::iterator::PReaderIterator,
-    interfaces::{builder::IteratorBuild, iterator::IteratorRead},
+    interfaces::{builder::IteratorBuild, iterator::IteratorRead, skippable::Skippable},
 };
 
 #[derive(Debug)]
-pub struct PReaderIteratorBuilder<'a, F> {
+pub struct PReaderIteratorBuilder<'a, I> {
     pub(crate) config: &'a Config,
     pub(crate) options: IteratorOptions,
     pub(crate) state: StateInput,
     pub(crate) file: PathBuf,
-    pub(crate) fields: F,
+    pub(crate) inner: I,
 }
 
-impl<'a, F: Default> PReaderIteratorBuilder<'a, F> {
+impl<'a, I: Default> PReaderIteratorBuilder<'a, I> {
     pub(crate) fn new(config: &'a Config, file: impl Into<PathBuf>) -> Self {
         Self {
             config,
             file: file.into(),
             state: StateInput::default(),
             options: IteratorOptions::default(),
-            fields: F::default(),
+            inner: I::default(),
         }
     }
 }
 
-impl<F> PReaderIteratorBuilder<'_, F> {
-    pub fn state(mut self, state: impl Into<StateInput>) -> Self {
-        self.state = state.into();
-        self
-    }
-
-    pub fn options(mut self, options: IteratorOptions) -> Self {
-        self.options = options;
-        self
-    }
-
-    pub fn start(mut self, start: u64) -> Self {
-        self.options.start = start;
-        self
-    }
-
-    pub fn end(mut self, end: u64) -> Self {
-        self.options.end = end;
-        self
-    }
-
-    pub fn skip(mut self, skip: u64) -> Self {
-        self.options.skip = skip;
-        self
-    }
-
-    pub fn limit(mut self, limit: u64) -> Self {
-        self.options.limit = limit;
-        self
-    }
-}
-
-impl<F> IteratorBuild for PReaderIteratorBuilder<'_, F>
+impl<I: Skippable> IteratorBuild for PReaderIteratorBuilder<'_, I>
 where
-    for<'a> Skip: From<&'a PReaderIteratorBuilder<'a, F>>,
-    PReaderIterator<F>: IteratorRead,
+    PReaderIterator<I>: IteratorRead,
 {
-    type Iterator = PReaderIterator<F>;
+    type Iterator = PReaderIterator<I>;
 
     fn build(self) -> Result<Self::Iterator> {
         self.options.validate()?;
 
         let file = dunce::canonicalize(&self.file)?;
-        let skip = Skip::from(&self);
+        let skip = self.inner.skip(self.options.skip);
 
-        let mut state = self.state.resolve(self.config, &file)?;
+        let state = self.state.resolve(self.config, &file)?;
 
         let window = self.options.window(state.position, state.file.size, skip);
         let reader = window.open(&state.file.path, self.config.buffer_capacity)?;
 
         let progress = window.progress(reader.get_ref(), skip.boundary(), self.options.limit)?;
-        let autosave = Autosave::from(self.config);
-
-        state.seek(window.position, autosave);
+        let autosave = AutoSave::from(self.config);
+        let state = state.seek(window.position, autosave);
 
         Ok(PReaderIterator {
-            state,
             reader,
             progress,
             autosave,
             failed: false,
-            fields: self.fields,
+            state,
+            inner: self.inner,
         })
     }
 }

@@ -13,7 +13,11 @@ pub struct PReader {
 }
 
 impl PReader {
-    fn builder<F: Default>(&self, file: impl Into<PathBuf>) -> PReaderIteratorBuilder<'_, F> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    fn builder<I: Default>(&self, file: impl Into<PathBuf>) -> PReaderIteratorBuilder<'_, I> {
         PReaderIteratorBuilder::new(&self.config, file)
     }
 

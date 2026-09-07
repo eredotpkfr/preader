@@ -5,14 +5,10 @@ use std::path::{
 
 use crate::PathError;
 
-pub const DEFAULT_STATE_DIRECTORY: &str = "preader";
+pub const DEFAULT_STATE_DIR: &str = "preader";
 
 pub fn default_state_dir() -> PathBuf {
-    scoped_join(
-        &dirs::cache_dir().unwrap_or_default(),
-        DEFAULT_STATE_DIRECTORY,
-    )
-    .unwrap()
+    scoped_join(&dirs::cache_dir().unwrap_or_default(), DEFAULT_STATE_DIR).unwrap()
 }
 
 pub fn scoped_join(root: &Path, unsafe_path: &str) -> Result<PathBuf, PathError> {

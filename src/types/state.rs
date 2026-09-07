@@ -10,7 +10,7 @@ use serde_json::to_string_pretty;
 
 use crate::{
     Config, Mismatch, Result, StateManager,
-    enums::autosave::Autosave,
+    enums::autosave::AutoSave,
     types::{checksum::ChecksumBody, file::FileMetadata, time::Timestamps},
 };
 
@@ -19,7 +19,7 @@ pub struct State {
     #[deref]
     pub(crate) data: StateData,
     #[partial_eq(skip)]
-    pub manager: StateManager,
+    pub(crate) manager: StateManager,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -33,6 +33,25 @@ pub struct StateData {
 }
 
 impl State {
+    pub(crate) fn new(config: &Config, path: &Path, name: String) -> Result<Self> {
+        let file = FileMetadata::try_from(path)?;
+        let data = StateData {
+            name,
+            file,
+            position: 0,
+            timestamps: Timestamps::now(),
+            checksum: String::new(),
+        };
+        let mut state = Self {
+            data,
+            manager: StateManager::from(config),
+        };
+
+        state.data.checksum = state.checksum()?;
+
+        Ok(state)
+    }
+
     pub fn path(&self) -> Result<PathBuf> {
         self.manager.path(&self.name)
     }
@@ -43,6 +62,20 @@ impl State {
 
     pub fn percent(&self) -> f64 {
         self.position as f64 * 100.0 / self.file.size.max(1) as f64
+    }
+
+    pub fn verify(&self) -> Result<()> {
+        let computed = self.checksum()?;
+
+        if computed != self.checksum {
+            return Err(Mismatch::Checksum {
+                saved: self.checksum.clone(),
+                computed,
+            }
+            .into());
+        }
+
+        Ok(self.file.compare(&FileMetadata::try_from(self.file.path.as_path())?)?)
     }
 
     pub fn save(&mut self) -> Result<PathBuf> {
@@ -66,20 +99,6 @@ impl State {
         Ok(path)
     }
 
-    pub fn verify(&self) -> Result<()> {
-        let computed = self.checksum()?;
-
-        if computed != self.checksum {
-            return Err(Mismatch::Checksum {
-                saved: self.checksum.clone(),
-                computed,
-            }
-            .into());
-        }
-
-        Ok(self.file.compare(&FileMetadata::try_from(self.file.path.as_path())?)?)
-    }
-
     pub fn resync(&self, path: impl AsRef<Path>) -> Result<Self> {
         let path = dunce::canonicalize(path)?;
         let mut resynced = self.clone();
@@ -91,35 +110,17 @@ impl State {
         Ok(resynced)
     }
 
-    pub(crate) fn new(config: &Config, path: &Path, name: String) -> Result<Self> {
-        let file = FileMetadata::try_from(path)?;
-        let data = StateData {
-            name,
-            file,
-            position: 0,
-            timestamps: Timestamps::now(),
-            checksum: String::new(),
-        };
-        let mut state = Self {
-            data,
-            manager: StateManager::from(config),
-        };
-
-        state.data.checksum = state.checksum()?;
-
-        Ok(state)
-    }
-
     pub(crate) fn advance(&mut self, bytes: u64) {
         self.data.position += bytes;
     }
 
-    pub(crate) fn seek(&mut self, position: u64, autosave: Autosave) {
+    pub(crate) fn seek(mut self, position: u64, autosave: AutoSave) -> Self {
         self.data.position = position;
         self.manager.last_saved_position = match autosave {
-            Autosave::Every(threshold) => position - position % threshold,
-            Autosave::Off | Autosave::Final => position,
+            AutoSave::Every(threshold) => position - position % threshold,
+            AutoSave::Off | AutoSave::Final => position,
         };
+        self
     }
 
     fn commit(&self, tmp: &Path, path: &Path, serialized: &str) -> Result<()> {

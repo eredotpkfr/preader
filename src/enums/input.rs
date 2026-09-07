@@ -3,7 +3,7 @@ use std::path::Path;
 use derive_more::From;
 
 use crate::{
-    Mismatch, Result, State, StateManager, manager::STATE_FILE_SUFFIX,
+    Mismatch, Result, State, StateManager, manager::STATE_FILE_EXTENSION,
     types::config::reader::Config, utils::path::path_stem,
 };
 
@@ -45,7 +45,7 @@ impl StateInput {
 
                 return Ok(state);
             }
-            Self::Name(name) => path_stem(&name, STATE_FILE_SUFFIX),
+            Self::Name(name) => path_stem(&name, STATE_FILE_EXTENSION),
             Self::Auto => manager.name(file),
         };
 

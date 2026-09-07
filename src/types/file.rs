@@ -61,7 +61,7 @@ impl TryFrom<&Path> for FileMetadata {
         Ok(Self {
             path: path.to_path_buf(),
             size: metadata.len(),
-            mtime: mtime.ok_or(Error::Mtime(seconds))?,
+            mtime: mtime.ok_or(Error::InvalidMtime(seconds))?,
             fingerprint: fingerprint(path)?,
         })
     }

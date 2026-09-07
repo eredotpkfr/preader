@@ -35,7 +35,7 @@ impl Window {
         ))
     }
 
-    pub(crate) fn skip_items(&self, file: &File, boundary: Option<u8>) -> Result<u64> {
+    fn skip_items(&self, file: &File, boundary: Option<u8>) -> Result<u64> {
         let Some(count) = self.skipping else {
             return Ok(0);
         };

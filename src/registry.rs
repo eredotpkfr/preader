@@ -7,11 +7,11 @@ use regex::Regex;
 use walkdir::{IntoIter, WalkDir};
 
 use crate::{
-    Error, Result, State, manager::StateManager, types::config::reader::Config,
+    Error, Result, State,
+    manager::{STATE_FILE_EXTENSION, StateManager},
+    types::config::reader::Config,
     utils::path::has_no_symlinks,
 };
-
-pub(crate) const STATE_FILE_EXT: &str = ".state.json";
 
 #[derive(Debug)]
 pub struct StateRegistry {
@@ -41,14 +41,17 @@ impl StateRegistry {
 
     pub fn load(&self, name: &str) -> Result<State> {
         if !self.exists(name) {
-            return Err(Error::Missing(name.to_owned()));
+            return Err(Error::NotFound(name.to_owned()));
         }
 
         self.manager.load(name)
     }
 
     pub fn find(&self, name: &str) -> Result<Option<State>> {
-        self.exists(name).then(|| self.load(name)).transpose()
+        match self.load(name) {
+            Err(Error::NotFound(_)) => Ok(None),
+            found => found.map(Some),
+        }
     }
 
     pub fn all(&self) -> Result<Vec<State>> {
@@ -56,7 +59,7 @@ impl StateRegistry {
     }
 
     pub fn exists(&self, name: &str) -> bool {
-        self.manager.path(name).map(|path| path.exists()).unwrap_or(false)
+        self.manager.path(name).is_ok_and(|path| path.exists())
     }
 
     pub fn count(&self) -> Result<usize> {
@@ -69,7 +72,7 @@ impl StateRegistry {
 
     pub fn delete(&self, name: &str) -> Result<()> {
         if !self.exists(name) {
-            return Err(Error::Missing(name.to_owned()));
+            return Err(Error::NotFound(name.to_owned()));
         }
 
         Ok(fs::remove_file(self.path(name)?)?)
@@ -111,8 +114,8 @@ impl Iterator for StateIterator {
                 Ok(entry) => entry,
             };
             let path = entry.path();
-            let name =
-                path.strip_prefix(root).ok()?.to_str()?.strip_suffix(STATE_FILE_EXT)?.to_owned();
+            let file = path.strip_prefix(root).ok()?.to_str()?;
+            let name = file.strip_suffix(&format!(".{STATE_FILE_EXTENSION}"))?.to_owned();
 
             (path.is_file()
                 && has_no_symlinks(root, path)

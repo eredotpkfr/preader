@@ -94,3 +94,8 @@ fn a_state_argument_accepts_every_name_shape(tmp_dir: TempDir) {
 
     assert_eq!(resumed.state().name, auto.name);
 }
+
+#[rstest]
+fn new_matches_the_default_config() {
+    assert_eq!(PReader::new().config, Config::default());
+}
