@@ -17,3 +17,12 @@ impl From<&Config> for AutoSave {
         }
     }
 }
+
+impl AutoSave {
+    pub(crate) fn floor(self, position: u64) -> u64 {
+        match self {
+            Self::Every(threshold) => position - position % threshold,
+            Self::Off | Self::Final => position,
+        }
+    }
+}

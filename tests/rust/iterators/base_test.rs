@@ -80,7 +80,7 @@ fn a_threshold_saves_during_iteration(tmp_dir: TempDir) {
     let mut saved = Vec::new();
 
     while bytes.read().unwrap().is_some() {
-        if let Some(state) = reader.states().find(TEST_STATE_NAME).unwrap()
+        if let Some(state) = reader.states().find(TEST_STATE_NAME)
             && saved.last() != Some(&state.position)
         {
             saved.push(state.position);
@@ -344,4 +344,32 @@ fn a_failing_final_save_is_reported_once(tmp_dir: TempDir) {
     }
 
     assert_eq!((yielded, errors), (3, 1));
+}
+
+#[rstest]
+fn a_manual_save_does_not_reset_the_autosave_baseline(tmp_dir: TempDir) {
+    let config = Config {
+        auto_save_state: true,
+        auto_save_state_bytes: 10,
+        ..Config::default()
+    };
+    let reader = reader(&tmp_dir, config);
+    let path = write(&tmp_dir, "data.bin", CONTENT);
+    let mut bytes = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap();
+
+    for _ in 0..5 {
+        bytes.read().unwrap();
+    }
+
+    bytes.state().save().unwrap();
+
+    assert_eq!(reader.states().load(TEST_STATE_NAME).unwrap().position, 5);
+
+    for _ in 0..5 {
+        bytes.read().unwrap();
+    }
+
+    // The baseline is still zero, so the automatic write lands at ten rather
+    // than at fifteen, matching the clone the Python getter used to hand out.
+    assert_eq!(reader.states().load(TEST_STATE_NAME).unwrap().position, 10);
 }

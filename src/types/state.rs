@@ -9,8 +9,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::to_string_pretty;
 
 use crate::{
-    Config, Mismatch, Result, StateManager,
-    enums::autosave::AutoSave,
+    Mismatch, Result,
+    manager::StateManager,
     types::{checksum::ChecksumBody, file::FileMetadata, time::Timestamps},
 };
 
@@ -33,23 +33,18 @@ pub struct StateData {
 }
 
 impl State {
-    pub(crate) fn new(config: &Config, path: &Path, name: String) -> Result<Self> {
-        let file = FileMetadata::try_from(path)?;
-        let data = StateData {
+    pub(crate) fn new(manager: StateManager, path: &Path, name: String) -> Result<Self> {
+        let mut data = StateData {
             name,
-            file,
+            file: FileMetadata::try_from(path)?,
             position: 0,
             timestamps: Timestamps::now(),
             checksum: String::new(),
         };
-        let mut state = Self {
-            data,
-            manager: StateManager::from(config),
-        };
 
-        state.data.checksum = state.checksum()?;
+        data.checksum = ChecksumBody::from(&data).compute()?;
 
-        Ok(state)
+        Ok(Self { data, manager })
     }
 
     pub fn path(&self) -> Result<PathBuf> {
@@ -75,59 +70,58 @@ impl State {
             .into());
         }
 
-        Ok(self.file.compare(&FileMetadata::try_from(self.file.path.as_path())?)?)
+        let current = FileMetadata::try_from(self.file.path.as_path())?;
+
+        Ok(self.file.compare(&current)?)
     }
 
     pub fn save(&mut self) -> Result<PathBuf> {
-        let path = self.path()?;
-        let tmp = self.manager.tmp(&self.name)?;
+        let refreshed = self.refresh(None)?;
+        let path = self.commit(&refreshed)?;
 
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-
-        let mut data = self.data.clone();
-
-        data.timestamps.updated_at = Utc::now();
-        data.checksum = ChecksumBody::from(&data).compute()?;
-
-        self.commit(&tmp, &path, &to_string_pretty(&data)?)?;
-
-        self.manager.last_saved_position = data.position;
-        self.data = data;
+        self.data = refreshed;
 
         Ok(path)
     }
 
     pub fn resync(&self, path: impl AsRef<Path>) -> Result<Self> {
-        let path = dunce::canonicalize(path)?;
-        let mut resynced = self.clone();
+        Ok(Self::from((
+            self.refresh(Some(&dunce::canonicalize(path)?))?,
+            self.manager.clone(),
+        )))
+    }
 
-        resynced.data.file = FileMetadata::try_from(path.as_path())?;
-        resynced.data.timestamps.updated_at = Utc::now();
-        resynced.data.checksum = ChecksumBody::from(&resynced.data).compute()?;
+    fn refresh(&self, file: Option<&Path>) -> Result<StateData> {
+        let mut data = self.data.clone();
 
-        Ok(resynced)
+        if let Some(path) = file {
+            data.file = FileMetadata::try_from(path)?;
+        }
+
+        data.timestamps.updated_at = Utc::now();
+        data.checksum = ChecksumBody::from(&data).compute()?;
+
+        Ok(data)
     }
 
     pub(crate) fn advance(&mut self, bytes: u64) {
         self.data.position += bytes;
     }
 
-    pub(crate) fn seek(mut self, position: u64, autosave: AutoSave) -> Self {
+    pub(crate) fn seek(mut self, position: u64) -> Self {
         self.data.position = position;
-        self.manager.last_saved_position = match autosave {
-            AutoSave::Every(threshold) => position - position % threshold,
-            AutoSave::Off | AutoSave::Final => position,
-        };
         self
     }
 
-    fn commit(&self, tmp: &Path, path: &Path, serialized: &str) -> Result<()> {
-        fs::write(tmp, serialized)
-            .and_then(|()| fs::rename(tmp, path))
-            .inspect_err(|_| drop(fs::remove_file(tmp)))?;
+    fn commit(&self, data: &StateData) -> Result<PathBuf> {
+        let (path, tmp) = (self.path()?, self.manager.tmp(&self.name)?);
 
-        Ok(())
+        path.parent().map(fs::create_dir_all).transpose()?;
+
+        fs::write(&tmp, to_string_pretty(data)?)
+            .and_then(|()| fs::rename(&tmp, &path))
+            .inspect_err(|_| drop(fs::remove_file(&tmp)))?;
+
+        Ok(path)
     }
 }

@@ -20,17 +20,6 @@ impl Default for IteratorOptions {
 }
 
 impl IteratorOptions {
-    pub(crate) fn validate(&self) -> Result<()> {
-        if self.start > self.end {
-            return Err(Error::InvalidRange {
-                start: self.start,
-                end: self.end,
-            });
-        }
-
-        Ok(())
-    }
-
     pub fn window(&self, position: u64, size: u64, skip: Skip) -> Window {
         let end = self.end.min(size);
         let start = self.start.saturating_add(skip.bytes()).min(end);
@@ -40,5 +29,16 @@ impl IteratorOptions {
             end,
             skipping: (position <= start && position < end).then(|| skip.items()),
         }
+    }
+
+    pub(crate) fn validate(&self) -> Result<()> {
+        if self.start > self.end {
+            return Err(Error::InvalidRange {
+                start: self.start,
+                end: self.end,
+            });
+        }
+
+        Ok(())
     }
 }

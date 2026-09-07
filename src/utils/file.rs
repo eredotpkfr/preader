@@ -6,6 +6,7 @@ use std::{
 
 use sha2::{Digest, Sha256};
 
+// Bytes read from the start of a file to compute its fingerprint
 const FINGERPRINT_SAMPLE_BYTES: u64 = 4096;
 
 pub fn fingerprint(path: &Path) -> Result<String> {

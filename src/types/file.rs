@@ -18,6 +18,28 @@ pub struct FileMetadata {
     pub fingerprint: String,
 }
 
+impl TryFrom<&Path> for FileMetadata {
+    type Error = Error;
+
+    fn try_from(path: &Path) -> Result<Self, Self::Error> {
+        let metadata = fs::metadata(path)?;
+
+        if !metadata.is_file() {
+            return Err(Error::NotAFile(path.to_path_buf()));
+        }
+
+        let seconds = metadata.modified()?.duration_since(UNIX_EPOCH)?.as_secs() as i64;
+        let mtime = DateTime::<Utc>::from_timestamp(seconds, 0);
+
+        Ok(Self {
+            path: path.to_path_buf(),
+            size: metadata.len(),
+            mtime: mtime.ok_or(Error::InvalidMtime(seconds))?,
+            fingerprint: fingerprint(path)?,
+        })
+    }
+}
+
 impl FileMetadata {
     pub(crate) fn compare(&self, current: &Self) -> Result<(), Mismatch> {
         if self.size != current.size {
@@ -42,27 +64,5 @@ impl FileMetadata {
         }
 
         Ok(())
-    }
-}
-
-impl TryFrom<&Path> for FileMetadata {
-    type Error = Error;
-
-    fn try_from(path: &Path) -> Result<Self, Self::Error> {
-        let metadata = fs::metadata(path)?;
-
-        if !metadata.is_file() {
-            return Err(Error::NotAFile(path.to_path_buf()));
-        }
-
-        let seconds = metadata.modified()?.duration_since(UNIX_EPOCH)?.as_secs() as i64;
-        let mtime = DateTime::<Utc>::from_timestamp(seconds, 0);
-
-        Ok(Self {
-            path: path.to_path_buf(),
-            size: metadata.len(),
-            mtime: mtime.ok_or(Error::InvalidMtime(seconds))?,
-            fingerprint: fingerprint(path)?,
-        })
     }
 }

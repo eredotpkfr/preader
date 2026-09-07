@@ -242,12 +242,18 @@ def test_clear_keeps_non_state_files(
 
 @pytest.mark.parametrize("state", EVERY_DEPTH, ids=["flat", "nested", "deep"])
 def test_save_creates_the_state_file_under_its_name(
-    reader: PReader, config: Config, tmp_file: Path, state: State
+    reader: PReader,
+    config: Config,
+    tmp_file: Path,
+    state: State,
+    read_state: Callable[..., Any],
 ) -> None:
-    path = reader.bytes(tmp_file, state=state).state.save()
+    saved = reader.bytes(tmp_file, state=state).state
+    path = saved.save()
 
     assert path == config.state_dir / f"{state}.state.json"
     assert path.is_file()
+    assert read_state(saved)
 
 
 def test_forward_slashes_resolve_to_the_native_name(

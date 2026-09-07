@@ -3,9 +3,7 @@ use std::path::{
     Path, PathBuf,
 };
 
-use crate::PathError;
-
-pub const DEFAULT_STATE_DIR: &str = "preader";
+use crate::{PathError, constants::DEFAULT_STATE_DIR};
 
 pub fn default_state_dir() -> PathBuf {
     scoped_join(&dirs::cache_dir().unwrap_or_default(), DEFAULT_STATE_DIR).unwrap()
@@ -33,14 +31,16 @@ pub fn scoped_join(root: &Path, unsafe_path: &str) -> Result<PathBuf, PathError>
 }
 
 pub fn has_no_symlinks(root: &Path, path: &Path) -> bool {
-    let (Ok(root), Ok(relative)) = (root.canonicalize(), path.strip_prefix(root)) else {
+    let (Ok(canonical), Ok(relative)) = (root.canonicalize(), path.strip_prefix(root)) else {
+        return true;
+    };
+    let scoped = canonical.join(relative);
+
+    let Some(existing) = scoped.ancestors().find(|ancestor| ancestor.exists()) else {
         return true;
     };
 
-    root.join(relative)
-        .ancestors()
-        .find(|ancestor| ancestor.exists())
-        .is_none_or(|existing| existing.canonicalize().is_ok_and(|real| real == existing))
+    existing.canonicalize().is_ok_and(|real| real == existing)
 }
 
 pub fn strip_extensions<'a>(name: &'a str, extension: &str) -> &'a str {

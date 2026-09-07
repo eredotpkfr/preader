@@ -3,15 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use regex::Regex;
-use walkdir::{IntoIter, WalkDir};
-
-use crate::{
-    Error, Result, State,
-    manager::{STATE_FILE_EXTENSION, StateManager},
-    types::config::reader::Config,
-    utils::path::has_no_symlinks,
-};
+use crate::{Error, Result, State, StateIterator, manager::StateManager, types::config::Config};
 
 #[derive(Debug)]
 pub struct StateRegistry {
@@ -28,7 +20,7 @@ impl From<&Config> for StateRegistry {
 
 impl StateRegistry {
     pub fn state_dir(&self) -> &Path {
-        &self.manager.config.state_dir
+        &self.manager.state_dir
     }
 
     pub fn names(&self) -> Result<StateIterator> {
@@ -47,11 +39,8 @@ impl StateRegistry {
         self.manager.load(name)
     }
 
-    pub fn find(&self, name: &str) -> Result<Option<State>> {
-        match self.load(name) {
-            Err(Error::NotFound(_)) => Ok(None),
-            found => found.map(Some),
-        }
+    pub fn find(&self, name: &str) -> Option<State> {
+        self.load(name).ok()
     }
 
     pub fn all(&self) -> Result<Vec<State>> {
@@ -81,46 +70,8 @@ impl StateRegistry {
     pub fn clear(&self) -> Result<()> {
         self.names()?.try_for_each(|name| self.delete(&name?))
     }
-}
 
-#[derive(Debug)]
-pub struct StateIterator {
-    state_dir: PathBuf,
-    entries: IntoIter,
-    pattern: Option<Regex>,
-}
-
-impl StateIterator {
-    pub(crate) fn new(dir: &Path, pattern: Option<&str>) -> Result<Self> {
-        fs::create_dir_all(dir)?;
-
-        Ok(Self {
-            state_dir: dir.to_path_buf(),
-            entries: WalkDir::new(dir).min_depth(1).into_iter(),
-            pattern: pattern.map(Regex::new).transpose()?,
-        })
-    }
-}
-
-impl Iterator for StateIterator {
-    type Item = Result<String>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let (root, pattern) = (&self.state_dir, self.pattern.as_ref());
-
-        self.entries.find_map(|entry| {
-            let entry = match entry {
-                Err(error) => return Some(Err(Error::Io(error.into()))),
-                Ok(entry) => entry,
-            };
-            let path = entry.path();
-            let file = path.strip_prefix(root).ok()?.to_str()?;
-            let name = file.strip_suffix(&format!(".{STATE_FILE_EXTENSION}"))?.to_owned();
-
-            (path.is_file()
-                && has_no_symlinks(root, path)
-                && pattern.is_none_or(|regex| regex.is_match(&name)))
-            .then_some(Ok(name))
-        })
+    pub(crate) fn manager(&self) -> &StateManager {
+        &self.manager
     }
 }
