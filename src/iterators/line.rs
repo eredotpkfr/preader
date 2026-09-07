@@ -6,7 +6,8 @@ use crate::{
     types::core::Reader,
 };
 
-pub(crate) const LINE_BOUNDARY: u8 = b'\n';
+// Byte a line iterator always splits on
+const LINE_BOUNDARY: u8 = b'\n';
 
 #[derive(Debug, Default)]
 pub struct Line {

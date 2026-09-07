@@ -1,5 +1,6 @@
 import hashlib
 import itertools
+import json
 import os
 
 from collections.abc import Callable, Iterable, Iterator
@@ -8,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from preader import Config, PReader, StateRegistry
+from preader import Config, PReader, State, StateRegistry
 
 FINGERPRINT_BYTES = 4096
 
@@ -165,3 +166,30 @@ def requires_pre_epoch_mtime(tmp_path: Path) -> None:
         os.utime(probe, (-86400, -86400))
     except (OSError, OverflowError):
         pytest.skip("a pre-epoch mtime cannot be set here")
+
+
+@pytest.fixture
+def read_state() -> Callable[[State], dict[str, Any]]:
+    def _read_state(state: State) -> dict[str, Any]:
+        payload: dict[str, Any] = json.loads(state.path().read_text())
+        metadata, stamps = state.file, state.timestamps
+
+        assert payload == {
+            "name": state.name,
+            "file": {
+                "path": str(metadata.path),
+                "size": metadata.size,
+                "mtime": int(metadata.mtime.timestamp()),
+                "fingerprint": metadata.fingerprint,
+            },
+            "position": state.position,
+            "timestamps": {
+                "created_at": int(stamps.created_at.timestamp()),
+                "updated_at": int(stamps.updated_at.timestamp()),
+            },
+            "_checksum": state.checksum(),
+        }
+
+        return payload
+
+    return _read_state

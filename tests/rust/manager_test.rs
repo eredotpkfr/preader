@@ -7,7 +7,7 @@ use std::{
 
 use preader::{
     Config, FileMetadata, STATE_FILE_EXTENSION, State, StateData, StateManager, TMP_FILE_EXTENSION,
-    Timestamps,
+    Timestamps, default_state_dir,
 };
 use rstest::{fixture, rstest};
 use sha2::{Digest, Sha256};
@@ -95,32 +95,38 @@ fn unverifiable_payload(name: &str) -> String {
 }
 
 #[rstest]
-fn name_matches_the_precomputed_digest(sandbox: Sandbox) {
+fn autoname_matches_the_precomputed_digest(sandbox: Sandbox) {
     assert_eq!(
-        sandbox.manager.name(Path::new(TEST_FILE_PATH)),
+        sandbox.manager.autoname(Path::new(TEST_FILE_PATH)),
         FILE_PATH_DIGEST
     );
 }
 
 #[rstest]
-fn name_hashes_the_path_bytes(sandbox: Sandbox) {
+fn autoname_hashes_the_path_bytes(sandbox: Sandbox) {
     let expected = hex::encode(Sha256::digest(TEST_FILE_PATH.as_bytes()));
 
-    assert_eq!(sandbox.manager.name(Path::new(TEST_FILE_PATH)), expected);
+    assert_eq!(
+        sandbox.manager.autoname(Path::new(TEST_FILE_PATH)),
+        expected
+    );
 }
 
 #[rstest]
-fn name_is_stable_for_the_same_path(sandbox: Sandbox) {
+fn autoname_is_stable_for_the_same_path(sandbox: Sandbox) {
     let path = Path::new(TEST_FILE_PATH);
 
-    assert_eq!(sandbox.manager.name(path), sandbox.manager.name(path));
+    assert_eq!(
+        sandbox.manager.autoname(path),
+        sandbox.manager.autoname(path)
+    );
 }
 
 #[rstest]
-fn name_differs_between_paths(sandbox: Sandbox) {
+fn autoname_differs_between_paths(sandbox: Sandbox) {
     assert_ne!(
-        sandbox.manager.name(Path::new("/tmp/data-1.bin")),
-        sandbox.manager.name(Path::new("/tmp/data-2.bin"))
+        sandbox.manager.autoname(Path::new("/tmp/data-1.bin")),
+        sandbox.manager.autoname(Path::new("/tmp/data-2.bin"))
     );
 }
 
@@ -128,10 +134,10 @@ fn name_differs_between_paths(sandbox: Sandbox) {
 #[case::current_dir_component(TEST_FILE_PATH, "/tmp/./data.bin")]
 #[case::trailing_slash("/tmp/data", "/tmp/data/")]
 #[case::relative_and_absolute("data.bin", "/tmp/data.bin")]
-fn name_does_not_normalize_the_path(sandbox: Sandbox, #[case] left: &str, #[case] right: &str) {
+fn autoname_does_not_normalize_the_path(sandbox: Sandbox, #[case] left: &str, #[case] right: &str) {
     assert_ne!(
-        sandbox.manager.name(Path::new(left)),
-        sandbox.manager.name(Path::new(right))
+        sandbox.manager.autoname(Path::new(left)),
+        sandbox.manager.autoname(Path::new(right))
     );
 }
 
@@ -140,8 +146,8 @@ fn name_does_not_normalize_the_path(sandbox: Sandbox, #[case] left: &str, #[case
 #[case::relative("data.bin")]
 #[case::empty("")]
 #[case::directory("/tmp/")]
-fn name_is_a_lowercase_hex_digest(sandbox: Sandbox, #[case] file: &str) {
-    let name = sandbox.manager.name(Path::new(file));
+fn autoname_is_a_lowercase_hex_digest(sandbox: Sandbox, #[case] file: &str) {
+    let name = sandbox.manager.autoname(Path::new(file));
 
     assert_eq!(name.len(), 64);
     assert!(name.chars().all(|c| c.is_ascii_hexdigit() && !c.is_uppercase()));
@@ -149,19 +155,12 @@ fn name_is_a_lowercase_hex_digest(sandbox: Sandbox, #[case] file: &str) {
 
 #[cfg(unix)]
 #[rstest]
-fn name_hashes_non_utf8_paths(sandbox: Sandbox) {
+fn autoname_hashes_non_utf8_paths(sandbox: Sandbox) {
     let path = Path::new(OsStr::from_bytes(b"/tmp/data-\xff\xfe.bin"));
-    let name = sandbox.manager.name(path);
+    let name = sandbox.manager.autoname(path);
 
     assert_eq!(name.len(), 64);
-    assert_ne!(name, sandbox.manager.name(Path::new("/tmp/data.bin")));
-}
-
-#[rstest]
-fn name_ignores_the_config(#[with(false)] sandbox: Sandbox, #[from(sandbox)] other: Sandbox) {
-    let path = Path::new(TEST_FILE_PATH);
-
-    assert_eq!(sandbox.manager.name(path), other.manager.name(path));
+    assert_ne!(name, sandbox.manager.autoname(Path::new("/tmp/data.bin")));
 }
 
 #[rstest]
@@ -449,4 +448,13 @@ fn from_config_carries_the_state_dir(sandbox: Sandbox) {
     let path = sandbox.manager.path(TEST_STATE_NAME).unwrap();
 
     assert_eq!(path.parent().unwrap(), sandbox.state_dir());
+}
+
+#[test]
+fn default_agrees_with_the_default_config() {
+    let derived = StateManager::default().path(TEST_STATE_NAME).unwrap();
+    let configured = StateManager::from(&Config::default()).path(TEST_STATE_NAME).unwrap();
+
+    assert_eq!(derived, configured);
+    assert_eq!(derived.parent().unwrap(), default_state_dir());
 }

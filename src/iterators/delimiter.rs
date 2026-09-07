@@ -2,11 +2,10 @@ use std::{io::BufRead, ops::Range};
 
 use crate::{
     DelimiterIterator, Result, Skip,
+    constants::DEFAULT_DELIMITER,
     interfaces::{iterator::IteratorRead, segmented::Segmented, skippable::Skippable},
     types::core::Reader,
 };
-
-pub const DEFAULT_DELIMITER: u8 = b',';
 
 #[derive(Debug)]
 pub struct Delimiter {

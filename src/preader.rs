@@ -1,15 +1,29 @@
 use std::path::PathBuf;
 
-use derive_more::From;
-
 use crate::{
     ByteBuilder, ChunkBuilder, Config, DelimiterBuilder, LineBuilder, StateRegistry,
     bases::builder::PReaderIteratorBuilder,
 };
 
-#[derive(Debug, Default, From)]
+#[derive(Debug)]
 pub struct PReader {
-    pub config: Config,
+    config: Config,
+    registry: StateRegistry,
+}
+
+impl Default for PReader {
+    fn default() -> Self {
+        Self::from(Config::default())
+    }
+}
+
+impl From<Config> for PReader {
+    fn from(config: Config) -> Self {
+        Self {
+            registry: (&config).into(),
+            config,
+        }
+    }
 }
 
 impl PReader {
@@ -17,12 +31,12 @@ impl PReader {
         Self::default()
     }
 
-    fn builder<I: Default>(&self, file: impl Into<PathBuf>) -> PReaderIteratorBuilder<'_, I> {
-        PReaderIteratorBuilder::new(&self.config, file)
+    pub fn config(&self) -> &Config {
+        &self.config
     }
 
-    pub fn states(&self) -> StateRegistry {
-        StateRegistry::from(&self.config)
+    pub fn states(&self) -> &StateRegistry {
+        &self.registry
     }
 
     pub fn bytes(&self, file: impl Into<PathBuf>) -> ByteBuilder<'_> {
@@ -39,5 +53,9 @@ impl PReader {
 
     pub fn delimiter(&self, file: impl Into<PathBuf>) -> DelimiterBuilder<'_> {
         self.builder(file)
+    }
+
+    fn builder<I: Default>(&self, file: impl Into<PathBuf>) -> PReaderIteratorBuilder<'_, I> {
+        PReaderIteratorBuilder::new(&self.config, self.registry.manager(), file)
     }
 }

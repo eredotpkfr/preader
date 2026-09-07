@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use preader::{AutoSave, Config, DEFAULT_VERIFY_STATE, StateManagerConfig, default_state_dir};
+use preader::{AutoSave, Config};
 use rstest::{fixture, rstest};
 
 #[fixture]
@@ -33,42 +33,11 @@ fn auto_save_collapses_the_config_pair(
 }
 
 #[rstest]
-fn manager_config_carries_its_fields(config: Config) {
-    let manager = StateManagerConfig::from(&config);
-
-    assert_eq!(manager.state_dir, config.state_dir);
-    assert_eq!(manager.verify_state, config.verify_state);
-}
-
-#[rstest]
-fn auto_load_state_reaches_neither_sub_config(config: Config) {
+fn auto_load_state_does_not_reach_the_autosave_policy(config: Config) {
     let mut flipped = config.clone();
     flipped.auto_load_state = !config.auto_load_state;
 
     assert_eq!(AutoSave::from(&config), AutoSave::from(&flipped));
-
-    let manager = StateManagerConfig::from(&config);
-    let flipped_manager = StateManagerConfig::from(&flipped);
-
-    assert_eq!(manager.state_dir, flipped_manager.state_dir);
-    assert_eq!(manager.verify_state, flipped_manager.verify_state);
-}
-
-#[rstest]
-fn manager_config_default_uses_the_crate_defaults() {
-    let manager = StateManagerConfig::default();
-
-    assert_eq!(manager.state_dir, default_state_dir());
-    assert_eq!(manager.verify_state, DEFAULT_VERIFY_STATE);
-}
-
-#[rstest]
-fn manager_config_default_and_conversion_agree() {
-    let from_config = StateManagerConfig::from(&Config::default());
-    let standalone = StateManagerConfig::default();
-
-    assert_eq!(from_config.state_dir, standalone.state_dir);
-    assert_eq!(from_config.verify_state, standalone.verify_state);
 }
 
 #[rstest]

@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+// Advice appended to every mismatch that resyncing the state can resolve
 const RESYNC_HINT: &str = "(call state.resync(file) if this is expected)";
 
 #[derive(Debug, thiserror::Error)]

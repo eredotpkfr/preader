@@ -10,15 +10,16 @@ use crate::{
 pub struct PReaderIterator<I> {
     pub(crate) reader: Reader,
     pub(crate) progress: Progress,
-    pub(crate) autosave: AutoSave,
-    pub(crate) failed: bool,
     pub(crate) state: State,
+    pub(crate) autosave: AutoSave,
+    pub(crate) saved: u64,
+    pub(crate) failed: bool,
     pub(crate) inner: I,
 }
 
 impl<I> PReaderIterator<I> {
-    pub fn state(&self) -> &State {
-        &self.state
+    pub fn state(&mut self) -> &mut State {
+        &mut self.state
     }
 
     pub(crate) fn done(&self) -> bool {
@@ -49,24 +50,14 @@ impl<I> PReaderIterator<I> {
     }
 
     fn save(&mut self, threshold: u64) -> Result<()> {
-        let pending = self.state.position - self.state.manager.last_saved_position;
+        let pending = self.state.position - self.saved;
 
         if pending > 0 && pending >= threshold {
             self.state.save()?;
+            self.saved = self.state.position;
         }
 
         Ok(())
-    }
-}
-
-impl<I> Iterator for PReaderIterator<I>
-where
-    Self: IteratorRead,
-{
-    type Item = Result<<Self as IteratorRead>::Owned>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.read().map(|item| item.map(Into::into)).transpose()
     }
 }
 
@@ -95,6 +86,17 @@ impl<I: Segmented> PReaderIterator<I> {
                 return Ok(Some(body));
             }
         }
+    }
+}
+
+impl<I> Iterator for PReaderIterator<I>
+where
+    Self: IteratorRead,
+{
+    type Item = Result<<Self as IteratorRead>::Owned>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.read().map(|item| item.map(Into::into)).transpose()
     }
 }
 

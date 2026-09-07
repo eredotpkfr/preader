@@ -3,8 +3,8 @@ use std::path::Path;
 use derive_more::From;
 
 use crate::{
-    Mismatch, Result, State, StateManager, manager::STATE_FILE_EXTENSION,
-    types::config::reader::Config, utils::path::path_stem,
+    Mismatch, Result, State, constants::STATE_FILE_EXTENSION, manager::StateManager,
+    utils::path::path_stem,
 };
 
 #[derive(Debug, Default, From)]
@@ -13,8 +13,8 @@ pub enum StateInput {
     Auto,
     #[from(&str, &String, String)]
     Name(String),
-    #[from]
-    Object(State),
+    #[from(forward)]
+    Object(Box<State>),
 }
 
 impl<T: Into<StateInput>> From<Option<T>> for StateInput {
@@ -24,13 +24,11 @@ impl<T: Into<StateInput>> From<Option<T>> for StateInput {
 }
 
 impl StateInput {
-    pub(crate) fn resolve(self, config: &Config, file: &Path) -> Result<State> {
-        let manager = StateManager::from(config);
-
+    pub(crate) fn resolve(self, manager: &StateManager, file: &Path) -> Result<State> {
         let name = match self {
             Self::Object(state) => {
-                if !config.verify_state {
-                    return Ok(state);
+                if !manager.verify_state {
+                    return Ok(*state);
                 }
 
                 if state.file.path != file {
@@ -43,19 +41,19 @@ impl StateInput {
 
                 state.verify()?;
 
-                return Ok(state);
+                return Ok(*state);
             }
             Self::Name(name) => path_stem(&name, STATE_FILE_EXTENSION),
-            Self::Auto => manager.name(file),
+            Self::Auto => manager.autoname(file),
         };
 
-        if config.auto_load_state
+        if manager.auto_load_state
             && let Ok(state) = manager.load(&name)
             && state.file.path == file
         {
             return Ok(state);
         }
 
-        State::new(config, file, name)
+        State::new(manager.clone(), file, name)
     }
 }

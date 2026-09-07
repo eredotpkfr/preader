@@ -2,11 +2,10 @@ use std::io::{ErrorKind, Read};
 
 use crate::{
     ChunkIterator, Result, Skip,
+    constants::DEFAULT_CHUNK_SIZE,
     interfaces::{iterator::IteratorRead, skippable::Skippable},
     types::core::Reader,
 };
-
-pub const DEFAULT_CHUNK_SIZE: usize = 1024;
 
 #[derive(Debug)]
 pub struct Chunk {
