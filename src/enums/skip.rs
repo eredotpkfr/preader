@@ -5,17 +5,10 @@ pub enum Skip {
 }
 
 impl Skip {
-    pub(crate) fn bytes(self) -> u64 {
+    pub(crate) fn counts(self) -> (u64, u64) {
         match self {
-            Self::Bytes(bytes) => bytes,
-            Self::Items { .. } => 0,
-        }
-    }
-
-    pub(crate) fn items(self) -> u64 {
-        match self {
-            Self::Bytes(_) => 0,
-            Self::Items { count, .. } => count,
+            Self::Bytes(bytes) => (bytes, 0),
+            Self::Items { count, .. } => (0, count),
         }
     }
 

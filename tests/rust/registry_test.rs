@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, path::PathBuf};
 
 use preader::{Config, Error, IteratorBuild, PReader, State};
 use rstest::{fixture, rstest};
@@ -15,13 +15,14 @@ const UNSAFE_NAMES: [&str; 4] = ["", "../escape", "/absolute", "."];
 
 struct Sandbox {
     reader: PReader,
+    file: PathBuf,
     tmp_dir: TempDir,
 }
 
 impl Sandbox {
     fn save(&self, name: &str) -> State {
-        let path = write(&self.tmp_dir, "data.bin", b"abcdef");
-        let mut state = self.reader.bytes(&path).state(name).build().unwrap().state().clone();
+        let build = self.reader.bytes(&self.file).state(name).build();
+        let mut state = build.unwrap().state().clone();
 
         state.save().unwrap();
 
@@ -36,8 +37,13 @@ impl Sandbox {
 #[fixture]
 fn sandbox(tmp_dir: TempDir) -> Sandbox {
     let reader = reader(&tmp_dir, Config::default());
+    let file = write(&tmp_dir, "data.bin", b"abcdef");
 
-    Sandbox { reader, tmp_dir }
+    Sandbox {
+        reader,
+        file,
+        tmp_dir,
+    }
 }
 
 #[rstest]
@@ -188,15 +194,15 @@ fn load_fails_with_missing_for_an_unknown_state(sandbox: Sandbox) {
 }
 
 #[rstest]
-#[case("")]
-#[case("../escape")]
-#[case("/absolute")]
-#[case(".")]
-fn load_fails_with_missing_for_an_unsafe_name(sandbox: Sandbox, #[case] name: &str) {
+#[case::traversal("../escape", "path escapes root")]
+#[case::absolute("/absolute", "path escapes root")]
+#[case::empty("", "path must not be empty")]
+#[case::current_dir(".", "path must not be empty")]
+fn load_fails_when_the_name_is_unsafe(sandbox: Sandbox, #[case] name: &str, #[case] message: &str) {
     let error = sandbox.load_error(name);
 
     assert!(
-        matches!(&error, Error::NotFound(reported) if reported == name),
+        error.to_string().contains(message),
         "name={name:?} produced {error}"
     );
 }
@@ -226,15 +232,19 @@ fn delete_removes_the_state_file(sandbox: Sandbox) {
 }
 
 #[rstest]
-#[case("")]
-#[case("../escape")]
-#[case("/absolute")]
-#[case(".")]
-fn delete_fails_with_missing_for_an_unsafe_name(sandbox: Sandbox, #[case] name: &str) {
-    let error = sandbox.reader.states().delete(name).err().unwrap();
+#[case::traversal("../escape", "path escapes root")]
+#[case::absolute("/absolute", "path escapes root")]
+#[case::empty("", "path must not be empty")]
+#[case::current_dir(".", "path must not be empty")]
+fn delete_fails_when_the_name_is_unsafe(
+    sandbox: Sandbox,
+    #[case] name: &str,
+    #[case] message: &str,
+) {
+    let error = sandbox.reader.states().delete(name).unwrap_err();
 
     assert!(
-        matches!(&error, Error::NotFound(reported) if reported == name),
+        error.to_string().contains(message),
         "name={name:?} produced {error}"
     );
 }
@@ -294,8 +304,6 @@ fn find_returns_none_for_a_corrupt_state(sandbox: Sandbox) {
         Error::Serde(_)
     ));
 }
-
-// ───────────── parity with the recorded Python contract ─────────────
 
 fn nested(parts: &[&str]) -> String {
     parts.iter().collect::<std::path::PathBuf>().to_string_lossy().into_owned()
@@ -364,8 +372,6 @@ fn names_ignores_a_non_utf8_state(sandbox: Sandbox) {
 
     let ghost = OsStr::from_bytes(b"ghost-\xff.state.json");
 
-    // Some filesystems reject a non-UTF-8 name outright; the contract only
-    // applies where one can be created.
     if fs::write(sandbox.reader.states().state_dir().join(ghost), "{}").is_err() {
         return;
     }

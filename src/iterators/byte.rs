@@ -22,7 +22,7 @@ impl IteratorRead for ByteIterator {
         };
 
         self.progress.count();
-        self.advance(1)?;
+        self.advance(1);
 
         Ok(Some(byte))
     }

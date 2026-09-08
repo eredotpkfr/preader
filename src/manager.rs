@@ -8,7 +8,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     Error, PathError, Result, State,
-    constants::{STATE_FILE_EXTENSION, TMP_FILE_EXTENSION},
+    constants::{STATE_FILE_EXTENSION_WITHOUT_DOT, TMP_FILE_EXTENSION},
     types::config::Config,
     utils::path::{has_no_symlinks, path_stem, scoped_join},
 };
@@ -42,13 +42,16 @@ impl StateManager {
     }
 
     pub fn path(&self, name: &str) -> Result<PathBuf> {
-        self.locate(name, &[STATE_FILE_EXTENSION])
+        self.locate(name, &[STATE_FILE_EXTENSION_WITHOUT_DOT])
     }
 
     pub fn tmp(&self, name: &str) -> Result<PathBuf> {
         let stamp = Utc::now().timestamp_nanos_opt().unwrap_or(0).to_string();
 
-        self.locate(name, &[&stamp, STATE_FILE_EXTENSION, TMP_FILE_EXTENSION])
+        self.locate(
+            name,
+            &[&stamp, STATE_FILE_EXTENSION_WITHOUT_DOT, TMP_FILE_EXTENSION],
+        )
     }
 
     pub fn load(&self, name: &str) -> Result<State> {
@@ -69,7 +72,10 @@ impl StateManager {
     }
 
     fn locate(&self, name: &str, extensions: &[&str]) -> Result<PathBuf> {
-        let mut path = scoped_join(&self.state_dir, &path_stem(name, STATE_FILE_EXTENSION))?;
+        let mut path = scoped_join(
+            &self.state_dir,
+            &path_stem(name, STATE_FILE_EXTENSION_WITHOUT_DOT),
+        )?;
 
         for extension in extensions {
             path = path.with_added_extension(extension);

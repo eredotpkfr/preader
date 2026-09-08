@@ -25,8 +25,6 @@ const ASCII: [&[u8]; 5] = [
 
 const SPLIT: [&[u8]; 5] = [b"", b"a,b,,c,", b"a,b,,c", b",,,", b"no-delimiter-here"];
 
-// Independent re-derivation of the documented window: the reader opens at
-// `start + skipped_bytes` clamped to `end`, and `end` is clamped to the file.
 fn window(size: u64, start: u64, end: u64, bytes: u64) -> (u64, u64) {
     let end = end.min(size);
 

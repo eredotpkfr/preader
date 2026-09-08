@@ -55,7 +55,6 @@ fn a_file_argument_accepts_every_ownership_shape(tmp_dir: TempDir) {
 
     assert!(shapes.iter().all(|path| *path == canonical));
 
-    // an owned PathBuf moves rather than being cloned
     let mut moved = reader.bytes(owned).build().unwrap();
 
     assert_eq!(moved.read().unwrap(), Some(b'f'));
@@ -82,14 +81,12 @@ fn a_state_argument_accepts_every_name_shape(tmp_dir: TempDir) {
 
     assert!(named.iter().all(|state| state.name == TEST_STATE_NAME));
 
-    // None falls back to the auto-derived name, which is a digest of the path
     let auto = reader.bytes(&path).state(None::<&str>).build().unwrap().state().clone();
     let omitted = reader.bytes(&path).build().unwrap().state().clone();
 
     assert_eq!(auto.name, omitted.name);
     assert_ne!(auto.name, TEST_STATE_NAME);
 
-    // a State object round-trips through the same setter
     let mut resumed = reader.bytes(&path).state(omitted).build().unwrap();
 
     assert_eq!(resumed.state().name, auto.name);
@@ -99,8 +96,6 @@ fn a_state_argument_accepts_every_name_shape(tmp_dir: TempDir) {
 fn new_matches_the_default_config() {
     assert_eq!(*PReader::new().config(), Config::default());
 }
-
-// ───────────── parity with the recorded Python contract ─────────────
 
 #[rstest]
 fn a_symlink_is_resolved_to_its_target(tmp_dir: TempDir) {

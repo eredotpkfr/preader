@@ -147,8 +147,6 @@ fn verify_reports_the_checksum_before_the_file_checks(tmp_dir: TempDir) {
     );
 }
 
-// ───────────── parity with the recorded Python contract ─────────────
-
 const LARGE: usize = 2560;
 const LINE: &[u8] = b"foo\n";
 
@@ -1077,9 +1075,6 @@ fn a_reloaded_state_matches_the_saved_one_to_the_second(tmp_dir: TempDir) {
     let reloaded = reader.states().load(TEST_STATE_NAME).unwrap();
     let truncated = |stamp: DateTime<chrono::Utc>| stamp.with_nanosecond(0).unwrap();
 
-    // The payload stores whole seconds, so the round trip drops the sub-second
-    // part; the checksum still agrees because the digest is computed over the
-    // same truncated values on both sides.
     assert_eq!(reloaded.name, saved.name);
     assert_eq!(reloaded.position, saved.position);
     assert_eq!(reloaded.file, saved.file);
@@ -1127,8 +1122,6 @@ fn the_saved_payload_keeps_the_checksum_last(tmp_dir: TempDir) {
     let path = write(&tmp_dir, "data.bin", b"foo\n");
     let mut bytes = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap();
     let payload = bytes.state().save().unwrap();
-    // The raw text is read rather than a parsed value: a parsed map would only
-    // report the file order while serde_json keeps insertion order.
     let text = fs::read_to_string(&payload).unwrap();
     let at = |key: &str| text.find(key).unwrap_or_else(|| panic!("{key} is missing"));
 

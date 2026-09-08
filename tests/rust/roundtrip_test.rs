@@ -25,7 +25,6 @@ const WORDS: [&str; 12] = [
     ",",
 ];
 
-// A deterministic stream, so a failure reproduces from the seed alone.
 struct Rng(u64);
 
 impl Rng {

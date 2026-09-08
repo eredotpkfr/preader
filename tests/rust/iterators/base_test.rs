@@ -107,9 +107,6 @@ fn reading_past_exhaustion_does_not_resave(tmp_dir: TempDir) {
         CONTENT.len() as u64
     );
 
-    // Idempotence comes from the pending delta reaching zero, not from a latch.
-    // Deleting the file makes a second write observable: the timestamps are stored
-    // at one-second resolution, so comparing them would prove nothing.
     reader.states().delete(TEST_STATE_NAME).unwrap();
 
     assert!(bytes.read().unwrap().is_none());
@@ -127,7 +124,6 @@ fn a_late_final_save_still_flushes_the_tail(tmp_dir: TempDir) {
     let path = write(&tmp_dir, "data.bin", CONTENT);
     let mut bytes = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap();
 
-    // The threshold never fires, so the whole run depends on the final save.
     for _ in 0..3 {
         bytes.read().unwrap();
     }
@@ -302,11 +298,6 @@ fn a_resumed_read_floors_the_last_saved_position(tmp_dir: TempDir) {
         }
     }
 
-    // Resuming at 7 with a threshold of 3 floors the baseline to 6, so the first
-    // save lands at 9 rather than at 10.
-    // Resuming at 7 with a threshold of 3 floors the baseline to 6, so the first
-    // save lands at 9 rather than at 10. The closing save happens inside the
-    // read() that reports exhaustion, so the loop never observes it.
     assert_eq!(saved, [7, 9, 12, 15, 18, 21, 24]);
     assert_eq!(
         resumed.states().load(TEST_STATE_NAME).unwrap().position,
@@ -315,35 +306,160 @@ fn a_resumed_read_floors_the_last_saved_position(tmp_dir: TempDir) {
 }
 
 #[rstest]
-fn a_failing_final_save_is_reported_once(tmp_dir: TempDir) {
+fn a_failing_threshold_save_is_retried(tmp_dir: TempDir) {
+    let config = Config {
+        auto_save_state: true,
+        auto_save_state_bytes: 1,
+        ..Config::default()
+    };
+    let reader = reader(&tmp_dir, config);
+    let path = write(&tmp_dir, "data.bin", CONTENT);
+
+    fs::write(tmp_dir.path().join("states"), b"not a directory").unwrap();
+
+    let mut bytes = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap();
+
+    for expected in &CONTENT[..3] {
+        assert_eq!(bytes.read().unwrap(), Some(*expected));
+
+        let error = bytes.error().unwrap();
+
+        assert!(matches!(error, Error::Io(_)), "{error}");
+    }
+
+    fs::remove_file(tmp_dir.path().join("states")).unwrap();
+
+    bytes.read().unwrap();
+
+    assert!(bytes.error().is_none());
+    assert_eq!(reader.states().load(TEST_STATE_NAME).unwrap().position, 4);
+}
+
+#[rstest]
+fn a_failing_threshold_save_keeps_every_item(tmp_dir: TempDir) {
+    let config = Config {
+        auto_save_state: true,
+        auto_save_state_bytes: 1,
+        ..Config::default()
+    };
+    let reader = reader(&tmp_dir, config);
+    let path = write(&tmp_dir, "data.bin", CONTENT);
+    let mut bytes = reader.bytes(&path).state("../../escape").build().unwrap();
+    let mut yielded = Vec::new();
+
+    while let Some(byte) = bytes.read().unwrap() {
+        yielded.push(byte);
+    }
+
+    assert_eq!(yielded, CONTENT);
+    assert!(bytes.error().is_some());
+}
+
+#[rstest]
+fn a_recovered_save_clears_the_error(tmp_dir: TempDir) {
+    let config = Config {
+        auto_save_state: true,
+        auto_save_state_bytes: 1,
+        ..Config::default()
+    };
+    let reader = reader(&tmp_dir, config);
+    let path = write(&tmp_dir, "data.bin", CONTENT);
+
+    fs::write(tmp_dir.path().join("states"), b"not a directory").unwrap();
+
+    let mut bytes = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap();
+
+    bytes.read().unwrap();
+
+    fs::remove_file(tmp_dir.path().join("states")).unwrap();
+
+    bytes.read().unwrap();
+
+    assert!(bytes.error().is_none());
+    assert_eq!(reader.states().load(TEST_STATE_NAME).unwrap().position, 2);
+}
+
+#[rstest]
+fn a_failing_threshold_save_is_not_retried_per_item(tmp_dir: TempDir) {
+    let config = Config {
+        auto_save_state: true,
+        auto_save_state_bytes: 5,
+        ..Config::default()
+    };
+    let reader = reader(&tmp_dir, config);
+    let path = write(&tmp_dir, "data.bin", CONTENT);
+
+    fs::write(tmp_dir.path().join("states"), b"not a directory").unwrap();
+
+    let mut bytes = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap();
+    let mut attempts = 0;
+
+    while bytes.read().unwrap().is_some() {
+        attempts += usize::from(bytes.error().is_some());
+    }
+
+    assert_eq!(attempts, CONTENT.len() / 5);
+}
+
+#[rstest]
+fn a_failing_final_save_does_not_block_termination(tmp_dir: TempDir) {
     let config = Config {
         auto_save_state: true,
         ..Config::default()
     };
     let reader = reader(&tmp_dir, config);
     let path = write(&tmp_dir, "data.bin", b"abc");
+    let mut bytes = reader.bytes(&path).state("../../escape").build().unwrap();
     let mut yielded = 0;
-    let mut errors = 0;
 
-    // A `for` loop that does not bail on the first error must still terminate:
-    // retrying the final save would yield the same error forever.
-    for item in reader.bytes(&path).state("../../escape").build().unwrap() {
-        match item {
-            Ok(_) => yielded += 1,
-            Err(error) => {
-                errors += 1;
+    for item in bytes.by_ref() {
+        item.unwrap();
+        yielded += 1;
 
-                assert!(error.to_string().contains("path escapes root"));
-            }
-        }
-
-        assert!(
-            yielded + errors <= 4,
-            "the iterator kept retrying the final save"
-        );
+        assert!(yielded <= 3, "the iterator kept retrying the final save");
     }
 
-    assert_eq!((yielded, errors), (3, 1));
+    assert_eq!(yielded, 3);
+
+    let error = bytes.error().unwrap();
+
+    assert!(error.to_string().contains("path escapes root"), "{error}");
+}
+
+#[rstest]
+fn error_clears_after_it_is_taken(tmp_dir: TempDir) {
+    let config = Config {
+        auto_save_state: true,
+        auto_save_state_bytes: 1,
+        ..Config::default()
+    };
+    let reader = reader(&tmp_dir, config);
+    let path = write(&tmp_dir, "data.bin", CONTENT);
+    let mut bytes = reader.bytes(&path).state("../../escape").build().unwrap();
+
+    bytes.read().unwrap();
+
+    assert!(bytes.error().is_some());
+    assert!(bytes.error().is_none());
+}
+
+#[rstest]
+fn a_read_error_outlives_a_failing_save(tmp_dir: TempDir) {
+    let config = Config {
+        auto_save_state: true,
+        auto_save_state_bytes: 1,
+        ..Config::default()
+    };
+    let reader = reader(&tmp_dir, config);
+    let path = write(&tmp_dir, "data.txt", b"foo\n\xff\xfe\n");
+    let mut lines = reader.lines(&path).state("../../escape").build().unwrap();
+
+    lines.read().unwrap();
+
+    let error = lines.read().unwrap_err();
+
+    assert!(matches!(error, Error::Io(_)), "{error}");
+    assert!(lines.error().is_some());
 }
 
 #[rstest]
@@ -369,7 +485,5 @@ fn a_manual_save_does_not_reset_the_autosave_baseline(tmp_dir: TempDir) {
         bytes.read().unwrap();
     }
 
-    // The baseline is still zero, so the automatic write lands at ten rather
-    // than at fifteen, matching the clone the Python getter used to hand out.
     assert_eq!(reader.states().load(TEST_STATE_NAME).unwrap().position, 10);
 }
