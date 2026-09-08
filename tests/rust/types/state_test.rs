@@ -150,6 +150,7 @@ fn verify_reports_the_checksum_before_the_file_checks(tmp_dir: TempDir) {
 // ───────────── parity with the recorded Python contract ─────────────
 
 const LARGE: usize = 2560;
+const LINE: &[u8] = b"foo\n";
 
 fn large(tmp_dir: &TempDir) -> PathBuf {
     write(tmp_dir, "large.bin", &b"foo\n".repeat(LARGE))
@@ -425,14 +426,14 @@ fn resync_updates_the_file_metadata(tmp_dir: TempDir) {
     let reader = reader(&tmp_dir, Config::default());
     let path = write(&tmp_dir, "data.bin", b"foo\n");
     let state = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap().state().clone();
-    let moved = write(&tmp_dir, "moved.bin", b"foobar\n");
+    let moved = write(&tmp_dir, "moved.bin", b"foo\nbar");
     let resynced = state.resync(&moved).unwrap();
 
     assert_eq!(resynced.file.path, moved.canonicalize().unwrap());
     assert_eq!(resynced.file.size, 7);
     assert_eq!(
         resynced.file.fingerprint,
-        preader::fingerprint(&moved).unwrap()
+        preader::fingerprint(&moved, preader::FINGERPRINT_SAMPLE_BYTES).unwrap()
     );
 }
 
@@ -451,6 +452,7 @@ fn resync_preserves_the_name_position_and_created_at(tmp_dir: TempDir) {
     assert_eq!(resynced.name, state.name);
     assert_eq!(resynced.position, state.position);
     assert_eq!(resynced.timestamps.created_at, state.timestamps.created_at);
+    assert!(resynced.timestamps.updated_at > state.timestamps.updated_at);
 }
 
 #[rstest]
@@ -465,30 +467,338 @@ fn resync_does_not_mutate_the_original(tmp_dir: TempDir) {
     assert_eq!(state.file.path, path.canonicalize().unwrap());
 }
 
+fn recorded(tmp_dir: &TempDir, content: &[u8], read: u64) -> State {
+    let reader = reader(tmp_dir, Config::default());
+    let path = write(tmp_dir, "tracked.bin", content);
+    let mut bytes = reader.bytes(&path).state(TEST_STATE_NAME).limit(read).build().unwrap();
+
+    while bytes.read().unwrap().is_some() {}
+
+    bytes.state().clone()
+}
+
 #[rstest]
-fn resync_keeps_a_position_past_the_new_file_end(tmp_dir: TempDir) {
-    let reader = reader(&tmp_dir, Config::default());
-    let path = write(&tmp_dir, "big.bin", &b"x".repeat(100));
+#[case::truncated_inside_the_window(LINE, 25, LINE, 2)]
+#[case::truncated_inside_a_wide_window(LINE, 2560, LINE, 250)]
+#[case::truncated_with_a_changed_prefix(LINE, 2560, b"bar\n", 1250)]
+#[case::grown_with_a_changed_prefix(LINE, 25, b"bar\n", 27)]
+#[case::replaced_at_the_same_size(LINE, 25, b"bar\n", 25)]
+#[case::emptied(LINE, 25, b"", 0)]
+#[case::truncated_at_the_window(b"a", 4096, b"a", 4095)]
+fn resync_rejects_a_lost_prefix(
+    tmp_dir: TempDir,
+    #[case] recorded_unit: &[u8],
+    #[case] before: usize,
+    #[case] unit: &[u8],
+    #[case] after: usize,
+) {
+    let saved = recorded(&tmp_dir, &recorded_unit.repeat(before), 5);
+    let path = write(&tmp_dir, "tracked.bin", &unit.repeat(after));
+    let error = saved.resync(&path).err().unwrap();
+
+    assert!(
+        error.to_string().contains("file content differs from the tracked file"),
+        "{error}"
+    );
+    assert!(
+        error.to_string().contains("read it under a new state to start over"),
+        "{error}"
+    );
+}
+
+#[rstest]
+#[case::appended(25, b"more")]
+#[case::unchanged(25, b"")]
+#[case::grown_past_a_wide_window(2560, b"more")]
+fn resync_accepts_a_kept_prefix(tmp_dir: TempDir, #[case] count: usize, #[case] extra: &[u8]) {
+    let before = LINE.repeat(count);
+    let after = [&before[..], extra].concat();
+    let saved = recorded(&tmp_dir, &before, 5);
+    let path = write(&tmp_dir, "tracked.bin", &after);
+    let resynced = saved.resync(&path).unwrap();
+
+    assert_eq!(resynced.position, 5);
+    assert_eq!(resynced.file.size, after.len() as u64);
+    assert!(resynced.position <= resynced.file.size);
+    resynced.verify().unwrap();
+}
+
+#[rstest]
+fn resync_clamps_the_position_to_the_new_size(tmp_dir: TempDir) {
+    let saved = recorded(&tmp_dir, &LINE.repeat(2560), 6000);
+    let path = write(&tmp_dir, "tracked.bin", &LINE.repeat(2560));
+
+    fs::OpenOptions::new().write(true).open(&path).unwrap().set_len(4500).unwrap();
+
+    let resynced = saved.resync(&path).unwrap();
+
+    assert_eq!(saved.position, 6000);
+    assert_eq!(resynced.position, 4500);
+    assert_eq!(resynced.percent(), 100.0);
+    resynced.verify().unwrap();
+}
+
+#[rstest]
+fn resync_ignores_changes_past_the_fingerprint_window(tmp_dir: TempDir) {
+    let mut after = LINE.repeat(2560);
+
+    after[4500] = b'\xff';
+
+    let saved = recorded(&tmp_dir, &LINE.repeat(2560), 6000);
+    let path = write(&tmp_dir, "tracked.bin", &after);
+    let resynced = saved.resync(&path).unwrap();
+
+    assert_eq!(resynced.position, 6000);
+    assert!(resynced.position <= resynced.file.size);
+    resynced.verify().unwrap();
+}
+
+#[rstest]
+fn resync_accepts_anything_for_an_empty_file(tmp_dir: TempDir) {
+    let saved = recorded(&tmp_dir, b"", 0);
+    let path = write(&tmp_dir, "tracked.bin", b"foo");
+    let resynced = saved.resync(&path).unwrap();
+
+    assert_eq!(resynced.position, 0);
+    assert_eq!(resynced.file.size, 3);
+}
+
+#[rstest]
+#[case::replaced(b"bar\n", 25, 50.0)]
+#[case::shrunk(b"foo\n", 2, 625.0)]
+#[case::emptied(b"", 0, 5000.0)]
+fn resync_trusts_the_path_without_verification(
+    tmp_dir: TempDir,
+    #[case] unit: &[u8],
+    #[case] count: usize,
+    #[case] percent: f64,
+) {
+    let reader = unverified(&tmp_dir);
+    let path = write(&tmp_dir, "tracked.bin", &LINE.repeat(25));
     let mut bytes = reader.bytes(&path).state(TEST_STATE_NAME).limit(50).build().unwrap();
 
     while bytes.read().unwrap().is_some() {}
 
-    bytes.state().save().unwrap();
-
     let saved = bytes.state().clone();
 
     drop(bytes);
+    write(&tmp_dir, "tracked.bin", &unit.repeat(count));
 
-    let smaller = write(&tmp_dir, "small.bin", &b"y".repeat(10));
-    let resynced = saved.resync(&smaller).unwrap();
+    let resynced = saved.resync(&path).unwrap();
 
     assert_eq!(resynced.position, 50);
-    assert_eq!(resynced.file.size, 10);
-    assert_eq!(resynced.percent(), 500.0);
+    assert_eq!(resynced.file.size, (unit.len() * count) as u64);
+    assert_eq!(resynced.percent(), percent);
+}
 
-    let mut resumed = reader.bytes(&smaller).state(resynced).build().unwrap();
+#[rstest]
+#[case::at_the_window(4096, 4096, 100, 100, 100.0 * 100.0 / 4096.0)]
+#[case::past_the_window(4097, 4096, 4097, 4096, 100.0)]
+fn resync_accepts_at_the_fingerprint_window(
+    tmp_dir: TempDir,
+    #[case] before: usize,
+    #[case] after: usize,
+    #[case] read: u64,
+    #[case] position: u64,
+    #[case] percent: f64,
+) {
+    let saved = recorded(&tmp_dir, &b"a".repeat(before), read);
+    let path = write(&tmp_dir, "tracked.bin", &b"a".repeat(after));
+    let resynced = saved.resync(&path).unwrap();
 
-    assert!(resumed.read().unwrap().is_none());
+    assert_eq!(resynced.position, position);
+    assert_eq!(resynced.percent(), percent);
+    assert!(resynced.position <= resynced.file.size);
+}
+
+#[rstest]
+fn resync_keeps_an_unsafe_name_for_the_save(tmp_dir: TempDir) {
+    let reader = reader(&tmp_dir, Config::default());
+    let path = write(&tmp_dir, "tracked.bin", &LINE.repeat(25));
+    let saved = reader.bytes(&path).state("../../escape").build().unwrap().state().clone();
+    let mut resynced = saved.resync(&path).unwrap();
+
+    assert_eq!(resynced.name, "../../escape");
+
+    let error = resynced.save().err().unwrap();
+
+    assert!(error.to_string().contains("path escapes root"), "{error}");
+}
+
+#[rstest]
+fn resync_fails_when_the_mtime_precedes_the_epoch(tmp_dir: TempDir) {
+    use std::time::{Duration, SystemTime};
+
+    let path = write(&tmp_dir, "tracked.bin", &LINE.repeat(25));
+    let saved = recorded(&tmp_dir, &LINE.repeat(25), 5);
+    let before_epoch = SystemTime::UNIX_EPOCH - Duration::from_secs(86_400);
+
+    if fs::OpenOptions::new()
+        .write(true)
+        .open(&path)
+        .unwrap()
+        .set_modified(before_epoch)
+        .is_err()
+    {
+        return; // a pre-epoch mtime cannot be set here
+    }
+
+    assert!(matches!(saved.resync(&path), Err(Error::Time(_))));
+}
+
+#[rstest]
+#[case::a_symlink(true)]
+#[case::an_unnormalized_path(false)]
+fn resync_canonicalizes_the_path(tmp_dir: TempDir, #[case] linked: bool) {
+    use std::os::unix::fs::symlink;
+
+    let target = write(&tmp_dir, "tracked.bin", &LINE.repeat(25));
+    let saved = recorded(&tmp_dir, &LINE.repeat(25), 5);
+    let detour = if linked {
+        let alias = tmp_dir.path().join("alias.bin");
+
+        symlink(&target, &alias).unwrap();
+
+        alias
+    } else {
+        tmp_dir.path().join(".").join("tracked.bin")
+    };
+    let resynced = saved.resync(&detour).unwrap();
+
+    assert_eq!(resynced.file.path, target.canonicalize().unwrap());
+}
+
+#[rstest]
+fn resync_keeps_a_position_that_equals_the_size(tmp_dir: TempDir) {
+    let saved = recorded(&tmp_dir, &LINE.repeat(25), 100);
+    let path = write(&tmp_dir, "tracked.bin", &LINE.repeat(25));
+    let resynced = saved.resync(&path).unwrap();
+
+    assert_eq!(saved.position, 100);
+    assert_eq!(resynced.position, 100);
+    assert_eq!(resynced.file.size, 100);
+}
+
+#[rstest]
+fn resync_fails_when_the_file_is_unreadable(tmp_dir: TempDir) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let path = write(&tmp_dir, "tracked.bin", &LINE.repeat(25));
+    let saved = recorded(&tmp_dir, &LINE.repeat(25), 5);
+
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o000)).unwrap();
+
+    if fs::read(&path).is_ok() {
+        return; // permissions are not enforced here
+    }
+
+    let error = saved.resync(&path).err().unwrap();
+
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+
+    assert!(
+        matches!(&error, Error::Io(io) if io.kind() == std::io::ErrorKind::PermissionDenied),
+        "{error}"
+    );
+}
+
+#[rstest]
+fn resync_keeps_the_state_dir_for_the_save(tmp_dir: TempDir) {
+    let reader = reader(&tmp_dir, Config::default());
+    let path = write(&tmp_dir, "tracked.bin", &LINE.repeat(25));
+    let saved = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap().state().clone();
+    let written = saved.resync(&path).unwrap().save().unwrap();
+
+    assert!(
+        written.starts_with(&reader.config().state_dir),
+        "{written:?}"
+    );
+    assert!(written.is_file(), "{written:?}");
+    assert_eq!(
+        reader.states().load(TEST_STATE_NAME).unwrap().name,
+        TEST_STATE_NAME
+    );
+}
+
+#[rstest]
+#[case::missing("missing.bin")]
+#[case::a_directory("elsewhere")]
+fn resync_still_checks_the_path_without_verification(tmp_dir: TempDir, #[case] name: &str) {
+    let reader = unverified(&tmp_dir);
+    let path = write(&tmp_dir, "tracked.bin", &LINE.repeat(25));
+    let saved = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap().state().clone();
+    let target = tmp_dir.path().join(name);
+
+    if name == "elsewhere" {
+        fs::create_dir(&target).unwrap();
+    }
+
+    assert!(saved.resync(&target).is_err());
+}
+
+#[rstest]
+fn resync_accepts_every_path_shape(tmp_dir: TempDir) {
+    let path = write(&tmp_dir, "tracked.bin", &LINE.repeat(25));
+    let saved = recorded(&tmp_dir, &LINE.repeat(25), 5);
+    let text = path.to_str().unwrap().to_owned();
+    let canonical = path.canonicalize().unwrap();
+
+    for resynced in [
+        saved.resync(text.as_str()).unwrap(),
+        saved.resync(&text).unwrap(),
+        saved.resync(text.clone()).unwrap(),
+        saved.resync(path.as_path()).unwrap(),
+        saved.resync(&path).unwrap(),
+        saved.resync(path.clone()).unwrap(),
+    ] {
+        assert_eq!(resynced.file.path, canonical);
+    }
+}
+
+#[rstest]
+fn resync_moves_the_identity_reference_forward(tmp_dir: TempDir) {
+    let saved = recorded(&tmp_dir, &LINE.repeat(25), 5);
+    let original = tmp_dir.path().join("tracked.bin");
+    let grown = write(&tmp_dir, "grown.bin", &LINE.repeat(30));
+    let once = saved.resync(&grown).unwrap();
+
+    assert_eq!(once.file.size, 120);
+
+    let error = once.resync(&original).err().unwrap();
+
+    assert!(
+        error.to_string().contains("file content differs from the tracked file"),
+        "{error}"
+    );
+    assert!(error.to_string().contains("grown.bin"), "{error}");
+    assert!(error.to_string().contains("tracked.bin"), "{error}");
+}
+
+#[rstest]
+fn resync_is_stable_when_repeated(tmp_dir: TempDir) {
+    let saved = recorded(&tmp_dir, &LINE.repeat(25), 5);
+    let path = write(&tmp_dir, "tracked.bin", &LINE.repeat(25));
+    let once = saved.resync(&path).unwrap();
+    let twice = once.resync(&path).unwrap();
+
+    assert_eq!(twice.position, 5);
+    assert_eq!(twice.file, once.file);
+    twice.verify().unwrap();
+}
+
+#[cfg(unix)]
+#[rstest]
+fn resync_fails_when_the_path_is_not_utf8(tmp_dir: TempDir) {
+    let saved = recorded(&tmp_dir, &LINE.repeat(25), 5);
+    let odd = tmp_dir.path().join(OsStr::from_bytes(b"data-\xff.bin"));
+
+    if fs::write(&odd, LINE.repeat(25)).is_err() {
+        return; // a non-UTF-8 name cannot be created here
+    }
+
+    let error = saved.resync(&odd).err().unwrap();
+
+    assert!(error.to_string().contains("invalid UTF-8"), "{error}");
 }
 
 #[rstest]
@@ -520,31 +830,6 @@ fn resync_reseals_a_tampered_state(tmp_dir: TempDir) {
 }
 
 #[rstest]
-fn resync_carries_the_position_onto_an_unrelated_file(tmp_dir: TempDir) {
-    let reader = reader(&tmp_dir, Config::default());
-    let path = write(&tmp_dir, "data.bin", &b"a".repeat(30));
-    let mut bytes = reader.bytes(&path).state(TEST_STATE_NAME).limit(10).build().unwrap();
-
-    while bytes.read().unwrap().is_some() {}
-
-    bytes.state().save().unwrap();
-
-    let saved = bytes.state().clone();
-
-    drop(bytes);
-
-    let unrelated = write(&tmp_dir, "other.bin", &b"Z".repeat(30));
-    let resynced = saved.resync(&unrelated).unwrap();
-
-    assert_eq!(resynced.position, 10);
-
-    let resumed = reader.bytes(&unrelated).state(resynced).build().unwrap();
-    let collected: Vec<u8> = resumed.map(|byte| byte.unwrap()).collect();
-
-    assert_eq!(collected, b"Z".repeat(20));
-}
-
-#[rstest]
 fn a_resynced_state_is_still_rejected_for_another_file(tmp_dir: TempDir) {
     let reader = reader(&tmp_dir, Config::default());
     let first = write(&tmp_dir, "a.bin", &b"a".repeat(10));
@@ -561,7 +846,11 @@ fn a_resynced_state_is_still_rejected_for_another_file(tmp_dir: TempDir) {
 }
 
 #[rstest]
-fn resync_fails_when_the_path_is_a_directory(tmp_dir: TempDir) {
+#[case::directly(false)]
+#[case::through_a_symlink(true)]
+fn resync_fails_when_the_path_is_a_directory(tmp_dir: TempDir, #[case] linked: bool) {
+    use std::os::unix::fs::symlink;
+
     let reader = reader(&tmp_dir, Config::default());
     let path = write(&tmp_dir, "data.bin", b"foo\n");
     let state = reader.bytes(&path).build().unwrap().state().clone();
@@ -569,22 +858,42 @@ fn resync_fails_when_the_path_is_a_directory(tmp_dir: TempDir) {
 
     fs::create_dir(&directory).unwrap();
 
-    let error = state.resync(&directory).err().unwrap();
+    let target = if linked {
+        let alias = tmp_dir.path().join("alias");
+
+        symlink(&directory, &alias).unwrap();
+
+        alias
+    } else {
+        directory
+    };
+    let error = state.resync(&target).err().unwrap();
 
     assert!(error.to_string().contains("not a file"), "got {error}");
 }
 
 #[rstest]
-fn resync_fails_when_the_file_is_missing(tmp_dir: TempDir) {
+#[case::missing(false)]
+#[case::a_symlink_loop(true)]
+fn resync_fails_when_the_path_cannot_be_resolved(tmp_dir: TempDir, #[case] looped: bool) {
+    use std::os::unix::fs::symlink;
+
     let reader = reader(&tmp_dir, Config::default());
     let path = write(&tmp_dir, "data.bin", b"foo\n");
     let state = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap().state().clone();
-    let error = state.resync(tmp_dir.path().join("does-not-exist.bin")).err().unwrap();
+    let target = if looped {
+        let (first, second) = (tmp_dir.path().join("a-link"), tmp_dir.path().join("b-link"));
 
-    assert!(
-        matches!(&error, Error::Io(io) if io.kind() == std::io::ErrorKind::NotFound),
-        "got {error}"
-    );
+        symlink(&second, &first).unwrap();
+        symlink(&first, &second).unwrap();
+
+        first
+    } else {
+        tmp_dir.path().join("does-not-exist.bin")
+    };
+    let error = state.resync(&target).err().unwrap();
+
+    assert!(matches!(&error, Error::Io(_)), "got {error}");
 }
 
 #[rstest]
@@ -606,16 +915,21 @@ fn save_leaves_the_state_untouched_when_it_fails(tmp_dir: TempDir, #[case] name:
 }
 
 #[rstest]
-fn save_removes_the_temporary_file_when_it_fails(tmp_dir: TempDir) {
+#[case::when_it_succeeds(false)]
+#[case::when_it_fails(true)]
+fn save_leaves_no_temporary_file(tmp_dir: TempDir, #[case] blocked: bool) {
     let reader = reader(&tmp_dir, Config::default());
     let state_dir = reader.config().state_dir.clone();
 
-    fs::create_dir_all(state_dir.join(format!("{TEST_STATE_NAME}.state.json"))).unwrap();
+    if blocked {
+        fs::create_dir_all(state_dir.join(format!("{TEST_STATE_NAME}.state.json"))).unwrap();
+    }
 
     let path = write(&tmp_dir, "data.bin", b"foo\n");
     let mut bytes = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap();
+    let outcome = bytes.state().save();
 
-    bytes.state().save().unwrap_err();
+    assert_eq!(outcome.is_err(), blocked);
 
     let leftovers: Vec<_> = fs::read_dir(&state_dir)
         .unwrap()

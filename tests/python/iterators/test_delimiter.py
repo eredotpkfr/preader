@@ -63,12 +63,14 @@ def test_end_yields_a_crossing_segment_whole(reader: PReader, data_file: Path) -
 
 
 def test_skip_stops_at_a_truncation(
-    make_reader: Callable[..., PReader], data_file: Path
+    make_reader: Callable[..., PReader],
+    data_file: Path,
+    truncate: Callable[[Path, int], None],
 ) -> None:
     reader = make_reader(verify_state=False, auto_load_state=True)
     reader.bytes(data_file, state=TEST_STATE_NAME).state.save()
 
-    os.truncate(data_file, 8)
+    truncate(data_file, 8)
 
     options = IteratorOptions(skip=3)
 
@@ -386,7 +388,9 @@ def test_save_error_at_finalize_propagates(
 
 
 def test_save_error_propagates_after_a_truncation(
-    data_file: Path, make_reader: Callable[..., PReader]
+    data_file: Path,
+    make_reader: Callable[..., PReader],
+    truncate: Callable[[Path, int], None],
 ) -> None:
     reader = make_reader(auto_save_state=True, buffer_capacity=1)
     iterator = reader.delimiter(
@@ -395,15 +399,16 @@ def test_save_error_propagates_after_a_truncation(
 
     next(iterator)
 
-    with data_file.open("r+b") as file:
-        file.truncate(1)
+    truncate(data_file, 1)
 
     with pytest.raises(StateError, match="path escapes root"):
         list(iterator)
 
 
 def test_save_error_propagates_while_skipping(
-    data_file: Path, make_reader: Callable[..., PReader]
+    data_file: Path,
+    make_reader: Callable[..., PReader],
+    truncate: Callable[[Path, int], None],
 ) -> None:
     reader = make_reader(auto_save_state=True, buffer_capacity=1)
     options = IteratorOptions(skip=3)
@@ -414,8 +419,7 @@ def test_save_error_propagates_while_skipping(
         options=options,
     )
 
-    with data_file.open("r+b") as file:
-        file.truncate(1)
+    truncate(data_file, 1)
 
     with pytest.raises(StateError, match="path escapes root"):
         list(iterator)
@@ -1323,15 +1327,16 @@ def test_iteration_survives_the_file_being_deleted(
 
 
 def test_iteration_stops_at_a_truncation(
-    make_reader: Callable[..., PReader], data_file: Path
+    make_reader: Callable[..., PReader],
+    data_file: Path,
+    truncate: Callable[[Path, int], None],
 ) -> None:
     reader = make_reader(buffer_capacity=1)
     iterator = reader.delimiter(data_file, delimiter=TEST_DEFAULT_DELIMITER)
 
     next(iterator)
 
-    with data_file.open("r+b") as file:
-        file.truncate(10)
+    truncate(data_file, 10)
 
     list(iterator)
 

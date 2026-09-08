@@ -342,6 +342,7 @@ fn names_survives_a_midway_delete(sandbox: Sandbox) {
 #[case::plain("notes.txt")]
 #[case::suffix_shaped("job-1.state.json.bak")]
 #[case::partial("job-1.state")]
+#[case::a_temporary_file("job-1.state.json.tmp")]
 fn names_ignores_a_non_state_file(sandbox: Sandbox, #[case] file: &str) {
     sandbox.save(TEST_STATE_NAME);
     fs::write(
@@ -373,10 +374,12 @@ fn names_ignores_a_non_utf8_state(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn clear_keeps_a_non_state_file(sandbox: Sandbox) {
+#[case::unrelated("README.md")]
+#[case::a_temporary_file("job-1.state.json.tmp")]
+fn clear_keeps_a_non_state_file(sandbox: Sandbox, #[case] name: &str) {
     sandbox.save(TEST_STATE_NAME);
 
-    let unrelated = sandbox.reader.states().state_dir().join("README.md");
+    let unrelated = sandbox.reader.states().state_dir().join(name);
 
     fs::write(&unrelated, "not a state").unwrap();
     sandbox.reader.states().clear().unwrap();
