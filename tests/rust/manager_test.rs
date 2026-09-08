@@ -6,8 +6,8 @@ use std::{
 };
 
 use preader::{
-    Config, DEFAULT_VERIFY_STATE, FileMetadata, STATE_FILE_SUFFIX, State, StateData, StateManager,
-    TMP_STATE_FILE_SUFFIX, Timestamps, default_state_dir,
+    Config, FileMetadata, STATE_FILE_EXTENSION_WITHOUT_DOT, State, StateData, StateManager,
+    TMP_FILE_EXTENSION, Timestamps, default_state_dir,
 };
 use rstest::{fixture, rstest};
 use sha2::{Digest, Sha256};
@@ -95,32 +95,38 @@ fn unverifiable_payload(name: &str) -> String {
 }
 
 #[rstest]
-fn name_matches_the_precomputed_digest(sandbox: Sandbox) {
+fn autoname_matches_the_precomputed_digest(sandbox: Sandbox) {
     assert_eq!(
-        sandbox.manager.name(Path::new(TEST_FILE_PATH)),
+        sandbox.manager.autoname(Path::new(TEST_FILE_PATH)),
         FILE_PATH_DIGEST
     );
 }
 
 #[rstest]
-fn name_hashes_the_path_bytes(sandbox: Sandbox) {
+fn autoname_hashes_the_path_bytes(sandbox: Sandbox) {
     let expected = hex::encode(Sha256::digest(TEST_FILE_PATH.as_bytes()));
 
-    assert_eq!(sandbox.manager.name(Path::new(TEST_FILE_PATH)), expected);
+    assert_eq!(
+        sandbox.manager.autoname(Path::new(TEST_FILE_PATH)),
+        expected
+    );
 }
 
 #[rstest]
-fn name_is_stable_for_the_same_path(sandbox: Sandbox) {
+fn autoname_is_stable_for_the_same_path(sandbox: Sandbox) {
     let path = Path::new(TEST_FILE_PATH);
 
-    assert_eq!(sandbox.manager.name(path), sandbox.manager.name(path));
+    assert_eq!(
+        sandbox.manager.autoname(path),
+        sandbox.manager.autoname(path)
+    );
 }
 
 #[rstest]
-fn name_differs_between_paths(sandbox: Sandbox) {
+fn autoname_differs_between_paths(sandbox: Sandbox) {
     assert_ne!(
-        sandbox.manager.name(Path::new("/tmp/data-1.bin")),
-        sandbox.manager.name(Path::new("/tmp/data-2.bin"))
+        sandbox.manager.autoname(Path::new("/tmp/data-1.bin")),
+        sandbox.manager.autoname(Path::new("/tmp/data-2.bin"))
     );
 }
 
@@ -128,10 +134,10 @@ fn name_differs_between_paths(sandbox: Sandbox) {
 #[case::current_dir_component(TEST_FILE_PATH, "/tmp/./data.bin")]
 #[case::trailing_slash("/tmp/data", "/tmp/data/")]
 #[case::relative_and_absolute("data.bin", "/tmp/data.bin")]
-fn name_does_not_normalize_the_path(sandbox: Sandbox, #[case] left: &str, #[case] right: &str) {
+fn autoname_does_not_normalize_the_path(sandbox: Sandbox, #[case] left: &str, #[case] right: &str) {
     assert_ne!(
-        sandbox.manager.name(Path::new(left)),
-        sandbox.manager.name(Path::new(right))
+        sandbox.manager.autoname(Path::new(left)),
+        sandbox.manager.autoname(Path::new(right))
     );
 }
 
@@ -140,8 +146,8 @@ fn name_does_not_normalize_the_path(sandbox: Sandbox, #[case] left: &str, #[case
 #[case::relative("data.bin")]
 #[case::empty("")]
 #[case::directory("/tmp/")]
-fn name_is_a_lowercase_hex_digest(sandbox: Sandbox, #[case] file: &str) {
-    let name = sandbox.manager.name(Path::new(file));
+fn autoname_is_a_lowercase_hex_digest(sandbox: Sandbox, #[case] file: &str) {
+    let name = sandbox.manager.autoname(Path::new(file));
 
     assert_eq!(name.len(), 64);
     assert!(name.chars().all(|c| c.is_ascii_hexdigit() && !c.is_uppercase()));
@@ -149,19 +155,12 @@ fn name_is_a_lowercase_hex_digest(sandbox: Sandbox, #[case] file: &str) {
 
 #[cfg(unix)]
 #[rstest]
-fn name_hashes_non_utf8_paths(sandbox: Sandbox) {
+fn autoname_hashes_non_utf8_paths(sandbox: Sandbox) {
     let path = Path::new(OsStr::from_bytes(b"/tmp/data-\xff\xfe.bin"));
-    let name = sandbox.manager.name(path);
+    let name = sandbox.manager.autoname(path);
 
     assert_eq!(name.len(), 64);
-    assert_ne!(name, sandbox.manager.name(Path::new("/tmp/data.bin")));
-}
-
-#[rstest]
-fn name_ignores_the_config(#[with(false)] sandbox: Sandbox, #[from(sandbox)] other: Sandbox) {
-    let path = Path::new(TEST_FILE_PATH);
-
-    assert_eq!(sandbox.manager.name(path), other.manager.name(path));
+    assert_ne!(name, sandbox.manager.autoname(Path::new("/tmp/data.bin")));
 }
 
 #[rstest]
@@ -171,7 +170,7 @@ fn path_appends_the_suffix_inside_the_state_dir(sandbox: Sandbox) {
     assert_eq!(path.parent().unwrap(), sandbox.state_dir());
     assert_eq!(
         path.file_name().unwrap(),
-        format!("{TEST_STATE_NAME}.{STATE_FILE_SUFFIX}").as_str()
+        format!("{TEST_STATE_NAME}.{STATE_FILE_EXTENSION_WITHOUT_DOT}").as_str()
     );
 }
 
@@ -252,7 +251,9 @@ fn tmp_carries_both_suffixes_inside_the_state_dir(sandbox: Sandbox) {
 
     assert_eq!(tmp.parent().unwrap(), sandbox.state_dir());
     assert!(file_name.starts_with(&format!("{TEST_STATE_NAME}.")));
-    assert!(file_name.ends_with(&format!(".{STATE_FILE_SUFFIX}.{TMP_STATE_FILE_SUFFIX}")));
+    assert!(file_name.ends_with(&format!(
+        ".{STATE_FILE_EXTENSION_WITHOUT_DOT}.{TMP_FILE_EXTENSION}"
+    )));
 }
 
 #[rstest]
@@ -282,7 +283,7 @@ fn tmp_fails_when_the_name_is_unsafe(sandbox: Sandbox, #[case] name: &str, #[cas
 fn tmp_normalizes_the_name(sandbox: Sandbox, #[case] name: &str, #[case] expected: &str) {
     let tmp = sandbox.manager.tmp(name).unwrap();
     let file_name = tmp.file_name().unwrap().to_str().unwrap();
-    let tail = format!(".{STATE_FILE_SUFFIX}.{TMP_STATE_FILE_SUFFIX}");
+    let tail = format!(".{STATE_FILE_EXTENSION_WITHOUT_DOT}.{TMP_FILE_EXTENSION}");
     let (stem, _stamp) = file_name.strip_suffix(&tail).unwrap().rsplit_once('.').unwrap();
 
     assert_eq!(stem, expected);
@@ -295,7 +296,9 @@ fn tmp_uses_a_nanosecond_timestamp(sandbox: Sandbox) {
     let stamp = file_name
         .strip_prefix(&format!("{TEST_STATE_NAME}."))
         .unwrap()
-        .strip_suffix(&format!(".{STATE_FILE_SUFFIX}.{TMP_STATE_FILE_SUFFIX}"))
+        .strip_suffix(&format!(
+            ".{STATE_FILE_EXTENSION_WITHOUT_DOT}.{TMP_FILE_EXTENSION}"
+        ))
         .unwrap();
 
     assert!(stamp.parse::<i64>().unwrap() > 0);
@@ -398,7 +401,7 @@ fn load_deserializes_the_payload_without_verification(#[with(false)] sandbox: Sa
 fn load_verifies_by_default(sandbox: Sandbox) {
     sandbox.write_state(TEST_STATE_NAME, unverifiable_payload(TEST_STATE_NAME));
 
-    assert!(sandbox.load_error(TEST_STATE_NAME).contains("io failed"));
+    assert!(sandbox.load_error(TEST_STATE_NAME).contains("state checksum mismatch"));
 }
 
 #[rstest]
@@ -435,16 +438,6 @@ fn load_returns_a_verified_state(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn load_carries_the_managers_saved_position(#[with(false)] mut sandbox: Sandbox) {
-    sandbox.manager.last_saved_position = 512;
-    sandbox.write_state(TEST_STATE_NAME, unverifiable_payload(TEST_STATE_NAME));
-
-    let state = sandbox.manager.load(TEST_STATE_NAME).unwrap();
-
-    assert_eq!(state.manager.last_saved_position, 512);
-}
-
-#[rstest]
 fn load_ignores_unknown_fields(#[with(false)] sandbox: Sandbox) {
     let payload = unverifiable_payload(TEST_STATE_NAME)
         .replace(r#""_checksum""#, r#""foo": 42, "_checksum""#);
@@ -455,41 +448,17 @@ fn load_ignores_unknown_fields(#[with(false)] sandbox: Sandbox) {
 }
 
 #[rstest]
-fn from_config_starts_with_no_saved_position(sandbox: Sandbox) {
-    assert_eq!(sandbox.manager.last_saved_position, 0);
-}
-
-#[rstest]
 fn from_config_carries_the_state_dir(sandbox: Sandbox) {
-    assert_eq!(sandbox.manager.config.state_dir, sandbox.state_dir());
+    let path = sandbox.manager.path(TEST_STATE_NAME).unwrap();
+
+    assert_eq!(path.parent().unwrap(), sandbox.state_dir());
 }
 
-#[rstest]
-#[case::verifying(true)]
-#[case::lenient(false)]
-fn from_config_carries_the_verify_flag(
-    #[case] verify_state: bool,
-    #[with(verify_state)] sandbox: Sandbox,
-) {
-    assert_eq!(sandbox.manager.config.verify_state, verify_state);
-}
+#[test]
+fn default_agrees_with_the_default_config() {
+    let derived = StateManager::default().path(TEST_STATE_NAME).unwrap();
+    let configured = StateManager::from(&Config::default()).path(TEST_STATE_NAME).unwrap();
 
-#[rstest]
-fn default_uses_the_crate_defaults() {
-    let manager = StateManager::default();
-
-    assert_eq!(manager.last_saved_position, 0);
-    assert_eq!(manager.config.state_dir, default_state_dir());
-    assert_eq!(manager.config.verify_state, DEFAULT_VERIFY_STATE);
-}
-
-#[rstest]
-fn clone_does_not_share_state(sandbox: Sandbox) {
-    let mut clone = sandbox.manager.clone();
-
-    clone.last_saved_position = 99;
-    clone.config.verify_state = false;
-
-    assert_eq!(sandbox.manager.last_saved_position, 0);
-    assert!(sandbox.manager.config.verify_state);
+    assert_eq!(derived, configured);
+    assert_eq!(derived.parent().unwrap(), default_state_dir());
 }

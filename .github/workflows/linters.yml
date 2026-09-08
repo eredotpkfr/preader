@@ -122,7 +122,7 @@ jobs:
         run: uv sync --locked
 
       - name: Run clippy
-        run: make clippy
+        run: make cargo-clippy
 
   rust-rustfmt:
     runs-on: ubuntu-latest
@@ -137,7 +137,7 @@ jobs:
           components: rustfmt
 
       - name: Run rustfmt
-        run: make rustfmt-check
+        run: make cargo-rustfmt-check
 
   typos:
     runs-on: ubuntu-latest

@@ -1,13 +1,11 @@
-use std::{fs, path::PathBuf};
-
-use pyo3::prelude::*;
-
-use crate::{
-    Error, State, iterators::state::StateIterator, manager::StateManager,
-    types::config::reader::Config,
+use std::{
+    fs,
+    path::{Path, PathBuf},
 };
 
-#[pyclass(module = "preader")]
+use crate::{Error, Result, State, StateIterator, manager::StateManager, types::config::Config};
+
+#[derive(Debug)]
 pub struct StateRegistry {
     manager: StateManager,
 }
@@ -20,80 +18,58 @@ impl From<&Config> for StateRegistry {
     }
 }
 
-#[pymethods]
 impl StateRegistry {
-    fn __iter__(&self) -> Result<StateIterator, Error> {
-        self.names()
+    pub fn state_dir(&self) -> &Path {
+        &self.manager.state_dir
     }
 
-    fn __getitem__(&self, name: &str) -> Result<State, Error> {
-        self.load(name)
+    pub fn names(&self) -> Result<StateIterator> {
+        StateIterator::new(self.state_dir(), None)
     }
 
-    fn __contains__(&self, name: &str) -> bool {
-        self.exists(name)
+    pub fn search(&self, pattern: &str) -> Result<StateIterator> {
+        StateIterator::new(self.state_dir(), Some(pattern))
     }
 
-    fn __len__(&self) -> Result<usize, Error> {
-        self.names()?.try_fold(0_usize, |acc, name| name.map(|_| acc + 1))
-    }
-
-    fn __delitem__(&self, name: &str) -> Result<(), Error> {
-        self.delete(name)
-    }
-
-    #[getter]
-    fn state_dir(&self) -> PathBuf {
-        self.manager.config.state_dir.clone()
-    }
-
-    fn names(&self) -> Result<StateIterator, Error> {
-        StateIterator::new(&self.manager.config.state_dir, None)
-    }
-
-    fn load(&self, name: &str) -> Result<State, Error> {
-        if !self.exists(name) {
-            return Err(Error::Missing(name.to_string()));
-        }
-
+    pub fn load(&self, name: &str) -> Result<State> {
         self.manager.load(name)
     }
 
-    fn find(&self, name: &str) -> Result<Option<State>, Error> {
-        self.exists(name).then(|| self.load(name)).transpose()
+    pub fn find(&self, name: &str) -> Option<State> {
+        self.load(name).ok()
     }
 
-    fn search(&self, pattern: &str) -> Result<StateIterator, Error> {
-        StateIterator::new(&self.manager.config.state_dir, Some(pattern))
-    }
-
-    fn delete(&self, name: &str) -> Result<(), Error> {
-        if !self.exists(name) {
-            return Err(Error::Missing(name.to_string()));
-        }
-
-        Ok(fs::remove_file(self.path(name)?)?)
-    }
-
-    fn exists(&self, name: &str) -> bool {
-        self.manager.path(name).map(|path| path.exists()).unwrap_or(false)
-    }
-
-    fn all(&self) -> Result<Vec<State>, Error> {
+    pub fn all(&self) -> Result<Vec<State>> {
         self.names()?.map(|name| self.load(&name?)).collect()
     }
 
-    fn clear(&self) -> Result<(), Error> {
-        self.names()?.try_for_each(|name| self.delete(&name?))
+    pub fn exists(&self, name: &str) -> bool {
+        self.manager.path(name).is_ok_and(|path| path.exists())
     }
 
-    fn path(&self, name: &str) -> Result<PathBuf, Error> {
+    pub fn count(&self) -> Result<usize> {
+        self.names()?.try_fold(0_usize, |total, name| name.map(|_| total + 1))
+    }
+
+    pub fn path(&self, name: &str) -> Result<PathBuf> {
         self.manager.path(name)
     }
 
-    fn __repr__(&self) -> String {
-        crate::macros::pyrepr!("StateRegistry" {
-            state_dir = format!("'{}'", self.manager.config.state_dir.display()),
-        })
+    pub fn delete(&self, name: &str) -> Result<()> {
+        let path = self.path(name)?;
+
+        if !path.exists() {
+            return Err(Error::NotFound(name.to_owned()));
+        }
+
+        Ok(fs::remove_file(path)?)
+    }
+
+    pub fn clear(&self) -> Result<()> {
+        self.names()?.try_for_each(|name| self.delete(&name?))
+    }
+
+    pub(crate) fn manager(&self) -> &StateManager {
+        &self.manager
     }
 }

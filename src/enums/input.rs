@@ -1,88 +1,59 @@
 use std::path::Path;
 
-use anyhow::anyhow;
-use pyo3::{Borrowed, FromPyObject, PyAny, PyErr, exceptions::PyTypeError, prelude::*};
-#[cfg(feature = "experimental-inspect")]
-use pyo3::{
-    PyTypeInfo,
-    inspect::PyStaticExpr,
-    type_hint_union,
-    types::{PyNone, PyString},
-};
+use derive_more::From;
 
 use crate::{
-    Error, State, StateManager,
-    manager::STATE_FILE_SUFFIX,
-    types::{config::reader::Config, state::RESYNC_HINT},
+    Mismatch, Result, State, constants::STATE_FILE_EXTENSION_WITHOUT_DOT, manager::StateManager,
     utils::path::path_stem,
 };
 
-pub(crate) enum StateInput {
-    Object(State),
-    Name(String),
+#[derive(Debug, Default, From)]
+pub enum StateInput {
+    #[default]
     Auto,
+    #[from(&str, &String, String)]
+    Name(String),
+    #[from(forward)]
+    Object(Box<State>),
 }
 
-impl<'a, 'py> FromPyObject<'a, 'py> for StateInput {
-    type Error = PyErr;
-
-    #[cfg(feature = "experimental-inspect")]
-    const INPUT_TYPE: PyStaticExpr =
-        type_hint_union!(State::TYPE_HINT, PyString::TYPE_HINT, PyNone::TYPE_HINT);
-
-    fn extract(ob: Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
-        if ob.is_none() {
-            return Ok(Self::Auto);
-        }
-
-        if let Ok(state) = ob.extract::<State>() {
-            return Ok(Self::Object(state));
-        }
-
-        if let Ok(name) = ob.extract::<String>() {
-            return Ok(Self::Name(name));
-        }
-
-        Err(PyTypeError::new_err(
-            "state must be None, a name (str), or a preader.State object",
-        ))
+impl<T: Into<StateInput>> From<Option<T>> for StateInput {
+    fn from(state: Option<T>) -> Self {
+        state.map(Into::into).unwrap_or_default()
     }
 }
 
 impl StateInput {
-    pub(crate) fn resolve(self, config: &Config, file: &Path) -> Result<State, Error> {
-        let manager = StateManager::from(config);
-
+    pub(crate) fn resolve(self, manager: &StateManager, file: &Path) -> Result<State> {
         let name = match self {
             Self::Object(state) => {
-                if !config.verify_state {
-                    return Ok(state);
+                if !manager.verify_state {
+                    return Ok(*state);
                 }
 
                 if state.file.path != file {
-                    return Err(Error::Message(anyhow!(
-                        "file path mismatch (saved: '{}', current: '{}') {}",
-                        state.file.path.display(),
-                        file.display(),
-                        RESYNC_HINT,
-                    )));
+                    return Err(Mismatch::Path {
+                        saved: state.file.path.clone(),
+                        current: file.to_path_buf(),
+                    }
+                    .into());
                 }
 
                 state.verify()?;
 
-                return Ok(state);
+                return Ok(*state);
             }
-            Self::Name(name) => path_stem(&name, STATE_FILE_SUFFIX),
-            Self::Auto => manager.name(file),
+            Self::Name(name) => path_stem(&name, STATE_FILE_EXTENSION_WITHOUT_DOT),
+            Self::Auto => manager.autoname(file),
         };
 
-        if config.auto_load_state
+        if manager.auto_load_state
             && let Ok(state) = manager.load(&name)
             && state.file.path == file
         {
             return Ok(state);
         }
 
-        State::new(config, file, name)
+        State::new(manager.clone(), file, name)
     }
 }

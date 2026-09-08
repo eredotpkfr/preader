@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 
 use chrono::DateTime;
-use preader::{ChecksumBody, FileMetadata, State, StateData, StateManager, Timestamps};
+use preader::{ChecksumBody, FileMetadata, StateData, Timestamps};
 use rstest::{fixture, rstest};
 use sha2::{Digest, Sha256};
 
@@ -119,7 +119,7 @@ fn compute_ignores_sub_second_precision(file: FileMetadata, mut timestamps: Time
 #[rstest]
 #[case::empty("")]
 #[case::stale("not-a-real-checksum")]
-fn from_a_state_ignores_its_own_checksum(
+fn compute_ignores_the_stored_checksum(
     file: FileMetadata,
     timestamps: Timestamps,
     #[case] checksum: &str,
@@ -131,10 +131,8 @@ fn from_a_state_ignores_its_own_checksum(
         timestamps,
         checksum: checksum.to_string(),
     };
-    let state = State::from((data, StateManager::default()));
-
     assert_eq!(
-        ChecksumBody::from(&state).compute().unwrap(),
+        ChecksumBody::from(&data).compute().unwrap(),
         PRECOMPUTED_DIGEST
     );
 }

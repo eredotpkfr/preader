@@ -1,5 +1,6 @@
 import json
 import os
+import warnings
 
 from collections.abc import Callable
 from pathlib import Path
@@ -15,7 +16,7 @@ from constants import (
     TEST_WINDOWS_UNSAFE_STATE_NAME_IDS,
     TEST_WINDOWS_UNSAFE_STATE_NAMES,
 )
-from preader import Config, IteratorOptions, PReader, State, StateError
+from preader import Config, IteratorOptions, PReader, SaveWarning, State, StateError
 
 
 @pytest.fixture
@@ -368,46 +369,54 @@ def test_extra_next_after_exhaustion_does_not_resave(
     assert reader.states[TEST_STATE_NAME].path().stat().st_mtime == mtime_before
 
 
-def test_autosave_error_propagates_from_unbound_iteration(
+def test_a_failing_autosave_warns_and_keeps_every_item(
     config: Config,
     make_reader: Callable[..., PReader],
     data_file: Path,
-    capfd: pytest.CaptureFixture[str],
 ) -> None:
     config.state_dir.write_bytes(b"foo")
 
     reader = make_reader(auto_save_state=True, auto_save_state_bytes=5)
 
-    with pytest.raises(StateError, match="io failed"):
-        for _ in reader.bytes(data_file, state=TEST_STATE_NAME):
-            pass
+    with pytest.warns(SaveWarning):
+        consumed = b"".join(reader.bytes(data_file, state=TEST_STATE_NAME))
 
-    assert "preader: save failed" not in capfd.readouterr().err
+    assert consumed == TEST_ALPHABET
 
 
-def test_save_error_at_finalize_propagates(
+def test_a_failing_final_save_keeps_every_item(
     data_file: Path, make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(auto_save_state=True)
 
-    with pytest.raises(StateError, match="path escapes root"):
-        for _ in reader.bytes(data_file, state="../../etc/passwd"):
-            pass
+    assert b"".join(reader.bytes(data_file, state="../../etc/passwd")) == TEST_ALPHABET
 
 
-def test_save_error_propagates_after_a_truncation(
-    data_file: Path, make_reader: Callable[..., PReader]
+def test_a_failing_autosave_keeps_the_items_read_before_a_truncation(
+    data_file: Path,
+    make_reader: Callable[..., PReader],
+    truncate: Callable[[Path, int], None],
 ) -> None:
     reader = make_reader(auto_save_state=True, buffer_capacity=1)
     iterator = reader.bytes(data_file, state="../../etc/passwd")
 
-    next(iterator)
+    assert next(iterator) == TEST_ALPHABET[:1]
 
-    with data_file.open("r+b") as file:
-        file.truncate(1)
+    truncate(data_file, 1)
 
-    with pytest.raises(StateError, match="path escapes root"):
-        list(iterator)
+    assert b"".join(iterator) == b""
+
+
+def test_a_failing_autosave_can_be_made_fatal(
+    data_file: Path, make_reader: Callable[..., PReader]
+) -> None:
+    reader = make_reader(auto_save_state=True, auto_save_state_bytes=1)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", SaveWarning)
+
+        with pytest.raises(SaveWarning, match="path escapes root"):
+            list(reader.bytes(data_file, state="../../etc/passwd"))
 
 
 def test_byte_iterator_repr(
@@ -816,15 +825,16 @@ def test_iteration_survives_the_file_being_deleted(
 
 
 def test_iteration_stops_at_a_truncation(
-    make_reader: Callable[..., PReader], data_file: Path
+    make_reader: Callable[..., PReader],
+    data_file: Path,
+    truncate: Callable[[Path, int], None],
 ) -> None:
     reader = make_reader(buffer_capacity=1)
     iterator = reader.bytes(data_file)
 
     next(iterator)
 
-    with data_file.open("r+b") as file:
-        file.truncate(10)
+    truncate(data_file, 10)
 
     list(iterator)
 

@@ -3,15 +3,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use pyo3::{exceptions::PyStopIteration, prelude::*};
 use regex::Regex;
 use walkdir::{IntoIter, WalkDir};
 
-use crate::{Error, utils::path::has_no_symlinks};
+use crate::{Error, Result, constants::STATE_FILE_EXTENSION, utils::path::has_no_symlinks};
 
-pub(crate) const STATE_FILE_EXT: &str = ".state.json";
-
-#[pyclass(module = "preader")]
+#[derive(Debug)]
 pub struct StateIterator {
     state_dir: PathBuf,
     entries: IntoIter,
@@ -19,7 +16,7 @@ pub struct StateIterator {
 }
 
 impl StateIterator {
-    pub(crate) fn new(dir: &Path, pattern: Option<&str>) -> Result<Self, Error> {
+    pub(crate) fn new(dir: &Path, pattern: Option<&str>) -> Result<Self> {
         fs::create_dir_all(dir)?;
 
         Ok(Self {
@@ -31,7 +28,7 @@ impl StateIterator {
 }
 
 impl Iterator for StateIterator {
-    type Item = Result<String, Error>;
+    type Item = Result<String>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let (root, pattern) = (&self.state_dir, self.pattern.as_ref());
@@ -42,31 +39,13 @@ impl Iterator for StateIterator {
                 Ok(entry) => entry,
             };
             let path = entry.path();
-            let name =
-                path.strip_prefix(root).ok()?.to_str()?.strip_suffix(STATE_FILE_EXT)?.to_owned();
+            let file = path.strip_prefix(root).ok()?.to_str()?;
+            let name = file.strip_suffix(STATE_FILE_EXTENSION)?.to_owned();
 
             (path.is_file()
                 && has_no_symlinks(root, path)
                 && pattern.is_none_or(|regex| regex.is_match(&name)))
             .then_some(Ok(name))
-        })
-    }
-}
-
-#[pymethods]
-impl StateIterator {
-    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
-        slf
-    }
-
-    fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<String> {
-        slf.next().transpose()?.ok_or_else(|| PyStopIteration::new_err(()))
-    }
-
-    fn __repr__(&self) -> String {
-        crate::macros::pyrepr!("StateIterator" {
-            state_dir = format!("'{}'", self.state_dir.display()),
-            pattern = self.pattern.as_ref().map_or_else(|| "None".to_owned(), |regex| format!("'{regex}'")),
         })
     }
 }

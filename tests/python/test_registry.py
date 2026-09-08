@@ -158,10 +158,12 @@ def test_lookup_raises_when_missing(
 
 
 @pytest.mark.parametrize(
-    "name", TEST_UNSAFE_STATE_NAMES, ids=TEST_UNSAFE_STATE_NAME_IDS
+    ("name", "message"), TEST_UNSAFE_STATE_NAMES.items(), ids=TEST_UNSAFE_STATE_NAME_IDS
 )
-def test_getitem_raises_when_name_is_unsafe(registry: StateRegistry, name: str) -> None:
-    with pytest.raises(KeyError):
+def test_getitem_raises_when_name_is_unsafe(
+    registry: StateRegistry, name: str, message: str
+) -> None:
+    with pytest.raises(StateError, match=message):
         registry[name]
 
 
@@ -226,12 +228,17 @@ def test_names_ignores_a_non_utf8_state(
     assert list(registry.names()) == [TEST_STATE_NAME]
 
 
+@pytest.mark.parametrize(
+    "name",
+    ["README.md", f"{TEST_STATE_NAME}.state.json.tmp"],
+    ids=["unrelated", "a_temporary_file"],
+)
 def test_clear_keeps_non_state_files(
-    reader: PReader, registry: StateRegistry, tmp_file: Path
+    reader: PReader, registry: StateRegistry, tmp_file: Path, name: str
 ) -> None:
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
 
-    unrelated = registry.path(TEST_STATE_NAME).parent / "README.md"
+    unrelated = registry.path(TEST_STATE_NAME).parent / name
     unrelated.write_text("not a state")
 
     registry.clear()
@@ -242,12 +249,18 @@ def test_clear_keeps_non_state_files(
 
 @pytest.mark.parametrize("state", EVERY_DEPTH, ids=["flat", "nested", "deep"])
 def test_save_creates_the_state_file_under_its_name(
-    reader: PReader, config: Config, tmp_file: Path, state: State
+    reader: PReader,
+    config: Config,
+    tmp_file: Path,
+    state: State,
+    read_state: Callable[..., Any],
 ) -> None:
-    path = reader.bytes(tmp_file, state=state).state.save()
+    saved = reader.bytes(tmp_file, state=state).state
+    path = saved.save()
 
     assert path == config.state_dir / f"{state}.state.json"
     assert path.is_file()
+    assert read_state(saved)
 
 
 def test_forward_slashes_resolve_to_the_native_name(
@@ -355,7 +368,7 @@ def test_delete_raises_when_the_name_escapes_through_a_symlink(
     victim = outside / f"{TEST_STATE_NAME}.state.json"
     victim.write_text("{}")
 
-    with pytest.raises(KeyError):
+    with pytest.raises(StateError, match="path escapes root via symlink"):
         del registry[str(Path("link", TEST_STATE_NAME))]
 
     assert victim.is_file()
@@ -369,7 +382,7 @@ def test_getitem_raises_when_the_state_is_a_symlink(
 
     (config.state_dir / f"{OTHER_STATE_NAME}.state.json").symlink_to(real)
 
-    with pytest.raises(KeyError):
+    with pytest.raises(StateError, match="path escapes root via symlink"):
         registry[OTHER_STATE_NAME]
 
 
@@ -505,10 +518,12 @@ def test_delitem_removes_saved_state(
 
 
 @pytest.mark.parametrize(
-    "name", TEST_UNSAFE_STATE_NAMES, ids=TEST_UNSAFE_STATE_NAME_IDS
+    ("name", "message"), TEST_UNSAFE_STATE_NAMES.items(), ids=TEST_UNSAFE_STATE_NAME_IDS
 )
-def test_delitem_raises_when_name_is_unsafe(registry: StateRegistry, name: str) -> None:
-    with pytest.raises(KeyError):
+def test_delitem_raises_when_name_is_unsafe(
+    registry: StateRegistry, name: str, message: str
+) -> None:
+    with pytest.raises(StateError, match=message):
         del registry[name]
 
 

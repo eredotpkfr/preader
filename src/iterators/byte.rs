@@ -1,76 +1,35 @@
-use std::{
-    fs::File,
-    io::{BufReader, Bytes, Read, Result},
-};
-
-use pyo3::{prelude::*, types::PyBytes};
+use std::io::Read;
 
 use crate::{
-    State,
-    iterators::base::IteratorBase,
-    types::{config::iterator::IteratorConfig, options::IteratorOptions},
+    ByteIterator, Result, Skip,
+    interfaces::{iterator::IteratorRead, skippable::Skippable},
 };
 
-#[pyclass(module = "preader", extends = IteratorBase)]
-pub struct ByteIterator {
-    bytes: Bytes<BufReader<File>>,
-}
+#[derive(Debug, Default)]
+pub struct Byte;
 
-impl ByteIterator {
-    pub(crate) fn new(
-        config: IteratorConfig,
-        mut state: State,
-        opts: IteratorOptions,
-    ) -> PyResult<PyClassInitializer<Self>> {
-        opts.validate()?;
+impl IteratorRead for ByteIterator {
+    type Borrowed<'a> = u8;
+    type Owned = u8;
 
-        let window = opts.window(state.position, state.file.size, opts.skip);
-        let reader = window.open(&state.file.path, config.buffer_capacity)?;
-
-        state.position = window.position;
-
-        let base = IteratorBase::new(config, state, window.end, opts.limit);
-        let sub = Self {
-            bytes: reader.bytes(),
-        };
-
-        Ok(PyClassInitializer::from(base).add_subclass(sub))
-    }
-
-    #[inline]
-    fn read_byte(&mut self) -> Result<Option<u8>> {
-        self.bytes.next().transpose()
-    }
-}
-
-#[pymethods]
-impl ByteIterator {
-    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
-        slf
-    }
-
-    fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Py<PyBytes>> {
-        let py = slf.py();
-
-        if slf.as_super().should_stop() {
-            return Err(slf.as_super().stop());
+    fn read(&mut self) -> Result<Option<u8>> {
+        if self.done() {
+            return self.stop();
         }
 
-        let Some(byte) = slf.read_byte()? else {
-            return Err(slf.as_super().stop());
+        let Some(byte) = (&mut self.reader).bytes().next().transpose()? else {
+            return self.stop();
         };
 
-        let value = PyBytes::new(py, &[byte]).unbind();
+        self.progress.count();
+        self.advance(1);
 
-        slf.as_super().count_yield();
-        slf.as_super().advance(1)?;
-
-        Ok(value)
+        Ok(Some(byte))
     }
+}
 
-    fn __repr__(slf: PyRef<'_, Self>) -> String {
-        crate::macros::pyrepr!("ByteIterator" {
-            state = slf.as_super().state.__repr__(),
-        })
+impl Skippable for Byte {
+    fn skip(&self, count: u64) -> Skip {
+        Skip::Bytes(count)
     }
 }

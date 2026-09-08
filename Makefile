@@ -8,18 +8,21 @@ all: \
 	cargo-build \
 	cargo-check \
 	cargo-clean \
+	cargo-clippy \
+	cargo-deny \
 	cargo-doc \
 	cargo-doc-rs \
 	cargo-doc-test \
 	cargo-fix \
 	cargo-machete \
 	cargo-nextest \
+	cargo-rustfmt \
+	cargo-rustfmt-check \
 	cargo-test \
 	cargo-udeps \
-	clippy \
+	cargo-update \
 	coverage \
 	coverage-lcov \
-	deny \
 	develop \
 	install-cargo-clippy \
 	install-cargo-deny \
@@ -39,19 +42,18 @@ all: \
 	live-book \
 	maturin-generate-ci \
 	mypy \
+	pre-commit \
+	pre-commit-update-hooks \
 	pytest \
 	ruff-check \
 	ruff-check-fix \
 	ruff-format \
 	ruff-format-check \
-	rustfmt \
-	rustfmt-check \
 	rustup \
 	shell \
 	stubs \
 	stubtest \
 	stubtest-allowlist \
-	update-pre-commit-hooks \
 	uv-audit \
 	uv-create-venv
 
@@ -60,29 +62,37 @@ book-build:
 book-test:
 	@mdbook test book
 cargo-build:
-	@uv run cargo build
+	@cargo build --all-features
 cargo-check:
-	@uv run cargo check
+	@cargo check --all-features --all-targets
 cargo-clean:
 	@cargo clean
+cargo-clippy:
+	@cargo clippy --all-targets --all-features -- -D warnings
+cargo-deny:
+	@cargo deny --all-features --log-level error check
 cargo-doc:
-	@uv run cargo doc
+	@cargo doc --all-features
 cargo-doc-rs:
-	@uv run cargo +nightly docs-rs
+	@cargo +nightly docs-rs
 cargo-doc-test:
-	@uv run cargo test --doc
+	@cargo test --doc
 cargo-fix:
-	@uv run cargo fix --allow-dirty --allow-staged
+	@cargo fix --all-features --allow-dirty --allow-staged
 cargo-machete:
 	@cargo machete
 cargo-nextest:
-	@uv run cargo nextest run
+	@cargo nextest run
+cargo-rustfmt: cargo-fix
+	@cargo +nightly fmt --all
+cargo-rustfmt-check:
+	@cargo +nightly fmt --all -- --check
 cargo-test:
-	@uv run cargo test
+	@cargo test
 cargo-udeps:
-	@uv run cargo +nightly udeps --all-targets
-clippy:
-	@uv run cargo clippy --all-targets --all-features -- -D warnings
+	@cargo +nightly udeps --all-targets --all-features
+cargo-update:
+	@cargo update --verbose
 coverage: COVERAGE_REPORT := --html --open
 coverage-lcov: COVERAGE_REPORT := --lcov --output-path lcov.info
 coverage coverage-lcov:
@@ -92,8 +102,6 @@ coverage coverage-lcov:
 		cargo llvm-cov report $(COVERAGE_REPORT) ); \
 	status=$$?; cargo clean -p preader >/dev/null; \
 		$(MAKE) --no-print-directory develop; exit $$status
-deny:
-	@cargo deny --all-features --log-level error check
 develop:
 	@uv run python -c "import pathlib, shutil, sysconfig; shutil.rmtree(pathlib.Path(sysconfig.get_paths()['purelib']) / 'preader', ignore_errors=True)"
 	@uv run maturin develop --uv
@@ -141,6 +149,10 @@ maturin-generate-ci:
 	@uv run maturin generate-ci github
 mypy:
 	@uv run mypy
+pre-commit:
+	@pre-commit run -a
+pre-commit-update-hooks:
+	@pre-commit autoupdate
 pytest: develop
 	@uv run pytest
 ruff-check:
@@ -151,23 +163,17 @@ ruff-format:
 	@uv run ruff format
 ruff-format-check:
 	@uv run ruff format --check
-rustfmt: cargo-fix
-	@cargo +nightly fmt --all
-rustfmt-check:
-	@cargo +nightly fmt --all -- --check
 rustup:
 	@rustup self update
 	@rustup update
 shell: develop
 	@uv run python3
 stubs:
-	@uv run maturin generate-stubs -q --out python -F experimental-inspect
+	@uv run maturin generate-stubs -q --out python -F extension-module,experimental-inspect
 stubtest: develop
 	@uv run stubtest preader --concise --allowlist stubtest-allowlist.txt
 stubtest-allowlist: develop
 	@uv run stubtest preader --generate-allowlist > stubtest-allowlist.txt
-update-pre-commit-hooks:
-	@pre-commit autoupdate
 uv-audit:
 	@uv audit
 uv-create-venv:

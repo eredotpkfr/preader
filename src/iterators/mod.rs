@@ -1,4 +1,3 @@
-pub mod base;
 pub mod byte;
 pub mod chunk;
 pub mod delimiter;

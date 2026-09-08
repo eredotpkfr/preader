@@ -1,8 +1,6 @@
 use std::path::PathBuf;
 
-use preader::{
-    Config, DEFAULT_VERIFY_STATE, IteratorConfig, StateManagerConfig, default_state_dir,
-};
+use preader::{AutoSave, Config};
 use rstest::{fixture, rstest};
 
 #[fixture]
@@ -18,57 +16,53 @@ fn config() -> Config {
 }
 
 #[rstest]
-fn iterator_config_carries_its_fields(config: Config) {
-    let iterator = IteratorConfig::from(&config);
+#[case::disabled(false, 0, AutoSave::Off)]
+#[case::disabled_with_a_threshold(false, 222, AutoSave::Off)]
+#[case::only_at_the_end(true, 0, AutoSave::Final)]
+#[case::every_threshold(true, 222, AutoSave::Every(222))]
+fn auto_save_collapses_the_config_pair(
+    mut config: Config,
+    #[case] enabled: bool,
+    #[case] threshold: u64,
+    #[case] expected: AutoSave,
+) {
+    config.auto_save_state = enabled;
+    config.auto_save_state_bytes = threshold;
 
-    assert_eq!(iterator.buffer_capacity, config.buffer_capacity);
-    assert_eq!(iterator.auto_save_state, config.auto_save_state);
-    assert_eq!(iterator.auto_save_state_bytes, config.auto_save_state_bytes);
+    assert_eq!(AutoSave::from(&config), expected);
 }
 
 #[rstest]
-fn manager_config_carries_its_fields(config: Config) {
-    let manager = StateManagerConfig::from(&config);
-
-    assert_eq!(manager.state_dir, config.state_dir);
-    assert_eq!(manager.verify_state, config.verify_state);
-}
-
-#[rstest]
-fn auto_load_state_reaches_neither_sub_config(config: Config) {
+fn auto_load_state_does_not_reach_the_autosave_policy(config: Config) {
     let mut flipped = config.clone();
     flipped.auto_load_state = !config.auto_load_state;
 
-    let iterator = IteratorConfig::from(&config);
-    let flipped_iterator = IteratorConfig::from(&flipped);
+    assert_eq!(AutoSave::from(&config), AutoSave::from(&flipped));
+}
 
-    assert_eq!(iterator.buffer_capacity, flipped_iterator.buffer_capacity);
-    assert_eq!(iterator.auto_save_state, flipped_iterator.auto_save_state);
+#[rstest]
+fn a_config_survives_a_json_round_trip(config: Config) {
+    let encoded = serde_json::to_string(&config).unwrap();
+
+    assert_eq!(serde_json::from_str::<Config>(&encoded).unwrap(), config);
+}
+
+#[rstest]
+fn a_serialized_config_names_every_field(config: Config) {
+    let encoded = serde_json::to_value(&config).unwrap();
+    let mut fields = encoded.as_object().unwrap().keys().cloned().collect::<Vec<_>>();
+
+    fields.sort();
+
     assert_eq!(
-        iterator.auto_save_state_bytes,
-        flipped_iterator.auto_save_state_bytes
+        fields,
+        [
+            "auto_load_state",
+            "auto_save_state",
+            "auto_save_state_bytes",
+            "buffer_capacity",
+            "state_dir",
+            "verify_state",
+        ]
     );
-
-    let manager = StateManagerConfig::from(&config);
-    let flipped_manager = StateManagerConfig::from(&flipped);
-
-    assert_eq!(manager.state_dir, flipped_manager.state_dir);
-    assert_eq!(manager.verify_state, flipped_manager.verify_state);
-}
-
-#[rstest]
-fn manager_config_default_uses_the_crate_defaults() {
-    let manager = StateManagerConfig::default();
-
-    assert_eq!(manager.state_dir, default_state_dir());
-    assert_eq!(manager.verify_state, DEFAULT_VERIFY_STATE);
-}
-
-#[rstest]
-fn manager_config_default_and_conversion_agree() {
-    let from_config = StateManagerConfig::from(&Config::default());
-    let standalone = StateManagerConfig::default();
-
-    assert_eq!(from_config.state_dir, standalone.state_dir);
-    assert_eq!(from_config.verify_state, standalone.verify_state);
 }
