@@ -180,7 +180,6 @@ fn a_resumed_read_ignores_align(tmp_dir: TempDir) {
         collected.push(line.to_owned());
     }
 
-    // The window opens mid-line, but a resumed run already consumed its skips.
     assert_eq!(collected, ["ha", "", "beta", "gamma"]);
 }
 

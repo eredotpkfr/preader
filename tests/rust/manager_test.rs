@@ -6,8 +6,8 @@ use std::{
 };
 
 use preader::{
-    Config, FileMetadata, STATE_FILE_EXTENSION, State, StateData, StateManager, TMP_FILE_EXTENSION,
-    Timestamps, default_state_dir,
+    Config, FileMetadata, STATE_FILE_EXTENSION_WITHOUT_DOT, State, StateData, StateManager,
+    TMP_FILE_EXTENSION, Timestamps, default_state_dir,
 };
 use rstest::{fixture, rstest};
 use sha2::{Digest, Sha256};
@@ -170,7 +170,7 @@ fn path_appends_the_suffix_inside_the_state_dir(sandbox: Sandbox) {
     assert_eq!(path.parent().unwrap(), sandbox.state_dir());
     assert_eq!(
         path.file_name().unwrap(),
-        format!("{TEST_STATE_NAME}.{STATE_FILE_EXTENSION}").as_str()
+        format!("{TEST_STATE_NAME}.{STATE_FILE_EXTENSION_WITHOUT_DOT}").as_str()
     );
 }
 
@@ -251,7 +251,9 @@ fn tmp_carries_both_suffixes_inside_the_state_dir(sandbox: Sandbox) {
 
     assert_eq!(tmp.parent().unwrap(), sandbox.state_dir());
     assert!(file_name.starts_with(&format!("{TEST_STATE_NAME}.")));
-    assert!(file_name.ends_with(&format!(".{STATE_FILE_EXTENSION}.{TMP_FILE_EXTENSION}")));
+    assert!(file_name.ends_with(&format!(
+        ".{STATE_FILE_EXTENSION_WITHOUT_DOT}.{TMP_FILE_EXTENSION}"
+    )));
 }
 
 #[rstest]
@@ -281,7 +283,7 @@ fn tmp_fails_when_the_name_is_unsafe(sandbox: Sandbox, #[case] name: &str, #[cas
 fn tmp_normalizes_the_name(sandbox: Sandbox, #[case] name: &str, #[case] expected: &str) {
     let tmp = sandbox.manager.tmp(name).unwrap();
     let file_name = tmp.file_name().unwrap().to_str().unwrap();
-    let tail = format!(".{STATE_FILE_EXTENSION}.{TMP_FILE_EXTENSION}");
+    let tail = format!(".{STATE_FILE_EXTENSION_WITHOUT_DOT}.{TMP_FILE_EXTENSION}");
     let (stem, _stamp) = file_name.strip_suffix(&tail).unwrap().rsplit_once('.').unwrap();
 
     assert_eq!(stem, expected);
@@ -294,7 +296,9 @@ fn tmp_uses_a_nanosecond_timestamp(sandbox: Sandbox) {
     let stamp = file_name
         .strip_prefix(&format!("{TEST_STATE_NAME}."))
         .unwrap()
-        .strip_suffix(&format!(".{STATE_FILE_EXTENSION}.{TMP_FILE_EXTENSION}"))
+        .strip_suffix(&format!(
+            ".{STATE_FILE_EXTENSION_WITHOUT_DOT}.{TMP_FILE_EXTENSION}"
+        ))
         .unwrap();
 
     assert!(stamp.parse::<i64>().unwrap() > 0);

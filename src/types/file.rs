@@ -7,7 +7,9 @@ use std::{
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::{Error, Mismatch, constants::FINGERPRINT_SAMPLE_BYTES, utils::file::fingerprint};
+use crate::{
+    Error, Mismatch, Result, constants::FINGERPRINT_SAMPLE_BYTES, utils::file::fingerprint,
+};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct FileMetadata {
@@ -21,7 +23,7 @@ pub struct FileMetadata {
 impl TryFrom<&Path> for FileMetadata {
     type Error = Error;
 
-    fn try_from(path: &Path) -> Result<Self, Self::Error> {
+    fn try_from(path: &Path) -> Result<Self> {
         let metadata = fs::metadata(path)?;
 
         if !metadata.is_file() {
@@ -41,11 +43,11 @@ impl TryFrom<&Path> for FileMetadata {
 }
 
 impl FileMetadata {
-    pub(crate) fn matches(&self, path: &Path) -> Result<bool, Error> {
+    pub(crate) fn matches(&self, path: &Path) -> Result<bool> {
         Ok(fingerprint(path, self.size.min(FINGERPRINT_SAMPLE_BYTES))? == self.fingerprint)
     }
 
-    pub(crate) fn compare(&self, current: &Self) -> Result<(), Mismatch> {
+    pub(crate) fn compare(&self, current: &Self) -> std::result::Result<(), Mismatch> {
         if self.size != current.size {
             return Err(Mismatch::Size {
                 saved: self.size,

@@ -141,7 +141,6 @@ fn a_resumed_read_ignores_align(tmp_dir: TempDir) {
         collected.push(segment.to_vec());
     }
 
-    // The window opens mid-segment, but a resumed run already consumed its skips.
     assert_eq!(
         collected,
         [b"aa".to_vec(), b"bbb".to_vec(), b"ccc".to_vec()]

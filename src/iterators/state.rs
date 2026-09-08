@@ -40,7 +40,7 @@ impl Iterator for StateIterator {
             };
             let path = entry.path();
             let file = path.strip_prefix(root).ok()?.to_str()?;
-            let name = file.strip_suffix(&format!(".{STATE_FILE_EXTENSION}"))?.to_owned();
+            let name = file.strip_suffix(STATE_FILE_EXTENSION)?.to_owned();
 
             (path.is_file()
                 && has_no_symlinks(root, path)

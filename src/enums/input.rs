@@ -3,7 +3,7 @@ use std::path::Path;
 use derive_more::From;
 
 use crate::{
-    Mismatch, Result, State, constants::STATE_FILE_EXTENSION, manager::StateManager,
+    Mismatch, Result, State, constants::STATE_FILE_EXTENSION_WITHOUT_DOT, manager::StateManager,
     utils::path::path_stem,
 };
 
@@ -43,7 +43,7 @@ impl StateInput {
 
                 return Ok(*state);
             }
-            Self::Name(name) => path_stem(&name, STATE_FILE_EXTENSION),
+            Self::Name(name) => path_stem(&name, STATE_FILE_EXTENSION_WITHOUT_DOT),
             Self::Auto => manager.autoname(file),
         };
 

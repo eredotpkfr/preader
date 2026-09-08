@@ -25,12 +25,7 @@ impl Progress {
     }
 
     pub(crate) fn skip(&mut self) -> bool {
-        self.skipping = match self.skipping.checked_sub(1) {
-            Some(remaining) => remaining,
-            None => return false,
-        };
-
-        true
+        (self.skipping > 0).then(|| self.skipping -= 1).is_some()
     }
 
     pub(crate) fn count(&mut self) {

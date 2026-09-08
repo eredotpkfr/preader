@@ -158,10 +158,12 @@ def test_lookup_raises_when_missing(
 
 
 @pytest.mark.parametrize(
-    "name", TEST_UNSAFE_STATE_NAMES, ids=TEST_UNSAFE_STATE_NAME_IDS
+    ("name", "message"), TEST_UNSAFE_STATE_NAMES.items(), ids=TEST_UNSAFE_STATE_NAME_IDS
 )
-def test_getitem_raises_when_name_is_unsafe(registry: StateRegistry, name: str) -> None:
-    with pytest.raises(KeyError):
+def test_getitem_raises_when_name_is_unsafe(
+    registry: StateRegistry, name: str, message: str
+) -> None:
+    with pytest.raises(StateError, match=message):
         registry[name]
 
 
@@ -366,7 +368,7 @@ def test_delete_raises_when_the_name_escapes_through_a_symlink(
     victim = outside / f"{TEST_STATE_NAME}.state.json"
     victim.write_text("{}")
 
-    with pytest.raises(KeyError):
+    with pytest.raises(StateError, match="path escapes root via symlink"):
         del registry[str(Path("link", TEST_STATE_NAME))]
 
     assert victim.is_file()
@@ -380,7 +382,7 @@ def test_getitem_raises_when_the_state_is_a_symlink(
 
     (config.state_dir / f"{OTHER_STATE_NAME}.state.json").symlink_to(real)
 
-    with pytest.raises(KeyError):
+    with pytest.raises(StateError, match="path escapes root via symlink"):
         registry[OTHER_STATE_NAME]
 
 
@@ -516,10 +518,12 @@ def test_delitem_removes_saved_state(
 
 
 @pytest.mark.parametrize(
-    "name", TEST_UNSAFE_STATE_NAMES, ids=TEST_UNSAFE_STATE_NAME_IDS
+    ("name", "message"), TEST_UNSAFE_STATE_NAMES.items(), ids=TEST_UNSAFE_STATE_NAME_IDS
 )
-def test_delitem_raises_when_name_is_unsafe(registry: StateRegistry, name: str) -> None:
-    with pytest.raises(KeyError):
+def test_delitem_raises_when_name_is_unsafe(
+    registry: StateRegistry, name: str, message: str
+) -> None:
+    with pytest.raises(StateError, match=message):
         del registry[name]
 
 

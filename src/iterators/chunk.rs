@@ -60,13 +60,13 @@ impl IteratorRead for ChunkIterator {
         let filled = self.inner.fill(&mut self.reader, max)?;
 
         if filled == 0 || (self.inner.drop_partial && filled < size) {
-            self.advance(filled)?;
+            self.advance(filled);
 
             return self.stop();
         }
 
         self.progress.count();
-        self.advance(filled)?;
+        self.advance(filled);
 
         Ok(Some(&self.inner.buffer[..filled]))
     }

@@ -19,10 +19,14 @@ impl From<&Config> for AutoSave {
 }
 
 impl AutoSave {
+    pub(crate) fn active(self) -> bool {
+        !matches!(self, Self::Off)
+    }
+
     pub(crate) fn floor(self, position: u64) -> u64 {
         match self {
+            Self::Every(0) | Self::Off | Self::Final => position,
             Self::Every(threshold) => position - position % threshold,
-            Self::Off | Self::Final => position,
         }
     }
 }

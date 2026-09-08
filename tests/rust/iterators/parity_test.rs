@@ -45,8 +45,6 @@ fn saved_state(reader: &PReader, path: &Path) -> State {
     state
 }
 
-// ─────────────────────────── auto_load_state ───────────────────────────
-
 #[rstest]
 fn auto_load_disabled_ignores_a_saved_state(tmp_dir: TempDir) {
     let reader = reader(&tmp_dir, Config::default());
@@ -164,8 +162,6 @@ fn auto_load_starts_fresh_when_the_name_tracks_another_file(tmp_dir: TempDir) {
     );
 }
 
-// ─────────────────────────── verify_state ───────────────────────────
-
 #[rstest]
 fn verification_disabled_accepts_a_stale_state_object(tmp_dir: TempDir) {
     let config = Config {
@@ -207,8 +203,6 @@ fn verification_disabled_reads_the_tracked_file_not_the_argument(tmp_dir: TempDi
 
     assert_eq!(collected, b"foo");
 }
-
-// ─────────────────────────── resync ───────────────────────────
 
 #[rstest]
 fn resync_allows_resuming_a_moved_file(tmp_dir: TempDir) {
@@ -269,8 +263,6 @@ fn resync_allows_resuming_a_grown_file(tmp_dir: TempDir) {
 
     assert_eq!(collected, b"more");
 }
-
-// ─────────────────────────── state identity ───────────────────────────
 
 #[rstest]
 fn a_state_object_keeps_its_own_state_dir(tmp_dir: TempDir) {
@@ -390,8 +382,6 @@ fn two_symlinks_to_the_same_target_share_the_autoname(tmp_dir: TempDir) {
     );
 }
 
-// ─────────────────────────── io and save failures ───────────────────────────
-
 #[rstest]
 fn a_deleted_tracked_file_fails_the_build(tmp_dir: TempDir) {
     let config = Config {
@@ -436,7 +426,7 @@ fn reading_a_file_replaced_by_a_directory_fails(tmp_dir: TempDir) {
 }
 
 #[rstest]
-fn a_save_error_propagates_after_a_truncation(tmp_dir: TempDir) {
+fn a_error_surfaces_after_a_truncation(tmp_dir: TempDir) {
     let config = Config {
         auto_save_state: true,
         buffer_capacity: 1,
@@ -449,13 +439,18 @@ fn a_save_error_propagates_after_a_truncation(tmp_dir: TempDir) {
     bytes.read().unwrap();
     truncate(&path, 1);
 
-    let error = bytes.find_map(Result::err).unwrap();
+    assert!(
+        bytes.all(|item| item.is_ok()),
+        "a save failure must not reach the item stream"
+    );
+
+    let error = bytes.error().unwrap();
 
     assert!(error.to_string().contains("path escapes root"), "{error}");
 }
 
 #[rstest]
-fn a_save_error_propagates_on_a_skipped_item(tmp_dir: TempDir) {
+fn a_error_surfaces_on_a_skipped_item(tmp_dir: TempDir) {
     let config = Config {
         auto_save_state: true,
         auto_save_state_bytes: 1,
@@ -464,14 +459,17 @@ fn a_save_error_propagates_on_a_skipped_item(tmp_dir: TempDir) {
     let reader = reader(&tmp_dir, config);
     let path = write(&tmp_dir, "data.txt", LINES);
     let mut lines = reader.lines(&path).state("../../escape").skip(2).build().unwrap();
-    let error = lines.read().unwrap_err();
+
+    assert_eq!(lines.read().unwrap(), Some("line-2"));
+
+    let error = lines.error().unwrap();
 
     assert!(error.to_string().contains("path escapes root"), "{error}");
-    assert_eq!(lines.state().position, 7);
+    assert_eq!(lines.state().position, 21);
 }
 
 #[rstest]
-fn a_save_error_propagates_on_a_filtered_blank(tmp_dir: TempDir) {
+fn a_error_surfaces_on_a_filtered_blank(tmp_dir: TempDir) {
     let config = Config {
         auto_save_state: true,
         auto_save_state_bytes: 1,
@@ -480,21 +478,24 @@ fn a_save_error_propagates_on_a_filtered_blank(tmp_dir: TempDir) {
     let reader = reader(&tmp_dir, config);
     let path = write(&tmp_dir, "data.txt", b"\nfoo\n");
     let mut lines = reader.lines(&path).state("../../escape").skip_empty(true).build().unwrap();
-    let error = lines.read().unwrap_err();
+
+    assert_eq!(lines.read().unwrap(), Some("foo"));
+
+    let error = lines.error().unwrap();
 
     assert!(error.to_string().contains("path escapes root"), "{error}");
-    assert_eq!(lines.state().position, 1);
+    assert_eq!(lines.state().position, 5);
 }
 
 #[rstest]
-fn a_save_error_propagates_when_end_drops_a_chunk(tmp_dir: TempDir) {
+fn a_error_surfaces_when_end_drops_a_chunk(tmp_dir: TempDir) {
     let config = Config {
         auto_save_state: true,
         ..Config::default()
     };
     let reader = reader(&tmp_dir, config);
     let path = write(&tmp_dir, "data.bin", ALPHABET);
-    let chunks = reader
+    let mut chunks = reader
         .chunks(&path)
         .state("../../escape")
         .size(8)
@@ -502,12 +503,16 @@ fn a_save_error_propagates_when_end_drops_a_chunk(tmp_dir: TempDir) {
         .end(12)
         .build()
         .unwrap();
-    let error = chunks.filter_map(Result::err).next().unwrap();
+
+    assert!(
+        chunks.all(|item| item.is_ok()),
+        "a save failure must not reach the item stream"
+    );
+
+    let error = chunks.error().unwrap();
 
     assert!(error.to_string().contains("path escapes root"), "{error}");
 }
-
-// ─────────────────────────── drop, registry and progress ───────────────────────────
 
 #[rstest]
 fn dropping_an_iterator_without_progress_saves_nothing(tmp_dir: TempDir) {
@@ -584,8 +589,6 @@ fn the_recorded_file_size_never_refreshes(tmp_dir: TempDir) {
     assert!(resumed.read().unwrap().is_none());
     assert_eq!(resumed.state().file.size, ALPHABET.len() as u64);
 }
-
-// ─────────────────────────── item semantics ───────────────────────────
 
 #[rstest]
 #[case::stripped(false, ["foo", "bar"])]

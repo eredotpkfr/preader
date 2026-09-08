@@ -21,13 +21,14 @@ impl Default for IteratorOptions {
 
 impl IteratorOptions {
     pub fn window(&self, position: u64, size: u64, skip: Skip) -> Window {
+        let (bytes, items) = skip.counts();
         let end = self.end.min(size);
-        let start = self.start.saturating_add(skip.bytes()).min(end);
+        let start = self.start.saturating_add(bytes).min(end);
 
         Window {
             position: position.max(start),
             end,
-            skipping: (position <= start && position < end).then(|| skip.items()),
+            skipping: (position <= start && position < end).then_some(items),
         }
     }
 

@@ -32,10 +32,6 @@ impl StateRegistry {
     }
 
     pub fn load(&self, name: &str) -> Result<State> {
-        if !self.exists(name) {
-            return Err(Error::NotFound(name.to_owned()));
-        }
-
         self.manager.load(name)
     }
 
@@ -60,11 +56,13 @@ impl StateRegistry {
     }
 
     pub fn delete(&self, name: &str) -> Result<()> {
-        if !self.exists(name) {
+        let path = self.path(name)?;
+
+        if !path.exists() {
             return Err(Error::NotFound(name.to_owned()));
         }
 
-        Ok(fs::remove_file(self.path(name)?)?)
+        Ok(fs::remove_file(path)?)
     }
 
     pub fn clear(&self) -> Result<()> {
