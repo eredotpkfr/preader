@@ -5,7 +5,7 @@ use std::{
     io::{ErrorKind, Seek},
 };
 
-use preader::{fingerprint, starts_mid_item};
+use preader::{FINGERPRINT_SAMPLE_BYTES, fingerprint, starts_mid_item};
 use rstest::rstest;
 use tempfile::TempDir;
 
@@ -30,7 +30,10 @@ fn fingerprint_digests_the_first_window(
 ) {
     let path = write(&tmp_dir, "data.bin", &content);
 
-    assert_eq!(fingerprint(&path).unwrap(), expected);
+    assert_eq!(
+        fingerprint(&path, FINGERPRINT_SAMPLE_BYTES).unwrap(),
+        expected
+    );
 }
 
 #[rstest]
@@ -40,8 +43,8 @@ fn fingerprint_ignores_content_past_the_window(tmp_dir: TempDir) {
     let longer = write(&tmp_dir, "longer.bin", &[&window, &b"y"[..]].concat());
 
     assert_eq!(
-        fingerprint(&shorter).unwrap(),
-        fingerprint(&longer).unwrap()
+        fingerprint(&shorter, FINGERPRINT_SAMPLE_BYTES).unwrap(),
+        fingerprint(&longer, FINGERPRINT_SAMPLE_BYTES).unwrap()
     );
 }
 
@@ -53,19 +56,26 @@ fn fingerprint_follows_a_symlink(tmp_dir: TempDir) {
 
     symlink(&target, &link).unwrap();
 
-    assert_eq!(fingerprint(&link).unwrap(), FOO_DIGEST);
+    assert_eq!(
+        fingerprint(&link, FINGERPRINT_SAMPLE_BYTES).unwrap(),
+        FOO_DIGEST
+    );
 }
 
 #[rstest]
 fn fingerprint_fails_when_the_file_is_missing(tmp_dir: TempDir) {
-    let error = fingerprint(&tmp_dir.path().join("missing.bin")).unwrap_err();
+    let error = fingerprint(
+        &tmp_dir.path().join("missing.bin"),
+        FINGERPRINT_SAMPLE_BYTES,
+    )
+    .unwrap_err();
 
     assert_eq!(error.kind(), ErrorKind::NotFound);
 }
 
 #[rstest]
 fn fingerprint_fails_when_the_path_is_a_directory(tmp_dir: TempDir) {
-    let error = fingerprint(tmp_dir.path()).unwrap_err();
+    let error = fingerprint(tmp_dir.path(), FINGERPRINT_SAMPLE_BYTES).unwrap_err();
 
     assert!(matches!(
         error.kind(),

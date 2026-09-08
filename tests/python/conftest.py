@@ -58,6 +58,25 @@ def append() -> Callable[[Path, bytes], None]:
 
 
 @pytest.fixture
+def overwrite() -> Callable[[Path, int, bytes], None]:
+    def _overwrite(path: Path, offset: int, content: bytes) -> None:
+        with path.open("r+b") as f:
+            f.seek(offset)
+            f.write(content)
+
+    return _overwrite
+
+
+@pytest.fixture
+def truncate() -> Callable[[Path, int], None]:
+    def _truncate(path: Path, size: int) -> None:
+        with path.open("r+b") as f:
+            f.truncate(size)
+
+    return _truncate
+
+
+@pytest.fixture
 def tmp_file(make_file: Callable[..., Path]) -> Path:
     return make_file(b"foo\n")
 

@@ -85,10 +85,18 @@ impl State {
     }
 
     pub fn resync(&self, path: impl AsRef<Path>) -> Result<Self> {
-        Ok(Self::from((
-            self.refresh(Some(&dunce::canonicalize(path)?))?,
-            self.manager.clone(),
-        )))
+        let path = dunce::canonicalize(path)?;
+        let data = self.refresh(Some(&path))?;
+
+        if self.manager.verify_state && !self.file.matches(&path)? {
+            return Err(Mismatch::Identity {
+                saved: self.file.path.clone(),
+                current: path,
+            }
+            .into());
+        }
+
+        Ok(Self::from((data, self.manager.clone())))
     }
 
     fn refresh(&self, file: Option<&Path>) -> Result<StateData> {
@@ -96,6 +104,10 @@ impl State {
 
         if let Some(path) = file {
             data.file = FileMetadata::try_from(path)?;
+
+            if self.manager.verify_state {
+                data.position = data.position.min(data.file.size);
+            }
         }
 
         data.timestamps.updated_at = Utc::now();

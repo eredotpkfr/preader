@@ -6,6 +6,8 @@ pub const DEFAULT_AUTO_SAVE_STATE_BYTES: u64 = 100 * 1024 * 1024;
 pub const DEFAULT_VERIFY_STATE: bool = true;
 // Bytes a chunk iterator yields per item while no size is set
 pub const DEFAULT_CHUNK_SIZE: usize = 1024;
+// Bytes read from the start of a file to compute its identity fingerprint
+pub const FINGERPRINT_SAMPLE_BYTES: u64 = 4096;
 // Byte a delimiter iterator splits on while no character is set
 pub const DEFAULT_DELIMITER: u8 = b',';
 // Directory name appended to the platform cache directory to hold state files

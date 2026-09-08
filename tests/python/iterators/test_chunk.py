@@ -243,15 +243,16 @@ def test_save_error_at_finalize_propagates(
 
 
 def test_save_error_propagates_after_a_truncation(
-    data_file: Path, make_reader: Callable[..., PReader]
+    data_file: Path,
+    make_reader: Callable[..., PReader],
+    truncate: Callable[[Path, int], None],
 ) -> None:
     reader = make_reader(auto_save_state=True, buffer_capacity=1)
     iterator = reader.chunks(data_file, chunk_size=3, state="../../etc/passwd")
 
     next(iterator)
 
-    with data_file.open("r+b") as file:
-        file.truncate(1)
+    truncate(data_file, 1)
 
     with pytest.raises(StateError, match="path escapes root"):
         list(iterator)
@@ -277,7 +278,10 @@ def test_save_error_propagates_when_end_drops_a_chunk(
 
 @pytest.mark.parametrize("threshold", [4, 1000], ids=["at_the_threshold", "at_the_end"])
 def test_save_error_propagates_on_a_dropped_short_chunk(
-    make_file: Callable[..., Path], make_reader: Callable[..., PReader], threshold: int
+    make_file: Callable[..., Path],
+    make_reader: Callable[..., PReader],
+    threshold: int,
+    truncate: Callable[[Path, int], None],
 ) -> None:
     reader = make_reader(
         auto_save_state=True, auto_save_state_bytes=threshold, buffer_capacity=1
@@ -289,8 +293,7 @@ def test_save_error_propagates_on_a_dropped_short_chunk(
 
     next(iterator)
 
-    with path.open("r+b") as file:
-        file.truncate(5)
+    truncate(path, 5)
 
     with pytest.raises(StateError, match="path escapes root"):
         list(iterator)
@@ -890,7 +893,9 @@ def test_drop_partial_reads_past_a_buffer_refill(
 
 
 def test_drop_partial_discards_a_truncated_chunk(
-    make_reader: Callable[..., PReader], make_file: Callable[..., Path]
+    make_reader: Callable[..., PReader],
+    make_file: Callable[..., Path],
+    truncate: Callable[[Path, int], None],
 ) -> None:
     reader = make_reader(buffer_capacity=1)
     path = make_file(b"foobarbaz")
@@ -898,8 +903,7 @@ def test_drop_partial_discards_a_truncated_chunk(
 
     assert next(iterator) == b"foo"
 
-    with path.open("r+b") as f:
-        f.truncate(5)
+    truncate(path, 5)
 
     assert list(iterator) == []
     assert iterator.state.position == 5
@@ -932,15 +936,16 @@ def test_iteration_survives_the_file_being_deleted(
 
 
 def test_iteration_stops_at_a_truncation(
-    make_reader: Callable[..., PReader], data_file: Path
+    make_reader: Callable[..., PReader],
+    data_file: Path,
+    truncate: Callable[[Path, int], None],
 ) -> None:
     reader = make_reader(buffer_capacity=1)
     iterator = reader.chunks(data_file, chunk_size=3)
 
     next(iterator)
 
-    with data_file.open("r+b") as file:
-        file.truncate(10)
+    truncate(data_file, 10)
 
     list(iterator)
 

@@ -6,13 +6,10 @@ use std::{
 
 use sha2::{Digest, Sha256};
 
-// Bytes read from the start of a file to compute its fingerprint
-const FINGERPRINT_SAMPLE_BYTES: u64 = 4096;
+pub fn fingerprint(path: &Path, window: u64) -> Result<String> {
+    let mut buffer = Vec::with_capacity(window as usize);
 
-pub fn fingerprint(path: &Path) -> Result<String> {
-    let mut buffer = Vec::with_capacity(FINGERPRINT_SAMPLE_BYTES as usize);
-
-    File::open(path)?.take(FINGERPRINT_SAMPLE_BYTES).read_to_end(&mut buffer)?;
+    File::open(path)?.take(window).read_to_end(&mut buffer)?;
 
     Ok(hex::encode(Sha256::digest(&buffer)))
 }

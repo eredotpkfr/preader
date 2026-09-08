@@ -226,12 +226,17 @@ def test_names_ignores_a_non_utf8_state(
     assert list(registry.names()) == [TEST_STATE_NAME]
 
 
+@pytest.mark.parametrize(
+    "name",
+    ["README.md", f"{TEST_STATE_NAME}.state.json.tmp"],
+    ids=["unrelated", "a_temporary_file"],
+)
 def test_clear_keeps_non_state_files(
-    reader: PReader, registry: StateRegistry, tmp_file: Path
+    reader: PReader, registry: StateRegistry, tmp_file: Path, name: str
 ) -> None:
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
 
-    unrelated = registry.path(TEST_STATE_NAME).parent / "README.md"
+    unrelated = registry.path(TEST_STATE_NAME).parent / name
     unrelated.write_text("not a state")
 
     registry.clear()

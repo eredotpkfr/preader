@@ -1,4 +1,4 @@
-use preader::{Config, IteratorBuild, IteratorRead};
+use preader::{Config, IteratorBuild, IteratorOptions, IteratorRead};
 use rstest::rstest;
 use tempfile::TempDir;
 
@@ -21,6 +21,24 @@ fn read_yields_every_byte(tmp_dir: TempDir) {
     }
 
     assert_eq!(collected, CONTENT);
+}
+
+#[rstest]
+fn options_replace_the_individual_setters(tmp_dir: TempDir) {
+    let reader = reader(&tmp_dir, Config::default());
+    let path = write(&tmp_dir, "data.bin", CONTENT);
+    let options = IteratorOptions {
+        start: 1,
+        end: 5,
+        skip: 1,
+        limit: 2,
+    };
+    let bundled = reader.bytes(&path).options(options).build().unwrap();
+    let separate = reader.bytes(&path).start(1).end(5).skip(1).limit(2).build().unwrap();
+    let collect = |bytes: preader::ByteIterator| bytes.map(Result::unwrap).collect::<Vec<_>>();
+
+    assert_eq!(collect(bundled), b"cd");
+    assert_eq!(collect(separate), b"cd");
 }
 
 #[rstest]
