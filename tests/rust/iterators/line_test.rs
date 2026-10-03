@@ -1,4 +1,4 @@
-use preader::{Config, IteratorBuild, IteratorRead};
+use preader::{Config, Error, IteratorBuild, IteratorRead};
 use rstest::rstest;
 use tempfile::TempDir;
 
@@ -87,7 +87,9 @@ fn read_fails_on_invalid_utf8(tmp_dir: TempDir) {
     let path = write(&tmp_dir, "data.txt", b"\xff\xfe\n");
     let mut iterator = reader.lines(&path).build().unwrap();
 
-    assert!(iterator.read().unwrap_err().to_string().contains("valid UTF-8"));
+    let error = iterator.read().unwrap_err();
+
+    assert!(matches!(error, Error::Utf8(_)), "unexpected error: {error}");
 }
 
 #[rstest]

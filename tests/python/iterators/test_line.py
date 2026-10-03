@@ -113,7 +113,7 @@ def test_raises_when_content_is_invalid_utf8(
 ) -> None:
     path = make_file(b"foo\n" + bytes([0xFF, 0xFE]) + b"\n")
 
-    with pytest.raises(OSError, match="valid UTF-8"):
+    with pytest.raises(ValueError, match="utf-8"):
         list(reader.lines(path))
 
 
@@ -126,7 +126,7 @@ def test_read_counts_the_invalid_line(
     assert next(iterator) == "foo"
     assert iterator.state.position == 4
 
-    with pytest.raises(OSError, match="valid UTF-8"):
+    with pytest.raises(ValueError, match="utf-8"):
         next(iterator)
 
     assert iterator.state.position == 7
@@ -150,7 +150,7 @@ def test_resume_after_an_invalid_line_stays_aligned(
 
     assert next(iterator) == "foo"
 
-    with pytest.raises(OSError, match="valid UTF-8"):
+    with pytest.raises(ValueError, match="utf-8"):
         next(iterator)
 
     assert list(iterator) == ["bar", "baz"]
@@ -161,14 +161,13 @@ def test_resume_after_an_invalid_line_stays_aligned(
     assert list(reader.lines(path, state=TEST_STATE_NAME)) == []
 
 
-def test_raises_when_skipped_content_is_invalid_utf8(
+def test_skipped_content_is_not_validated(
     reader: PReader, make_file: Callable[..., Path]
 ) -> None:
     path = make_file(bytes([0xFF, 0xFE]) + b"\nfoo\n")
     options = IteratorOptions(skip=1)
 
-    with pytest.raises(OSError, match="valid UTF-8"):
-        list(reader.lines(path, options=options))
+    assert list(reader.lines(path, options=options)) == ["foo"]
 
 
 @pytest.mark.parametrize(

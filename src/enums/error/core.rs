@@ -11,6 +11,8 @@ pub enum Error {
     #[error(transparent)]
     Regex(#[from] regex::Error),
     #[error(transparent)]
+    Utf8(#[from] std::str::Utf8Error),
+    #[error(transparent)]
     Time(#[from] std::time::SystemTimeError),
     #[error(transparent)]
     Path(#[from] PathError),

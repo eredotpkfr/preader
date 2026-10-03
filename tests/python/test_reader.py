@@ -28,7 +28,7 @@ def test_every_iterator_counts_invalid_bytes(
 
     assert next(lines) == "foo"
 
-    with pytest.raises(OSError, match="valid UTF-8"):
+    with pytest.raises(ValueError, match="utf-8"):
         next(lines)
 
     assert next(lines) == "bar"

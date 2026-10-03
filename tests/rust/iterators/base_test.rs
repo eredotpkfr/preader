@@ -472,7 +472,7 @@ fn a_read_error_reaches_the_caller_before_any_save(tmp_dir: TempDir) {
 
     let error = lines.read().unwrap_err();
 
-    assert!(matches!(error, Error::Io(_)), "{error}");
+    assert!(matches!(error, Error::Utf8(_)), "{error}");
 }
 
 #[cfg(unix)]
