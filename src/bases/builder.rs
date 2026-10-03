@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use crate::{
-    AutoSave, Config, IteratorOptions, Result, StateInput,
+    Config, IteratorOptions, Result, StateInput,
     bases::iterator::PReaderIterator,
     interfaces::{builder::IteratorBuild, iterator::IteratorRead, skippable::Skippable},
     manager::StateManager,
@@ -47,22 +47,8 @@ where
         let skip = self.inner.skip(self.options.skip);
 
         let state = self.state.resolve(self.manager, &file)?;
-
         let window = self.options.window(state.position, state.file.size, skip);
-        let reader = window.open(&state.file.path, self.config.buffer_capacity)?;
 
-        let progress = window.progress(reader.get_ref(), skip.boundary(), self.options.limit)?;
-        let autosave = AutoSave::from(self.config);
-        let state = state.seek(window.position);
-        let saved = autosave.floor(window.position);
-
-        Ok(PReaderIterator {
-            reader,
-            progress,
-            autosave,
-            saved,
-            state,
-            inner: self.inner,
-        })
+        PReaderIterator::new(self.config, self.options, state, &window, skip, self.inner)
     }
 }

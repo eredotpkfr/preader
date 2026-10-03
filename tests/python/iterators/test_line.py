@@ -117,6 +117,50 @@ def test_raises_when_content_is_invalid_utf8(
         list(reader.lines(path))
 
 
+def test_read_counts_the_invalid_line(
+    reader: PReader, make_file: Callable[..., Path]
+) -> None:
+    path = make_file(b"foo\n" + bytes([0xFF, 0xFE]) + b"\nbar\n")
+    iterator = reader.lines(path)
+
+    assert next(iterator) == "foo"
+    assert iterator.state.position == 4
+
+    with pytest.raises(OSError, match="valid UTF-8"):
+        next(iterator)
+
+    assert iterator.state.position == 7
+    assert next(iterator) == "bar"
+
+    with pytest.raises(StopIteration):
+        next(iterator)
+
+    assert iterator.state.position == 11
+    assert iterator.state.percent() == 100.0
+
+
+def test_resume_after_an_invalid_line_stays_aligned(
+    make_reader: Callable[..., PReader], make_file: Callable[..., Path]
+) -> None:
+    path = make_file(b"foo\n" + bytes([0xFF, 0xFE]) + b"\nbar\nbaz\n")
+    reader = make_reader(
+        auto_save_state=True, auto_save_state_bytes=1, auto_load_state=True
+    )
+    iterator = reader.lines(path, state=TEST_STATE_NAME)
+
+    assert next(iterator) == "foo"
+
+    with pytest.raises(OSError, match="valid UTF-8"):
+        next(iterator)
+
+    assert list(iterator) == ["bar", "baz"]
+
+    del iterator
+
+    assert reader.states[TEST_STATE_NAME].position == 15
+    assert list(reader.lines(path, state=TEST_STATE_NAME)) == []
+
+
 def test_raises_when_skipped_content_is_invalid_utf8(
     reader: PReader, make_file: Callable[..., Path]
 ) -> None:

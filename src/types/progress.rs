@@ -7,15 +7,6 @@ pub struct Progress {
 }
 
 impl Progress {
-    pub(crate) fn new(end: u64, limit: u64, skipping: u64) -> Self {
-        Self {
-            end,
-            limit,
-            yielded: 0,
-            skipping,
-        }
-    }
-
     pub(crate) fn done(&self, position: u64) -> bool {
         position >= self.end || self.yielded >= self.limit
     }

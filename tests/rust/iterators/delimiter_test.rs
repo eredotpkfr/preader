@@ -51,6 +51,22 @@ fn skip_empty_judges_blankness_without_the_delimiter(tmp_dir: TempDir) {
 }
 
 #[rstest]
+fn read_splits_invalid_bytes(tmp_dir: TempDir) {
+    let reader = reader(&tmp_dir, Config::default());
+    let path = write(&tmp_dir, "data.csv", b"a,\xff\xfe,c");
+    let mut iterator = reader.delimiter(&path).build().unwrap();
+    let mut collected = Vec::new();
+
+    while let Some(segment) = iterator.read().unwrap() {
+        collected.push(segment.to_vec());
+    }
+
+    assert_eq!(collected, [b"a".to_vec(), vec![0xff, 0xfe], b"c".to_vec()]);
+    assert_eq!(iterator.state().position, 6);
+    assert_eq!(iterator.state().percent(), 100.0);
+}
+
+#[rstest]
 fn a_file_without_the_delimiter_yields_one_segment(tmp_dir: TempDir) {
     assert_eq!(segments(&tmp_dir, b"abc", false, false), [b"abc".to_vec()]);
 }

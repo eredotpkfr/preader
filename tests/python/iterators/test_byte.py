@@ -50,6 +50,17 @@ def test_options_narrow_the_output(
     assert b"".join(reader.bytes(data_file, options=options)) == expected
 
 
+def test_read_yields_invalid_bytes(
+    reader: PReader, make_file: Callable[..., Path]
+) -> None:
+    invalid = b"foo" + bytes([0xFF, 0xFE]) + b"bar"
+    iterator = reader.bytes(make_file(invalid))
+
+    assert b"".join(iterator) == invalid
+    assert iterator.state.position == 8
+    assert iterator.state.percent() == 100.0
+
+
 @pytest.mark.parametrize(
     ("options", "expected_length"),
     [(IteratorOptions(end=5, limit=100), 5), (IteratorOptions(end=100, limit=2), 2)],

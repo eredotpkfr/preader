@@ -91,6 +91,22 @@ fn read_fails_on_invalid_utf8(tmp_dir: TempDir) {
 }
 
 #[rstest]
+fn read_counts_the_invalid_line(tmp_dir: TempDir) {
+    let reader = reader(&tmp_dir, Config::default());
+    let path = write(&tmp_dir, "data.txt", b"alpha\n\xff\xfe\nbeta\n");
+    let mut lines = reader.lines(&path).build().unwrap();
+
+    assert_eq!(lines.read().unwrap(), Some("alpha"));
+    assert_eq!(lines.state().position, 6);
+    assert!(lines.read().is_err());
+    assert_eq!(lines.state().position, 9);
+    assert_eq!(lines.read().unwrap(), Some("beta"));
+    assert_eq!(lines.read().unwrap(), None);
+    assert_eq!(lines.state().position, 14);
+    assert_eq!(lines.state().percent(), 100.0);
+}
+
+#[rstest]
 fn align_skips_a_line_the_window_starts_inside(tmp_dir: TempDir) {
     let reader = reader(&tmp_dir, Config::default());
     let path = write(&tmp_dir, "data.txt", CONTENT);

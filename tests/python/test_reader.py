@@ -10,6 +10,35 @@ from constants import TEST_ALPHABET, TEST_DEFAULT_DELIMITER, TEST_STATE_NAME
 from preader import Config, IteratorOptions, PReader, StateError
 
 
+def test_every_iterator_counts_invalid_bytes(
+    reader: PReader, make_file: Callable[..., Path]
+) -> None:
+    invalid = b"foo\n" + bytes([0xFF, 0xFE]) + b"\nbar\n"
+    path = make_file(invalid)
+
+    assert b"".join(reader.bytes(path)) == invalid
+    assert b"".join(reader.chunks(path, chunk_size=4)) == invalid
+    assert list(reader.delimiter(path, delimiter="\n")) == [
+        b"foo",
+        bytes([0xFF, 0xFE]),
+        b"bar",
+    ]
+
+    lines = reader.lines(path)
+
+    assert next(lines) == "foo"
+
+    with pytest.raises(OSError, match="valid UTF-8"):
+        next(lines)
+
+    assert next(lines) == "bar"
+
+    with pytest.raises(StopIteration):
+        next(lines)
+
+    assert lines.state.position == 11
+
+
 def test_preader_defaults() -> None:
     config = PReader().config
     default = Config()

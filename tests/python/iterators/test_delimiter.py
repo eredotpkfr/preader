@@ -52,6 +52,17 @@ def test_options_narrow_the_output(
     assert segments == [seg.encode() for seg in expected]
 
 
+def test_read_splits_invalid_bytes(
+    reader: PReader, make_file: Callable[..., Path]
+) -> None:
+    invalid = b"foo," + bytes([0xFF, 0xFE]) + b",bar"
+    iterator = reader.delimiter(make_file(invalid), delimiter=TEST_DEFAULT_DELIMITER)
+
+    assert list(iterator) == [b"foo", bytes([0xFF, 0xFE]), b"bar"]
+    assert iterator.state.position == 10
+    assert iterator.state.percent() == 100.0
+
+
 def test_end_yields_a_crossing_segment_whole(reader: PReader, data_file: Path) -> None:
     options = IteratorOptions(end=15)
     iterator = reader.delimiter(

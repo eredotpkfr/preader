@@ -62,6 +62,22 @@ fn a_zero_sized_chunk_yields_nothing(tmp_dir: TempDir) {
 }
 
 #[rstest]
+fn read_keeps_invalid_bytes(tmp_dir: TempDir) {
+    let reader = reader(&tmp_dir, Config::default());
+    let path = write(&tmp_dir, "data.bin", b"ab\xff\xfeefgh");
+    let mut chunks = reader.chunks(&path).size(4).build().unwrap();
+    let mut collected = Vec::new();
+
+    while let Some(chunk) = chunks.read().unwrap() {
+        collected.push(chunk.to_vec());
+    }
+
+    assert_eq!(collected, [b"ab\xff\xfe".to_vec(), b"efgh".to_vec()]);
+    assert_eq!(chunks.state().position, 8);
+    assert_eq!(chunks.state().percent(), 100.0);
+}
+
+#[rstest]
 fn a_chunk_of_one_matches_the_byte_iterator(tmp_dir: TempDir) {
     let expected: Vec<Vec<u8>> = CONTENT.iter().map(|byte| vec![*byte]).collect();
 
