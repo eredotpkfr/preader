@@ -43,10 +43,6 @@ pub fn has_no_symlinks(root: &Path, path: &Path) -> bool {
     existing.canonicalize().is_ok_and(|real| real == existing)
 }
 
-pub fn strip_extensions<'a>(name: &'a str, extension: &str) -> &'a str {
-    name.trim_end_matches(&format!(".{extension}"))
-}
-
 pub fn normalize_path(path: &str) -> String {
     Path::new(path)
         .components()
@@ -63,7 +59,7 @@ pub fn path_stem(path: &str, extension: &str) -> String {
     let Some(last) = candidate.file_name().and_then(|last| last.to_str()) else {
         return normalized;
     };
-    let stem = strip_extensions(last, extension);
+    let stem = last.trim_end_matches(extension);
 
     if Path::new(stem).file_name().and_then(|stem| stem.to_str()) != Some(stem) {
         return String::new();

@@ -3,8 +3,8 @@ use std::path::{MAIN_SEPARATOR_STR, Path};
 use std::{fs, os::unix::fs::symlink};
 
 use preader::{
-    DEFAULT_STATE_DIR, default_state_dir, has_no_symlinks, normalize_path, path_stem, scoped_join,
-    strip_extensions,
+    DEFAULT_STATE_DIR, STATE_FILE_EXTENSION, default_state_dir, has_no_symlinks, normalize_path,
+    path_stem, scoped_join,
 };
 use rstest::{fixture, rstest};
 use tempfile::TempDir;
@@ -82,20 +82,6 @@ fn default_state_dir_is_absolute() {
 }
 
 #[rstest]
-#[case::suffixed("job-1.state.json", "job-1")]
-#[case::not_suffixed("job-1", "job-1")]
-#[case::empty_name("", "")]
-#[case::only_looks_suffixed("mystate.json", "mystate.json")]
-#[case::different_case("job-1.STATE.JSON", "job-1.STATE.JSON")]
-#[case::bare_suffix("state.json", "state.json")]
-#[case::suffix_without_a_name(".state.json", "")]
-#[case::doubled_suffix("job-1.state.json.state.json", "job-1")]
-#[case::tripled_suffix("job-1.state.json.state.json.state.json", "job-1")]
-fn strip_extensions_removes_every_exact_match(#[case] name: &str, #[case] expected: &str) {
-    assert_eq!(strip_extensions(name, "state.json"), expected);
-}
-
-#[rstest]
 #[case::plain("job-1", "job-1")]
 #[case::nested("sub/job-1", "sub/job-1")]
 #[case::repeated_separator("sub//job-1", "sub/job-1")]
@@ -130,11 +116,15 @@ fn normalize_path_treats_a_backslash_as_a_name_character() {
     "sub-1/.state.json/sub-2/job-1"
 )]
 #[case::only_looks_suffixed("mystate.json", "mystate.json")]
-fn path_stem_strips_the_last_extension(#[case] path: &str, #[case] expected: &str) {
-    let stem = path_stem(path, "state.json");
+#[case::empty_name("", "")]
+#[case::different_case("job-1.STATE.JSON", "job-1.STATE.JSON")]
+#[case::bare_suffix("state.json", "state.json")]
+#[case::tripled_suffix("job-1.state.json.state.json.state.json", "job-1")]
+fn path_stem_strips_every_trailing_extension(#[case] path: &str, #[case] expected: &str) {
+    let stem = path_stem(path, STATE_FILE_EXTENSION);
 
     assert_eq!(stem, expected.replace('/', MAIN_SEPARATOR_STR));
-    assert_eq!(path_stem(&stem, "state.json"), stem);
+    assert_eq!(path_stem(&stem, STATE_FILE_EXTENSION), stem);
 }
 
 #[rstest]
@@ -147,7 +137,7 @@ fn path_stem_strips_the_last_extension(#[case] path: &str, #[case] expected: &st
 #[case::stem_is_a_current_dir("..state.json")]
 #[case::stem_is_a_parent_dir("...state.json")]
 fn path_stem_is_empty_without_a_usable_stem(#[case] path: &str) {
-    assert!(path_stem(path, "state.json").is_empty());
+    assert!(path_stem(path, STATE_FILE_EXTENSION).is_empty());
 }
 
 #[rstest]
@@ -155,7 +145,7 @@ fn path_stem_is_empty_without_a_usable_stem(#[case] path: &str) {
 #[case::traversal("../../etc/passwd")]
 #[case::root("/")]
 fn path_stem_keeps_an_unsafe_path_verbatim(#[case] path: &str) {
-    let stem = path_stem(path, "state.json");
+    let stem = path_stem(path, STATE_FILE_EXTENSION);
 
     assert!(scoped_join(Path::new("/tmp/preader"), &stem).is_err());
 }

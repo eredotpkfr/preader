@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use preader::{Config, Error, IteratorBuild, IteratorRead, PReader, State};
+use preader::{Config, Error, IteratorBuild, IteratorRead, PReader, STATE_FILE_EXTENSION, State};
 use rstest::rstest;
 use tempfile::TempDir;
 
@@ -286,7 +286,7 @@ fn a_state_object_keeps_its_own_state_dir(tmp_dir: TempDir) {
         byte.unwrap();
     }
 
-    let name = format!("{TEST_STATE_NAME}.state.json");
+    let name = format!("{TEST_STATE_NAME}{STATE_FILE_EXTENSION}");
 
     assert!(owner.config().state_dir.join(&name).is_file());
     assert!(!elsewhere.join(&name).exists());
@@ -426,7 +426,7 @@ fn reading_a_file_replaced_by_a_directory_fails(tmp_dir: TempDir) {
 }
 
 #[rstest]
-fn a_error_surfaces_after_a_truncation(tmp_dir: TempDir) {
+fn a_save_error_stops_the_read_after_a_truncation(tmp_dir: TempDir) {
     let config = Config {
         auto_save_state: true,
         buffer_capacity: 1,
@@ -439,18 +439,13 @@ fn a_error_surfaces_after_a_truncation(tmp_dir: TempDir) {
     bytes.read().unwrap();
     truncate(&path, 1);
 
-    assert!(
-        bytes.all(|item| item.is_ok()),
-        "a save failure must not reach the item stream"
-    );
-
-    let error = bytes.error().unwrap();
+    let error = bytes.find_map(Result::err).unwrap();
 
     assert!(error.to_string().contains("path escapes root"), "{error}");
 }
 
 #[rstest]
-fn a_error_surfaces_on_a_skipped_item(tmp_dir: TempDir) {
+fn a_save_error_stops_the_read_on_a_skipped_item(tmp_dir: TempDir) {
     let config = Config {
         auto_save_state: true,
         auto_save_state_bytes: 1,
@@ -460,16 +455,14 @@ fn a_error_surfaces_on_a_skipped_item(tmp_dir: TempDir) {
     let path = write(&tmp_dir, "data.txt", LINES);
     let mut lines = reader.lines(&path).state("../../escape").skip(2).build().unwrap();
 
-    assert_eq!(lines.read().unwrap(), Some("line-2"));
-
-    let error = lines.error().unwrap();
+    let error = lines.read().unwrap_err();
 
     assert!(error.to_string().contains("path escapes root"), "{error}");
-    assert_eq!(lines.state().position, 21);
+    assert_eq!(lines.state().position, 7);
 }
 
 #[rstest]
-fn a_error_surfaces_on_a_filtered_blank(tmp_dir: TempDir) {
+fn a_save_error_stops_the_read_on_a_filtered_blank(tmp_dir: TempDir) {
     let config = Config {
         auto_save_state: true,
         auto_save_state_bytes: 1,
@@ -479,16 +472,14 @@ fn a_error_surfaces_on_a_filtered_blank(tmp_dir: TempDir) {
     let path = write(&tmp_dir, "data.txt", b"\nfoo\n");
     let mut lines = reader.lines(&path).state("../../escape").skip_empty(true).build().unwrap();
 
-    assert_eq!(lines.read().unwrap(), Some("foo"));
-
-    let error = lines.error().unwrap();
+    let error = lines.read().unwrap_err();
 
     assert!(error.to_string().contains("path escapes root"), "{error}");
-    assert_eq!(lines.state().position, 5);
+    assert_eq!(lines.state().position, 1);
 }
 
 #[rstest]
-fn a_error_surfaces_when_end_drops_a_chunk(tmp_dir: TempDir) {
+fn a_save_error_stops_the_read_when_end_drops_a_chunk(tmp_dir: TempDir) {
     let config = Config {
         auto_save_state: true,
         ..Config::default()
@@ -504,12 +495,7 @@ fn a_error_surfaces_when_end_drops_a_chunk(tmp_dir: TempDir) {
         .build()
         .unwrap();
 
-    assert!(
-        chunks.all(|item| item.is_ok()),
-        "a save failure must not reach the item stream"
-    );
-
-    let error = chunks.error().unwrap();
+    let error = chunks.find_map(Result::err).unwrap();
 
     assert!(error.to_string().contains("path escapes root"), "{error}");
 }

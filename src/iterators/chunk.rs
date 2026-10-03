@@ -4,7 +4,7 @@ use crate::{
     ChunkIterator, Result, Skip,
     constants::DEFAULT_CHUNK_SIZE,
     interfaces::{iterator::IteratorRead, skippable::Skippable},
-    types::core::Reader,
+    types::core::FileReader,
 };
 
 #[derive(Debug)]
@@ -25,7 +25,7 @@ impl Default for Chunk {
 }
 
 impl Chunk {
-    fn fill(&mut self, reader: &mut Reader, max: usize) -> Result<usize> {
+    fn fill(&mut self, reader: &mut FileReader, max: usize) -> Result<usize> {
         let mut filled = 0;
 
         while filled < max {
@@ -60,13 +60,13 @@ impl IteratorRead for ChunkIterator {
         let filled = self.inner.fill(&mut self.reader, max)?;
 
         if filled == 0 || (self.inner.drop_partial && filled < size) {
-            self.advance(filled);
+            self.advance(filled)?;
 
             return self.stop();
         }
 
         self.progress.count();
-        self.advance(filled);
+        self.advance(filled)?;
 
         Ok(Some(&self.inner.buffer[..filled]))
     }

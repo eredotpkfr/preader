@@ -4,7 +4,7 @@ use std::{
     path::Path,
 };
 
-use crate::{Progress, Result, types::core::Reader, utils::file::starts_mid_item};
+use crate::{Progress, Result, types::core::FileReader, utils::file::starts_mid_item};
 
 #[derive(Debug)]
 pub struct Window {
@@ -14,7 +14,7 @@ pub struct Window {
 }
 
 impl Window {
-    pub fn open(&self, path: &Path, capacity: usize) -> Result<Reader> {
+    pub fn open(&self, path: &Path, capacity: usize) -> Result<FileReader> {
         let mut file = File::open(path)?;
 
         file.seek(SeekFrom::Start(self.position))?;

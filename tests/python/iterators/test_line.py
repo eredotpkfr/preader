@@ -1,6 +1,5 @@
 import json
 import os
-import warnings
 
 from collections.abc import Callable
 from pathlib import Path
@@ -15,7 +14,7 @@ from constants import (
     TEST_WINDOWS_UNSAFE_STATE_NAME_IDS,
     TEST_WINDOWS_UNSAFE_STATE_NAMES,
 )
-from preader import Config, IteratorOptions, PReader, SaveWarning, State, StateError
+from preader import Config, IteratorOptions, PReader, State, StateError
 
 LINES = [f"line-{i}" for i in range(6)]
 LINE_CONTENT = "\n".join(LINES).encode()
@@ -308,28 +307,52 @@ def test_extra_next_after_exhaustion_does_not_resave(
     assert reader.states[TEST_STATE_NAME].path().stat().st_mtime == mtime_before
 
 
-def test_a_failing_autosave_warns_and_keeps_every_item(
+def test_a_failing_threshold_save_stops_the_read(
     config: Config,
     make_reader: Callable[..., PReader],
     data_file: Path,
 ) -> None:
     config.state_dir.write_bytes(b"foo")
 
-    reader = make_reader(auto_save_state=True, auto_save_state_bytes=5)
+    reader = make_reader(auto_save_state=True, auto_save_state_bytes=100)
+    iterator = reader.lines(data_file, state=TEST_STATE_NAME)
 
-    with pytest.warns(SaveWarning):
-        assert list(reader.lines(data_file, state=TEST_STATE_NAME)) == LINES
+    assert [next(iterator) for _ in range(len(LINES))] == LINES
+
+    with pytest.raises(StateError):
+        next(iterator)
 
 
-def test_a_failing_final_save_keeps_every_item(
+def test_a_failed_save_exhausts_the_iterator(
+    config: Config,
+    make_reader: Callable[..., PReader],
+    data_file: Path,
+) -> None:
+    config.state_dir.write_bytes(b"foo")
+
+    reader = make_reader(auto_save_state=True, auto_save_state_bytes=1)
+    iterator = reader.lines(data_file, state=TEST_STATE_NAME)
+
+    with pytest.raises(StateError):
+        next(iterator)
+
+    with pytest.raises(StopIteration):
+        next(iterator)
+
+
+def test_a_failing_final_save_reaches_every_item_first(
     data_file: Path, make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(auto_save_state=True)
+    iterator = reader.lines(data_file, state="../../etc/passwd")
 
-    assert list(reader.lines(data_file, state="../../etc/passwd")) == LINES
+    assert [next(iterator) for _ in range(len(LINES))] == LINES
+
+    with pytest.raises(StateError, match="path escapes root"):
+        next(iterator)
 
 
-def test_a_failing_autosave_keeps_the_items_read_before_a_truncation(
+def test_a_failing_autosave_stops_the_read_after_a_truncation(
     data_file: Path,
     make_reader: Callable[..., PReader],
     truncate: Callable[[Path, int], None],
@@ -341,10 +364,11 @@ def test_a_failing_autosave_keeps_the_items_read_before_a_truncation(
 
     truncate(data_file, 1)
 
-    assert list(iterator) == []
+    with pytest.raises(StateError, match="path escapes root"):
+        list(iterator)
 
 
-def test_a_failing_autosave_does_not_interrupt_skipping(
+def test_a_failing_autosave_stops_the_read_while_skipping(
     data_file: Path,
     make_reader: Callable[..., PReader],
     truncate: Callable[[Path, int], None],
@@ -355,23 +379,24 @@ def test_a_failing_autosave_does_not_interrupt_skipping(
 
     truncate(data_file, 1)
 
-    assert list(iterator) == []
+    with pytest.raises(StateError, match="path escapes root"):
+        list(iterator)
 
 
-def test_a_failing_autosave_keeps_an_item_reached_by_skipping(
+def test_a_failing_autosave_stops_the_read_on_a_skipped_item(
     data_file: Path, make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(auto_save_state=True, auto_save_state_bytes=1)
     options = IteratorOptions(skip=2)
     iterator = reader.lines(data_file, state="../../etc/passwd", options=options)
 
-    with pytest.warns(SaveWarning, match="path escapes root"):
-        assert list(iterator) == LINES[2:]
+    with pytest.raises(StateError, match="path escapes root"):
+        next(iterator)
 
-    assert iterator.state.position == len(LINE_CONTENT)
+    assert iterator.state.position == len(LINES[0]) + 1
 
 
-def test_a_failing_autosave_keeps_an_item_after_a_filtered_blank(
+def test_a_failing_autosave_stops_the_read_on_a_filtered_blank(
     make_file: Callable[..., Path], make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(auto_save_state=True, auto_save_state_bytes=1)
@@ -379,22 +404,10 @@ def test_a_failing_autosave_keeps_an_item_after_a_filtered_blank(
 
     iterator = reader.lines(path, state="../../etc/passwd", skip_empty=True)
 
-    with pytest.warns(SaveWarning, match="path escapes root"):
-        assert list(iterator) == ["foo"]
+    with pytest.raises(StateError, match="path escapes root"):
+        next(iterator)
 
-    assert iterator.state.position == 5
-
-
-def test_a_failing_autosave_can_be_made_fatal(
-    data_file: Path, make_reader: Callable[..., PReader]
-) -> None:
-    reader = make_reader(auto_save_state=True, auto_save_state_bytes=1)
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", SaveWarning)
-
-        with pytest.raises(SaveWarning, match="path escapes root"):
-            list(reader.lines(data_file, state="../../etc/passwd"))
+    assert iterator.state.position == 1
 
 
 def test_line_iterator_repr(

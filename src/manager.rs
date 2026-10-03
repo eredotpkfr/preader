@@ -8,7 +8,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     Error, PathError, Result, State,
-    constants::{STATE_FILE_EXTENSION_WITHOUT_DOT, TMP_FILE_EXTENSION},
+    constants::{STATE_FILE_EXTENSION, STATE_FILE_EXTENSION_WITHOUT_DOT, TMP_FILE_EXTENSION},
     types::config::Config,
     utils::path::{has_no_symlinks, path_stem, scoped_join},
 };
@@ -72,10 +72,7 @@ impl StateManager {
     }
 
     fn locate(&self, name: &str, extensions: &[&str]) -> Result<PathBuf> {
-        let mut path = scoped_join(
-            &self.state_dir,
-            &path_stem(name, STATE_FILE_EXTENSION_WITHOUT_DOT),
-        )?;
+        let mut path = scoped_join(&self.state_dir, &path_stem(name, STATE_FILE_EXTENSION))?;
 
         for extension in extensions {
             path = path.with_added_extension(extension);
