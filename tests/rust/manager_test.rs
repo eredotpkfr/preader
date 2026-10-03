@@ -6,7 +6,7 @@ use std::{
 };
 
 use preader::{
-    Config, FileMetadata, STATE_FILE_EXTENSION, State, StateData, StateManager, TMP_FILE_EXTENSION,
+    Config, FileMetadata, STATE_FILE_EXTENSION, StateData, StateManager, TMP_FILE_EXTENSION,
     Timestamps, default_state_dir,
 };
 use rstest::{fixture, rstest};
@@ -51,7 +51,7 @@ impl Sandbox {
             checksum: String::new(),
         };
 
-        State::from((data, self.manager.clone())).save().unwrap()
+        self.manager.state(data).save().unwrap()
     }
 }
 

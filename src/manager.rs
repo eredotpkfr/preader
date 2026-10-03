@@ -7,7 +7,7 @@ use chrono::Utc;
 use sha2::{Digest, Sha256};
 
 use crate::{
-    Error, PathError, Result, State,
+    Error, PathError, Result, State, StateData,
     constants::{STATE_FILE_EXTENSION, STATE_FILE_EXTENSION_WITHOUT_DOT, TMP_FILE_EXTENSION},
     types::config::Config,
     utils::path::{has_no_symlinks, path_stem, scoped_join},
@@ -54,6 +54,13 @@ impl StateManager {
         )
     }
 
+    pub fn state(&self, data: StateData) -> State {
+        State {
+            data,
+            manager: self.clone(),
+        }
+    }
+
     pub fn load(&self, name: &str) -> Result<State> {
         let path = self.path(name)?;
 
@@ -62,7 +69,7 @@ impl StateManager {
         }
 
         let content = fs::read_to_string(&path)?;
-        let state = State::from((serde_json::from_str(&content)?, self.clone()));
+        let state = self.state(serde_json::from_str(&content)?);
 
         if self.verify_state {
             state.verify()?;

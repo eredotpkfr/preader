@@ -47,20 +47,17 @@ fn state_in(tmp_dir: &TempDir) -> State {
     });
     let data = state_data(PathBuf::from(OsStr::from_bytes(NON_UTF8_PATH)));
 
-    State::from((data, manager))
+    manager.state(data)
 }
 
 #[test]
 fn eq_compares_the_data() {
-    let one = State::from((
-        state_data(PathBuf::from(TEST_FILE_PATH)),
-        StateManager::default(),
-    ));
+    let one = StateManager::default().state(state_data(PathBuf::from(TEST_FILE_PATH)));
     let mut data = state_data(PathBuf::from(TEST_FILE_PATH));
 
     data.position += 1;
 
-    let other = State::from((data, StateManager::default()));
+    let other = StateManager::default().state(data);
 
     assert!(one != other);
 }
@@ -71,14 +68,8 @@ fn eq_ignores_the_manager() {
         state_dir: PathBuf::from("/tmp/preader-elsewhere"),
         ..Config::default()
     };
-    let one = State::from((
-        state_data(PathBuf::from(TEST_FILE_PATH)),
-        StateManager::from(&elsewhere),
-    ));
-    let other = State::from((
-        state_data(PathBuf::from(TEST_FILE_PATH)),
-        StateManager::default(),
-    ));
+    let one = StateManager::from(&elsewhere).state(state_data(PathBuf::from(TEST_FILE_PATH)));
+    let other = StateManager::default().state(state_data(PathBuf::from(TEST_FILE_PATH)));
 
     assert_ne!(one.path().unwrap(), other.path().unwrap());
     assert!(one == other);
