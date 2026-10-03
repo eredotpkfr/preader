@@ -44,6 +44,17 @@ def test_options_narrow_the_output(
     assert b"".join(reader.chunks(data_file, options=options, chunk_size=3)) == expected
 
 
+def test_read_keeps_invalid_bytes(
+    reader: PReader, make_file: Callable[..., Path]
+) -> None:
+    invalid = b"foo" + bytes([0xFF, 0xFE]) + b"bar"
+    iterator = reader.chunks(make_file(invalid), chunk_size=4)
+
+    assert b"".join(iterator) == invalid
+    assert iterator.state.position == 8
+    assert iterator.state.percent() == 100.0
+
+
 @pytest.mark.parametrize("buffer_capacity", [0, 2], ids=["zero", "tiny"])
 def test_buffer_capacity_smaller_than_chunk_size(
     data_file: Path, make_reader: Callable[..., PReader], buffer_capacity: int

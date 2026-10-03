@@ -210,6 +210,35 @@ fn a_single_byte_file_yields_one_item(tmp_dir: TempDir) {
 }
 
 #[rstest]
+fn every_iterator_counts_invalid_bytes(tmp_dir: TempDir) {
+    let reader = reader(&tmp_dir, Config::default());
+    let path = write(&tmp_dir, "data.bin", b"foo\n\xff\xfe\nbar\n");
+
+    let mut bytes = reader.bytes(&path).build().unwrap();
+
+    while bytes.read().unwrap().is_some() {}
+
+    let mut chunks = reader.chunks(&path).size(4).build().unwrap();
+
+    while chunks.read().unwrap().is_some() {}
+
+    let mut segments = reader.delimiter(&path).character(b'\n').build().unwrap();
+
+    while segments.read().unwrap().is_some() {}
+
+    let mut lines = reader.lines(&path).build().unwrap();
+
+    for _ in 0..4 {
+        let _ = lines.read();
+    }
+
+    assert_eq!(bytes.state().position, 11, "bytes");
+    assert_eq!(chunks.state().position, 11, "chunks");
+    assert_eq!(segments.state().position, 11, "delimiter");
+    assert_eq!(lines.state().position, 11, "lines");
+}
+
+#[rstest]
 fn the_maximum_start_and_end_yield_nothing(tmp_dir: TempDir) {
     let reader = reader(&tmp_dir, Config::default());
     let path = write(&tmp_dir, "data.bin", b"foo\n");

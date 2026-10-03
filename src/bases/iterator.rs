@@ -1,9 +1,10 @@
-use std::ops::Range;
+use std::{io::Seek, ops::Range};
 
 use crate::{
-    AutoSave, Progress, Result, State,
+    AutoSave, Config, IteratorOptions, Progress, Result, State,
+    enums::skip::Skip,
     interfaces::{iterator::IteratorRead, segmented::Segmented},
-    types::core::FileReader,
+    types::{core::FileReader, window::Window},
 };
 
 #[derive(Debug)]
@@ -17,6 +18,30 @@ pub struct PReaderIterator<I> {
 }
 
 impl<I> PReaderIterator<I> {
+    pub(crate) fn new(
+        config: &Config,
+        options: IteratorOptions,
+        state: State,
+        window: &Window,
+        skip: Skip,
+        inner: I,
+    ) -> Result<Self> {
+        let reader = window.open(&state.file.path, config.buffer_capacity)?;
+        let progress = window.progress(&state.file.path, options, skip)?;
+        let autosave = AutoSave::from(config);
+        let saved = autosave.floor(window.position);
+        let state = state.seek(window.position);
+
+        Ok(Self {
+            reader,
+            progress,
+            state,
+            autosave,
+            saved,
+            inner,
+        })
+    }
+
     pub fn state(&mut self) -> &mut State {
         &mut self.state
     }
@@ -25,13 +50,25 @@ impl<I> PReaderIterator<I> {
         self.progress.done(self.state.position)
     }
 
-    pub(crate) fn advance(&mut self, bytes: usize) -> Result<()> {
+    pub(crate) fn advance(&mut self, read: Result<usize>) -> Result<usize> {
+        if read.is_err() {
+            let consumed = self.reader.stream_position()?;
+
+            self.state.advance(consumed.saturating_sub(self.state.position));
+
+            return read;
+        }
+
+        let bytes = read?;
+
         self.state.advance(bytes as u64);
 
         match self.autosave {
-            AutoSave::Every(threshold) => self.save(threshold),
-            AutoSave::Off | AutoSave::Final => Ok(()),
+            AutoSave::Every(threshold) => self.save(threshold)?,
+            AutoSave::Off | AutoSave::Final => (),
         }
+
+        Ok(bytes)
     }
 
     pub(crate) fn stop<T>(&mut self) -> Result<Option<T>> {
@@ -64,13 +101,11 @@ impl<I: Segmented> PReaderIterator<I> {
                 return self.stop();
             }
 
-            let read = self.inner.fill(&mut self.reader)?;
+            let read = self.inner.fill(&mut self.reader);
 
-            if read == 0 {
+            if self.advance(read)? == 0 {
                 return self.stop();
             }
-
-            self.advance(read)?;
 
             if self.progress.skip() {
                 continue;

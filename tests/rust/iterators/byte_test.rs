@@ -76,6 +76,23 @@ fn options_narrow_the_output(
 }
 
 #[rstest]
+fn read_yields_invalid_bytes(tmp_dir: TempDir) {
+    let reader = reader(&tmp_dir, Config::default());
+    let invalid: &[u8] = b"ab\xff\xfecd";
+    let path = write(&tmp_dir, "data.bin", invalid);
+    let mut bytes = reader.bytes(&path).build().unwrap();
+    let mut collected = Vec::new();
+
+    while let Some(byte) = bytes.read().unwrap() {
+        collected.push(byte);
+    }
+
+    assert_eq!(collected, invalid);
+    assert_eq!(bytes.state().position, 6);
+    assert_eq!(bytes.state().percent(), 100.0);
+}
+
+#[rstest]
 fn read_yields_nothing_for_an_empty_file(tmp_dir: TempDir) {
     let reader = reader(&tmp_dir, Config::default());
     let path = write(&tmp_dir, "data.bin", b"");

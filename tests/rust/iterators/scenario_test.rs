@@ -289,6 +289,38 @@ fn lines_fail_when_a_skipped_item_is_invalid_utf8(tmp_dir: TempDir) {
 }
 
 #[rstest]
+fn a_resume_after_an_invalid_line_stays_aligned(tmp_dir: TempDir) {
+    let content = b"alpha\n\xff\xfe\nbeta\ngamma\n";
+    let reader = reader(&tmp_dir, resuming(&tmp_dir));
+    let path = write(&tmp_dir, "data.txt", content);
+    let mut lines = reader.lines(&path).state(TEST_STATE_NAME).build().unwrap();
+    let mut collected = Vec::new();
+
+    while let Ok(item) = lines.read() {
+        match item {
+            Some(line) => collected.push(line.to_owned()),
+            None => break,
+        }
+    }
+
+    assert_eq!(collected, ["alpha"]);
+
+    while let Some(line) = lines.read().unwrap() {
+        collected.push(line.to_owned());
+    }
+
+    assert_eq!(collected, ["alpha", "beta", "gamma"]);
+    assert_eq!(lines.state().position, content.len() as u64);
+
+    drop(lines);
+
+    let mut resumed = reader.lines(&path).state(TEST_STATE_NAME).build().unwrap();
+
+    assert_eq!(resumed.read().unwrap(), None);
+    assert_eq!(resumed.state().position, content.len() as u64);
+}
+
+#[rstest]
 fn mixed_line_endings_are_both_stripped(tmp_dir: TempDir) {
     let reader = reader(&tmp_dir, Config::default());
     let path = write(&tmp_dir, "data.txt", b"a\r\nb\nc\r\n");

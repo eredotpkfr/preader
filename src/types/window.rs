@@ -4,7 +4,10 @@ use std::{
     path::Path,
 };
 
-use crate::{Progress, Result, types::core::FileReader, utils::file::starts_mid_item};
+use crate::{
+    IteratorOptions, Progress, Result, enums::skip::Skip, types::core::FileReader,
+    utils::file::starts_mid_item,
+};
 
 #[derive(Debug)]
 pub struct Window {
@@ -24,25 +27,28 @@ impl Window {
 
     pub(crate) fn progress(
         &self,
-        file: &File,
-        boundary: Option<u8>,
-        limit: u64,
+        path: &Path,
+        options: IteratorOptions,
+        skip: Skip,
     ) -> Result<Progress> {
-        Ok(Progress::new(
-            self.end,
-            limit,
-            self.skip_items(file, boundary)?,
-        ))
+        Ok(Progress {
+            end: self.end,
+            limit: options.limit,
+            yielded: 0,
+            skipping: self.skip_items(path, skip.boundary())?,
+        })
     }
 
-    fn skip_items(&self, file: &File, boundary: Option<u8>) -> Result<u64> {
+    fn skip_items(&self, path: &Path, boundary: Option<u8>) -> Result<u64> {
         let Some(count) = self.skipping else {
             return Ok(0);
         };
-        let misaligned = match boundary {
-            Some(byte) => starts_mid_item(file, self.position, byte)?,
-            None => false,
+        let Some(byte) = boundary else {
+            return Ok(count);
         };
+
+        let file = File::open(path)?;
+        let misaligned = starts_mid_item(&file, self.position, byte)?;
 
         Ok(count.saturating_add(u64::from(misaligned)))
     }

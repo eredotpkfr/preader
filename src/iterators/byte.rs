@@ -22,8 +22,8 @@ impl IteratorRead for ByteIterator {
             return self.stop();
         };
 
+        self.advance(Ok(1))?;
         self.progress.count();
-        self.advance(1)?;
 
         Ok(Some(byte))
     }
