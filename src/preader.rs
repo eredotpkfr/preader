@@ -5,6 +5,7 @@ use crate::{
     bases::builder::PReaderIteratorBuilder,
 };
 
+#[cfg_attr(feature = "python", pyo3::pyclass(module = "preader"))]
 #[derive(Debug)]
 pub struct PReader {
     config: Config,

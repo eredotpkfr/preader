@@ -31,14 +31,6 @@ sha2 = "0.11.0"
 thiserror = "2.0.20"
 walkdir = "2.5.0"
 
-# pyo3 has no consumer until src/python/ returns with the bindings; the feature
-# wiring itself is verified (cargo test needs no interpreter, maturin still builds)
-[package.metadata.cargo-machete]
-ignored = ["pyo3"]
-
-[package.metadata.cargo-udeps.ignore]
-normal = ["pyo3"]
-
 [features]
 default = []
 testing = []

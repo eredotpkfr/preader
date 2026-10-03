@@ -236,9 +236,9 @@ def test_a_failing_threshold_save_stops_the_read(
     reader = make_reader(auto_save_state=True, auto_save_state_bytes=5)
     iterator = reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=3)
 
-    assert b"".join(next(iterator) for _ in range(2)) == TEST_ALPHABET[:6]
+    assert next(iterator) == TEST_ALPHABET[:3]
 
-    with pytest.raises(StateError):
+    with pytest.raises(FileExistsError):
         next(iterator)
 
 
@@ -252,7 +252,7 @@ def test_a_failed_save_exhausts_the_iterator(
     reader = make_reader(auto_save_state=True, auto_save_state_bytes=1)
     iterator = reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=3)
 
-    with pytest.raises(StateError):
+    with pytest.raises(FileExistsError):
         next(iterator)
 
     with pytest.raises(StopIteration):
@@ -681,7 +681,7 @@ def test_raises_when_resumed_file_replaced_by_directory(
     data_file.unlink()
     data_file.mkdir()
 
-    with pytest.raises(StateError, match="io failed"):
+    with pytest.raises(StateError, match="not a file"):
         reader.chunks(data_file, state=state)
 
 

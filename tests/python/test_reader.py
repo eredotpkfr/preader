@@ -101,7 +101,7 @@ def test_bytes_raises_when_the_file_is_unreadable(
 ) -> None:
     revoke_permissions(tmp_file)
 
-    with pytest.raises(StateError, match="Permission denied"):
+    with pytest.raises(PermissionError):
         reader.bytes(tmp_file)
 
 

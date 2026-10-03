@@ -1,6 +1,10 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+#[cfg_attr(
+    feature = "python",
+    pyo3::pyclass(module = "preader", eq, frozen, get_all, skip_from_py_object)
+)]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Timestamps {
     #[serde(with = "chrono::serde::ts_seconds")]

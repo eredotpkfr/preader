@@ -170,7 +170,7 @@ def test_getitem_raises_when_name_is_unsafe(
 def test_getitem_raises_when_state_is_a_directory(registry: StateRegistry) -> None:
     registry.path(TEST_STATE_NAME).mkdir(parents=True)
 
-    with pytest.raises(StateError, match="state not found"):
+    with pytest.raises(KeyError, match=TEST_STATE_NAME):
         registry[TEST_STATE_NAME]
 
 
@@ -180,7 +180,7 @@ def test_delete_raises_when_state_is_a_directory(
     config.state_dir.mkdir(parents=True, exist_ok=True)
     (config.state_dir / f"{TEST_STATE_NAME}.state.json").mkdir()
 
-    with pytest.raises(StateError, match="io failed"):
+    with pytest.raises(OSError, match=r"Operation not permitted|Is a directory"):
         del registry[TEST_STATE_NAME]
 
 
@@ -487,14 +487,14 @@ def test_find_returns_none_when_name_is_unsafe(
     assert registry.find(name) is None
 
 
-def test_find_raises_when_state_is_corrupted(
+def test_find_returns_none_when_state_is_corrupted(
     registry: StateRegistry, reader: PReader, tmp_file: Path
 ) -> None:
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
     registry.path(TEST_STATE_NAME).write_text("not valid json")
 
-    with pytest.raises(StateError, match="line 1 column"):
-        registry.find(TEST_STATE_NAME)
+    assert registry.exists(TEST_STATE_NAME)
+    assert registry.find(TEST_STATE_NAME) is None
 
 
 def test_search_filters_by_pattern(
@@ -774,7 +774,7 @@ def test_registry_raises_when_the_state_dir_is_a_file(
 ) -> None:
     config.state_dir.write_text("not a directory")
 
-    with pytest.raises(StateError, match="AlreadyExists"):
+    with pytest.raises(FileExistsError):
         call(make_reader().states)
 
 
@@ -825,7 +825,7 @@ def test_registry_raises_when_a_subdirectory_is_unreadable(
 
     revoke_permissions(blocked)
 
-    with pytest.raises(StateError, match="io failed"):
+    with pytest.raises(PermissionError):
         call(registry)
 
 

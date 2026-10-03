@@ -8,11 +8,12 @@ use walkdir::{IntoIter, WalkDir};
 
 use crate::{Error, Result, constants::STATE_FILE_EXTENSION, utils::path::has_no_symlinks};
 
+#[cfg_attr(feature = "python", pyo3::pyclass(module = "preader"))]
 #[derive(Debug)]
 pub struct StateIterator {
-    state_dir: PathBuf,
-    entries: IntoIter,
-    pattern: Option<Regex>,
+    pub(crate) state_dir: PathBuf,
+    pub(crate) entries: IntoIter,
+    pub(crate) pattern: Option<Regex>,
 }
 
 impl StateIterator {

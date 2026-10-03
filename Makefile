@@ -62,23 +62,23 @@ book-build:
 book-test:
 	@mdbook test book
 cargo-build:
-	@cargo build --all-features
+	@uv run cargo build --all-features
 cargo-check:
-	@cargo check --all-features --all-targets
+	@uv run cargo check --all-features --all-targets
 cargo-clean:
 	@cargo clean
 cargo-clippy:
-	@cargo clippy --all-targets --all-features -- -D warnings
+	@uv run cargo clippy --all-targets --all-features -- -D warnings
 cargo-deny:
 	@cargo deny --all-features --log-level error check
 cargo-doc:
-	@cargo doc --all-features
+	@uv run cargo doc --all-features
 cargo-doc-rs:
 	@cargo +nightly docs-rs
 cargo-doc-test:
 	@cargo test --doc
 cargo-fix:
-	@cargo fix --all-features --allow-dirty --allow-staged
+	@uv run cargo fix --all-features --allow-dirty --allow-staged
 cargo-machete:
 	@cargo machete
 cargo-nextest:
@@ -90,7 +90,7 @@ cargo-rustfmt-check:
 cargo-test:
 	@cargo test --features testing
 cargo-udeps:
-	@cargo +nightly udeps --all-targets --all-features
+	@uv run cargo +nightly udeps --all-targets --all-features
 cargo-update:
 	@cargo update --verbose
 coverage: COVERAGE_REPORT := --html --open

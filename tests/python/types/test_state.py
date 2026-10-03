@@ -127,7 +127,7 @@ def test_save_raises_when_state_dir_blocked(
 
     state = make_reader().bytes(tmp_file).state
 
-    with pytest.raises(StateError, match="AlreadyExists"):
+    with pytest.raises(FileExistsError):
         state.save()
 
 
@@ -137,7 +137,7 @@ def test_save_raises_when_state_path_is_a_directory(
     state = reader.bytes(tmp_file).state
     state.path().mkdir(parents=True)
 
-    with pytest.raises(StateError, match="io failed"):
+    with pytest.raises(IsADirectoryError):
         state.save()
 
 
@@ -200,7 +200,7 @@ def test_verify_raises_when_mtime_precedes_the_epoch(
 
     os.utime(tmp_large_file, (-86400, -86400))
 
-    with pytest.raises(StateError, match="io failed"):
+    with pytest.raises(StateError, match="second time provided"):
         state.verify()
 
 
@@ -254,7 +254,7 @@ def test_verify_raises_when_file_deleted(
 
     tmp_large_file.unlink()
 
-    with pytest.raises(StateError, match="NotFound") as exc_info:
+    with pytest.raises(FileNotFoundError) as exc_info:
         state.verify()
 
     assert "mismatch" not in str(exc_info.value)
@@ -309,8 +309,11 @@ def test_resync_does_not_mutate_original(
 
 
 @pytest.mark.parametrize(
-    ("name", "message"),
-    [("../../etc/passwd", "path escapes root"), (TEST_STATE_NAME, "io failed")],
+    ("name", "error", "message"),
+    [
+        ("../../etc/passwd", StateError, "path escapes root"),
+        (TEST_STATE_NAME, IsADirectoryError, "Is a directory"),
+    ],
     ids=["path_rejected", "commit_failed"],
 )
 def test_save_leaves_the_state_untouched_when_it_fails(
@@ -318,6 +321,7 @@ def test_save_leaves_the_state_untouched_when_it_fails(
     make_reader: Callable[..., PReader],
     tmp_file: Path,
     name: str,
+    error: type[Exception],
     message: str,
 ) -> None:
     state_dir = config.state_dir
@@ -330,7 +334,7 @@ def test_save_leaves_the_state_untouched_when_it_fails(
     before = state.timestamps.updated_at
     checksum = state.checksum()
 
-    with pytest.raises(StateError, match=message):
+    with pytest.raises(error, match=message):
         state.save()
 
     assert state.timestamps.updated_at == before
@@ -353,7 +357,7 @@ def test_save_leaves_no_temporary_file(
     state = make_reader().bytes(tmp_file, state=TEST_STATE_NAME).state
 
     if blocked:
-        with pytest.raises(StateError, match="io failed"):
+        with pytest.raises(IsADirectoryError):
             state.save()
     else:
         state.save()
@@ -382,7 +386,7 @@ def test_reload_raises_when_the_file_is_deleted(
     path.unlink()
     state.save()
 
-    with pytest.raises(StateError, match="NotFound"):
+    with pytest.raises(FileNotFoundError):
         reader.states[TEST_STATE_NAME]
 
 
@@ -627,7 +631,7 @@ def test_resync_raises_when_the_file_is_unreadable(
 
     revoke_permissions(tmp_file)
 
-    with pytest.raises(StateError, match="Permission denied"):
+    with pytest.raises(PermissionError):
         state.resync(tmp_file)
 
 
@@ -644,10 +648,16 @@ def test_resync_keeps_the_state_dir_for_the_save(
 
 
 @pytest.mark.parametrize(
-    "name", ["missing.bin", "elsewhere"], ids=["missing", "a_directory"]
+    ("name", "error"),
+    [("missing.bin", FileNotFoundError), ("elsewhere", StateError)],
+    ids=["missing", "a_directory"],
 )
 def test_resync_still_checks_the_path_without_verification(
-    make_reader: Callable[..., PReader], tmp_file: Path, tmp_path: Path, name: str
+    make_reader: Callable[..., PReader],
+    tmp_file: Path,
+    tmp_path: Path,
+    name: str,
+    error: type[Exception],
 ) -> None:
     reader = make_reader(verify_state=False)
     state = reader.bytes(tmp_file, state=TEST_STATE_NAME).state
@@ -656,7 +666,7 @@ def test_resync_still_checks_the_path_without_verification(
     if name == "elsewhere":
         target.mkdir()
 
-    with pytest.raises(StateError):
+    with pytest.raises(error):
         state.resync(target)
 
 
@@ -782,7 +792,7 @@ def test_resync_raises_when_the_path_cannot_be_resolved(
         target.symlink_to(second)
         second.symlink_to(target)
 
-    with pytest.raises(StateError, match="io failed"):
+    with pytest.raises(OSError, match=r"No such file|Too many levels"):
         state.resync(target)
 
 
@@ -920,7 +930,7 @@ def test_percent_treats_a_zero_size_as_one_byte(
 def test_save_raises_when_the_name_is_too_long(reader: PReader, tmp_file: Path) -> None:
     state = reader.bytes(tmp_file, state="x" * 300).state
 
-    with pytest.raises(StateError, match="io failed"):
+    with pytest.raises(OSError, match="File name too long"):
         state.save()
 
 
