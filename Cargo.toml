@@ -41,6 +41,7 @@ normal = ["pyo3"]
 
 [features]
 default = []
+testing = []
 python = ["dep:pyo3", "dep:pyo3-build-config"]
 extension-module = ["python", "pyo3/extension-module"]
 experimental-inspect = ["python", "pyo3/experimental-inspect"]

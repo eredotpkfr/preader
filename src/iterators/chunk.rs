@@ -1,8 +1,9 @@
 use std::io::{ErrorKind, Read};
 
 use crate::{
-    ChunkIterator, Result, Skip,
+    ChunkIterator, Result,
     constants::DEFAULT_CHUNK_SIZE,
+    enums::skip::Skip,
     interfaces::{iterator::IteratorRead, skippable::Skippable},
     types::core::FileReader,
 };
@@ -19,7 +20,7 @@ impl Default for Chunk {
         Self {
             size: DEFAULT_CHUNK_SIZE,
             drop_partial: false,
-            buffer: vec![0; DEFAULT_CHUNK_SIZE],
+            buffer: Vec::new(),
         }
     }
 }
@@ -27,6 +28,10 @@ impl Default for Chunk {
 impl Chunk {
     fn fill(&mut self, reader: &mut FileReader, max: usize) -> Result<usize> {
         let mut filled = 0;
+
+        if self.buffer.len() < max {
+            self.buffer.resize(max, 0);
+        }
 
         while filled < max {
             match reader.read(&mut self.buffer[filled..max]) {

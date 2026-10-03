@@ -1,7 +1,8 @@
 use std::{io::BufRead, ops::Range};
 
 use crate::{
-    LineIterator, Result, Skip,
+    LineIterator, Result,
+    enums::skip::Skip,
     interfaces::{iterator::IteratorRead, segmented::Segmented, skippable::Skippable},
     types::core::FileReader,
 };

@@ -17,7 +17,7 @@ pub enum StateInput {
     Object(Box<State>),
 }
 
-impl<T: Into<StateInput>> From<Option<T>> for StateInput {
+impl<T: Into<Self>> From<Option<T>> for StateInput {
     fn from(state: Option<T>) -> Self {
         state.map(Into::into).unwrap_or_default()
     }

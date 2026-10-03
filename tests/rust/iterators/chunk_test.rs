@@ -52,6 +52,11 @@ fn a_chunk_larger_than_the_file_yields_one_chunk(tmp_dir: TempDir) {
 }
 
 #[rstest]
+fn the_largest_possible_chunk_size_still_reads_the_file(tmp_dir: TempDir) {
+    assert_eq!(chunks(&tmp_dir, usize::MAX, false), [CONTENT.to_vec()]);
+}
+
+#[rstest]
 fn a_zero_sized_chunk_yields_nothing(tmp_dir: TempDir) {
     assert!(chunks(&tmp_dir, 0, false).is_empty());
 }

@@ -44,11 +44,11 @@ impl StateRegistry {
     }
 
     pub fn exists(&self, name: &str) -> bool {
-        self.manager.path(name).is_ok_and(|path| path.exists())
+        self.manager.path(name).is_ok_and(|path| path.is_file())
     }
 
     pub fn count(&self) -> Result<usize> {
-        self.names()?.try_fold(0_usize, |total, name| name.map(|_| total + 1))
+        self.names()?.try_fold(0, |total, name| name.and(Ok(total + 1)))
     }
 
     pub fn path(&self, name: &str) -> Result<PathBuf> {

@@ -82,13 +82,13 @@ cargo-fix:
 cargo-machete:
 	@cargo machete
 cargo-nextest:
-	@cargo nextest run
+	@cargo nextest run --features testing
 cargo-rustfmt: cargo-fix
 	@cargo +nightly fmt --all
 cargo-rustfmt-check:
 	@cargo +nightly fmt --all -- --check
 cargo-test:
-	@cargo test
+	@cargo test --features testing
 cargo-udeps:
 	@cargo +nightly udeps --all-targets --all-features
 cargo-update:

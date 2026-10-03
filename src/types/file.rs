@@ -11,7 +11,7 @@ use crate::{
     Error, Mismatch, Result, constants::FINGERPRINT_SAMPLE_BYTES, utils::file::fingerprint,
 };
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct FileMetadata {
     pub path: PathBuf,
     pub size: u64,
@@ -30,7 +30,7 @@ impl TryFrom<&Path> for FileMetadata {
             return Err(Error::NotAFile(path.to_path_buf()));
         }
 
-        let seconds = metadata.modified()?.duration_since(UNIX_EPOCH)?.as_secs() as i64;
+        let seconds = metadata.modified()?.duration_since(UNIX_EPOCH)?.as_secs().cast_signed();
         let mtime = DateTime::<Utc>::from_timestamp(seconds, 0);
 
         Ok(Self {
@@ -47,26 +47,29 @@ impl FileMetadata {
         Ok(fingerprint(path, self.size.min(FINGERPRINT_SAMPLE_BYTES))? == self.fingerprint)
     }
 
-    pub(crate) fn compare(&self, current: &Self) -> std::result::Result<(), Mismatch> {
+    pub(crate) fn compare(&self, current: &Self) -> Result<()> {
         if self.size != current.size {
             return Err(Mismatch::Size {
                 saved: self.size,
                 current: current.size,
-            });
+            }
+            .into());
         }
 
         if self.mtime != current.mtime {
             return Err(Mismatch::Mtime {
                 saved: self.mtime.timestamp(),
                 current: current.mtime.timestamp(),
-            });
+            }
+            .into());
         }
 
         if self.fingerprint != current.fingerprint {
             return Err(Mismatch::Fingerprint {
                 saved: self.fingerprint.clone(),
                 current: current.fingerprint.clone(),
-            });
+            }
+            .into());
         }
 
         Ok(())
