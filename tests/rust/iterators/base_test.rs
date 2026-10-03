@@ -306,163 +306,6 @@ fn a_resumed_read_floors_the_last_saved_position(tmp_dir: TempDir) {
 }
 
 #[rstest]
-fn a_failing_threshold_save_is_retried(tmp_dir: TempDir) {
-    let config = Config {
-        auto_save_state: true,
-        auto_save_state_bytes: 1,
-        ..Config::default()
-    };
-    let reader = reader(&tmp_dir, config);
-    let path = write(&tmp_dir, "data.bin", CONTENT);
-
-    fs::write(tmp_dir.path().join("states"), b"not a directory").unwrap();
-
-    let mut bytes = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap();
-
-    for expected in &CONTENT[..3] {
-        assert_eq!(bytes.read().unwrap(), Some(*expected));
-
-        let error = bytes.error().unwrap();
-
-        assert!(matches!(error, Error::Io(_)), "{error}");
-    }
-
-    fs::remove_file(tmp_dir.path().join("states")).unwrap();
-
-    bytes.read().unwrap();
-
-    assert!(bytes.error().is_none());
-    assert_eq!(reader.states().load(TEST_STATE_NAME).unwrap().position, 4);
-}
-
-#[rstest]
-fn a_failing_threshold_save_keeps_every_item(tmp_dir: TempDir) {
-    let config = Config {
-        auto_save_state: true,
-        auto_save_state_bytes: 1,
-        ..Config::default()
-    };
-    let reader = reader(&tmp_dir, config);
-    let path = write(&tmp_dir, "data.bin", CONTENT);
-    let mut bytes = reader.bytes(&path).state("../../escape").build().unwrap();
-    let mut yielded = Vec::new();
-
-    while let Some(byte) = bytes.read().unwrap() {
-        yielded.push(byte);
-    }
-
-    assert_eq!(yielded, CONTENT);
-    assert!(bytes.error().is_some());
-}
-
-#[rstest]
-fn a_recovered_save_clears_the_error(tmp_dir: TempDir) {
-    let config = Config {
-        auto_save_state: true,
-        auto_save_state_bytes: 1,
-        ..Config::default()
-    };
-    let reader = reader(&tmp_dir, config);
-    let path = write(&tmp_dir, "data.bin", CONTENT);
-
-    fs::write(tmp_dir.path().join("states"), b"not a directory").unwrap();
-
-    let mut bytes = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap();
-
-    bytes.read().unwrap();
-
-    fs::remove_file(tmp_dir.path().join("states")).unwrap();
-
-    bytes.read().unwrap();
-
-    assert!(bytes.error().is_none());
-    assert_eq!(reader.states().load(TEST_STATE_NAME).unwrap().position, 2);
-}
-
-#[rstest]
-fn a_failing_threshold_save_is_not_retried_per_item(tmp_dir: TempDir) {
-    let config = Config {
-        auto_save_state: true,
-        auto_save_state_bytes: 5,
-        ..Config::default()
-    };
-    let reader = reader(&tmp_dir, config);
-    let path = write(&tmp_dir, "data.bin", CONTENT);
-
-    fs::write(tmp_dir.path().join("states"), b"not a directory").unwrap();
-
-    let mut bytes = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap();
-    let mut attempts = 0;
-
-    while bytes.read().unwrap().is_some() {
-        attempts += usize::from(bytes.error().is_some());
-    }
-
-    assert_eq!(attempts, CONTENT.len() / 5);
-}
-
-#[rstest]
-fn a_failing_final_save_does_not_block_termination(tmp_dir: TempDir) {
-    let config = Config {
-        auto_save_state: true,
-        ..Config::default()
-    };
-    let reader = reader(&tmp_dir, config);
-    let path = write(&tmp_dir, "data.bin", b"abc");
-    let mut bytes = reader.bytes(&path).state("../../escape").build().unwrap();
-    let mut yielded = 0;
-
-    for item in bytes.by_ref() {
-        item.unwrap();
-        yielded += 1;
-
-        assert!(yielded <= 3, "the iterator kept retrying the final save");
-    }
-
-    assert_eq!(yielded, 3);
-
-    let error = bytes.error().unwrap();
-
-    assert!(error.to_string().contains("path escapes root"), "{error}");
-}
-
-#[rstest]
-fn error_clears_after_it_is_taken(tmp_dir: TempDir) {
-    let config = Config {
-        auto_save_state: true,
-        auto_save_state_bytes: 1,
-        ..Config::default()
-    };
-    let reader = reader(&tmp_dir, config);
-    let path = write(&tmp_dir, "data.bin", CONTENT);
-    let mut bytes = reader.bytes(&path).state("../../escape").build().unwrap();
-
-    bytes.read().unwrap();
-
-    assert!(bytes.error().is_some());
-    assert!(bytes.error().is_none());
-}
-
-#[rstest]
-fn a_read_error_outlives_a_failing_save(tmp_dir: TempDir) {
-    let config = Config {
-        auto_save_state: true,
-        auto_save_state_bytes: 1,
-        ..Config::default()
-    };
-    let reader = reader(&tmp_dir, config);
-    let path = write(&tmp_dir, "data.txt", b"foo\n\xff\xfe\n");
-    let mut lines = reader.lines(&path).state("../../escape").build().unwrap();
-
-    lines.read().unwrap();
-
-    let error = lines.read().unwrap_err();
-
-    assert!(matches!(error, Error::Io(_)), "{error}");
-    assert!(lines.error().is_some());
-}
-
-#[rstest]
 fn a_manual_save_does_not_reset_the_autosave_baseline(tmp_dir: TempDir) {
     let config = Config {
         auto_save_state: true,
@@ -486,4 +329,192 @@ fn a_manual_save_does_not_reset_the_autosave_baseline(tmp_dir: TempDir) {
     }
 
     assert_eq!(reader.states().load(TEST_STATE_NAME).unwrap().position, 10);
+}
+
+#[rstest]
+fn a_failing_threshold_save_stops_the_read(tmp_dir: TempDir) {
+    let config = Config {
+        auto_save_state: true,
+        auto_save_state_bytes: 5,
+        ..Config::default()
+    };
+    let reader = reader(&tmp_dir, config);
+    let path = write(&tmp_dir, "data.bin", CONTENT);
+
+    fs::write(tmp_dir.path().join("states"), b"not a directory").unwrap();
+
+    let mut bytes = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap();
+    let mut yielded = Vec::new();
+
+    let error = loop {
+        match bytes.read() {
+            Ok(Some(byte)) => yielded.push(byte),
+            Ok(None) => panic!("the read finished without reporting the failed save"),
+            Err(error) => break error,
+        }
+    };
+
+    assert!(matches!(error, Error::Io(_)), "{error}");
+    assert_eq!(yielded, &CONTENT[..4]);
+}
+
+#[rstest]
+fn a_failed_save_exhausts_the_iterator(tmp_dir: TempDir) {
+    let config = Config {
+        auto_save_state: true,
+        auto_save_state_bytes: 1,
+        ..Config::default()
+    };
+    let reader = reader(&tmp_dir, config);
+    let path = write(&tmp_dir, "data.bin", CONTENT);
+
+    fs::write(tmp_dir.path().join("states"), b"not a directory").unwrap();
+
+    let mut bytes = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap();
+
+    bytes.read().unwrap_err();
+
+    for _ in 0..3 {
+        assert_eq!(bytes.read().unwrap(), None);
+    }
+}
+
+#[rstest]
+fn a_failing_final_save_reaches_every_item_first(tmp_dir: TempDir) {
+    let config = Config {
+        auto_save_state: true,
+        ..Config::default()
+    };
+    let reader = reader(&tmp_dir, config);
+    let path = write(&tmp_dir, "data.bin", CONTENT);
+    let mut bytes = reader.bytes(&path).state("../../escape").build().unwrap();
+    let mut yielded = Vec::new();
+
+    let error = loop {
+        match bytes.read() {
+            Ok(Some(byte)) => yielded.push(byte),
+            Ok(None) => panic!("the read finished without reporting the failed save"),
+            Err(error) => break error,
+        }
+    };
+
+    assert!(error.to_string().contains("path escapes root"), "{error}");
+    assert_eq!(yielded, CONTENT);
+}
+
+#[rstest]
+fn an_error_ignoring_loop_still_terminates(tmp_dir: TempDir) {
+    let config = Config {
+        auto_save_state: true,
+        auto_save_state_bytes: 1,
+        ..Config::default()
+    };
+    let reader = reader(&tmp_dir, config);
+    let path = write(&tmp_dir, "data.bin", CONTENT);
+    let mut polls = 0;
+
+    for item in reader.bytes(&path).state("../../escape").build().unwrap() {
+        polls += 1;
+
+        assert!(
+            polls <= 2,
+            "the iterator kept yielding after the failed save"
+        );
+
+        if let Err(error) = item {
+            assert!(error.to_string().contains("path escapes root"), "{error}");
+        }
+    }
+
+    assert_eq!(polls, 1);
+}
+
+#[rstest]
+fn a_read_error_reaches_the_caller_before_any_save(tmp_dir: TempDir) {
+    let config = Config {
+        auto_save_state: true,
+        ..Config::default()
+    };
+    let reader = reader(&tmp_dir, config);
+    let path = write(&tmp_dir, "data.txt", b"foo\n\xff\xfe\n");
+    let mut lines = reader.lines(&path).state("../../escape").build().unwrap();
+
+    assert_eq!(lines.read().unwrap(), Some("foo"));
+
+    let error = lines.read().unwrap_err();
+
+    assert!(matches!(error, Error::Io(_)), "{error}");
+}
+
+#[cfg(unix)]
+#[rstest]
+fn a_resumed_read_covers_what_a_failed_save_left_behind(tmp_dir: TempDir) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let config = Config {
+        auto_save_state: true,
+        auto_save_state_bytes: 5,
+        auto_load_state: true,
+        ..Config::default()
+    };
+    let reader = reader(&tmp_dir, config);
+    let path = write(&tmp_dir, "data.bin", CONTENT);
+    let states = reader.states().state_dir().to_path_buf();
+    let mut first = Vec::new();
+
+    let mut bytes = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap();
+
+    for _ in 0..10 {
+        first.push(bytes.read().unwrap().unwrap());
+    }
+
+    drop(bytes);
+
+    let checkpoint = reader.states().load(TEST_STATE_NAME).unwrap().position;
+
+    fs::set_permissions(&states, fs::Permissions::from_mode(0o500)).unwrap();
+
+    if fs::write(states.join("probe"), b"x").is_ok() {
+        fs::set_permissions(&states, fs::Permissions::from_mode(0o700)).unwrap();
+
+        return; // permissions are not enforced here
+    }
+
+    let mut bytes = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap();
+    let mut second = Vec::new();
+
+    let error = loop {
+        match bytes.read() {
+            Ok(Some(byte)) => second.push(byte),
+            Ok(None) => panic!("the read finished without reporting the failed save"),
+            Err(error) => break error,
+        }
+    };
+
+    drop(bytes);
+    fs::set_permissions(&states, fs::Permissions::from_mode(0o700)).unwrap();
+
+    assert!(matches!(error, Error::Io(_)), "{error}");
+    assert_eq!(
+        reader.states().load(TEST_STATE_NAME).unwrap().position,
+        checkpoint,
+        "a failed save must leave the stored position untouched"
+    );
+
+    let mut third = Vec::new();
+    let mut bytes = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap();
+
+    while let Some(byte) = bytes.read().unwrap() {
+        third.push(byte);
+    }
+
+    drop(bytes);
+
+    let covered = [first.as_slice(), third.as_slice()].concat();
+
+    assert_eq!(covered, CONTENT, "resuming must leave no gap");
+    assert!(
+        second.iter().all(|byte| third.contains(byte)),
+        "the bytes delivered before the failure must be delivered again"
+    );
 }

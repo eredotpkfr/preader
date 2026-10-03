@@ -1,6 +1,5 @@
 import json
 import os
-import warnings
 
 from collections.abc import Callable
 from pathlib import Path
@@ -16,7 +15,7 @@ from constants import (
     TEST_WINDOWS_UNSAFE_STATE_NAME_IDS,
     TEST_WINDOWS_UNSAFE_STATE_NAMES,
 )
-from preader import Config, IteratorOptions, PReader, SaveWarning, State, StateError
+from preader import Config, IteratorOptions, PReader, State, StateError
 
 
 @pytest.fixture
@@ -216,7 +215,7 @@ def test_extra_next_after_exhaustion_does_not_resave(
     assert reader.states[TEST_STATE_NAME].path().stat().st_mtime == mtime_before
 
 
-def test_a_failing_autosave_warns_and_keeps_every_item(
+def test_a_failing_threshold_save_stops_the_read(
     config: Config,
     make_reader: Callable[..., PReader],
     data_file: Path,
@@ -224,24 +223,45 @@ def test_a_failing_autosave_warns_and_keeps_every_item(
     config.state_dir.write_bytes(b"foo")
 
     reader = make_reader(auto_save_state=True, auto_save_state_bytes=5)
+    iterator = reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=3)
 
-    with pytest.warns(SaveWarning):
-        consumed = b"".join(
-            reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=3)
-        )
+    assert b"".join(next(iterator) for _ in range(2)) == TEST_ALPHABET[:6]
 
-    assert consumed == TEST_ALPHABET
+    with pytest.raises(StateError):
+        next(iterator)
 
 
-def test_a_failing_final_save_keeps_every_item(
+def test_a_failed_save_exhausts_the_iterator(
+    config: Config,
+    make_reader: Callable[..., PReader],
+    data_file: Path,
+) -> None:
+    config.state_dir.write_bytes(b"foo")
+
+    reader = make_reader(auto_save_state=True, auto_save_state_bytes=1)
+    iterator = reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=3)
+
+    with pytest.raises(StateError):
+        next(iterator)
+
+    with pytest.raises(StopIteration):
+        next(iterator)
+
+
+def test_a_failing_final_save_reaches_every_item_first(
     data_file: Path, make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(auto_save_state=True)
+    iterator = reader.chunks(data_file, chunk_size=13, state="../../etc/passwd")
+    consumed = b"".join(next(iterator) for _ in range(2))
 
-    assert b"".join(reader.chunks(data_file, state="../../etc/passwd")) == TEST_ALPHABET
+    assert consumed == TEST_ALPHABET
+
+    with pytest.raises(StateError, match="path escapes root"):
+        next(iterator)
 
 
-def test_a_failing_autosave_keeps_the_items_read_before_a_truncation(
+def test_a_failing_autosave_stops_the_read_after_a_truncation(
     data_file: Path,
     make_reader: Callable[..., PReader],
     truncate: Callable[[Path, int], None],
@@ -253,15 +273,16 @@ def test_a_failing_autosave_keeps_the_items_read_before_a_truncation(
 
     truncate(data_file, 1)
 
-    assert b"".join(iterator) == b""
+    with pytest.raises(StateError, match="path escapes root"):
+        list(iterator)
 
 
-def test_a_failing_autosave_keeps_every_item_when_end_drops_a_chunk(
+def test_a_failing_autosave_stops_the_read_when_end_drops_a_chunk(
     data_file: Path, make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(auto_save_state=True)
     options = IteratorOptions(end=12)
-    chunks = reader.chunks(
+    iterator = reader.chunks(
         data_file,
         chunk_size=8,
         drop_partial=True,
@@ -269,11 +290,14 @@ def test_a_failing_autosave_keeps_every_item_when_end_drops_a_chunk(
         options=options,
     )
 
-    assert b"".join(chunks) == TEST_ALPHABET[:8]
+    assert next(iterator) == TEST_ALPHABET[:8]
+
+    with pytest.raises(StateError, match="path escapes root"):
+        next(iterator)
 
 
 @pytest.mark.parametrize("threshold", [4, 1000], ids=["at_the_threshold", "at_the_end"])
-def test_a_failing_autosave_keeps_every_item_on_a_dropped_short_chunk(
+def test_a_failing_autosave_stops_the_read_on_a_dropped_short_chunk(
     make_file: Callable[..., Path],
     make_reader: Callable[..., PReader],
     threshold: int,
@@ -291,19 +315,8 @@ def test_a_failing_autosave_keeps_every_item_on_a_dropped_short_chunk(
 
     truncate(path, 5)
 
-    assert b"".join(iterator) == b""
-
-
-def test_a_failing_autosave_can_be_made_fatal(
-    data_file: Path, make_reader: Callable[..., PReader]
-) -> None:
-    reader = make_reader(auto_save_state=True, auto_save_state_bytes=1)
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", SaveWarning)
-
-        with pytest.raises(SaveWarning, match="path escapes root"):
-            list(reader.chunks(data_file, chunk_size=3, state="../../etc/passwd"))
+    with pytest.raises(StateError, match="path escapes root"):
+        list(iterator)
 
 
 def test_chunk_iterator_repr(

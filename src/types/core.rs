@@ -7,7 +7,7 @@ use crate::{
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-pub(crate) type Reader = BufReader<File>;
+pub type FileReader = BufReader<File>;
 
 pub type ByteIterator = PReaderIterator<Byte>;
 pub type ChunkIterator = PReaderIterator<Chunk>;

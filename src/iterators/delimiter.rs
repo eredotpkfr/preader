@@ -4,7 +4,7 @@ use crate::{
     DelimiterIterator, Result, Skip,
     constants::DEFAULT_DELIMITER,
     interfaces::{iterator::IteratorRead, segmented::Segmented, skippable::Skippable},
-    types::core::Reader,
+    types::core::FileReader,
 };
 
 #[derive(Debug)]
@@ -29,7 +29,7 @@ impl Default for Delimiter {
 }
 
 impl Segmented for Delimiter {
-    fn fill(&mut self, reader: &mut Reader) -> Result<usize> {
+    fn fill(&mut self, reader: &mut FileReader) -> Result<usize> {
         self.buffer.clear();
 
         Ok(reader.read_until(self.character, &mut self.buffer)?)

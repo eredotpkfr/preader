@@ -60,7 +60,6 @@ where
             progress,
             autosave,
             saved,
-            failure: None,
             state,
             inner: self.inner,
         })

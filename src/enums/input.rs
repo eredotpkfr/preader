@@ -3,7 +3,7 @@ use std::path::Path;
 use derive_more::From;
 
 use crate::{
-    Mismatch, Result, State, constants::STATE_FILE_EXTENSION_WITHOUT_DOT, manager::StateManager,
+    Mismatch, Result, State, constants::STATE_FILE_EXTENSION, manager::StateManager,
     utils::path::path_stem,
 };
 
@@ -26,25 +26,23 @@ impl<T: Into<StateInput>> From<Option<T>> for StateInput {
 impl StateInput {
     pub(crate) fn resolve(self, manager: &StateManager, file: &Path) -> Result<State> {
         let name = match self {
+            Self::Name(name) => path_stem(&name, STATE_FILE_EXTENSION),
+            Self::Auto => manager.autoname(file),
             Self::Object(state) => {
-                if !manager.verify_state {
-                    return Ok(*state);
-                }
-
-                if state.file.path != file {
-                    return Err(Mismatch::Path {
-                        saved: state.file.path.clone(),
-                        current: file.to_path_buf(),
+                if manager.verify_state {
+                    if state.file.path != file {
+                        return Err(Mismatch::Path {
+                            saved: state.file.path.clone(),
+                            current: file.to_path_buf(),
+                        }
+                        .into());
                     }
-                    .into());
-                }
 
-                state.verify()?;
+                    state.verify()?;
+                }
 
                 return Ok(*state);
             }
-            Self::Name(name) => path_stem(&name, STATE_FILE_EXTENSION_WITHOUT_DOT),
-            Self::Auto => manager.autoname(file),
         };
 
         if manager.auto_load_state

@@ -1,6 +1,6 @@
 use std::{fs, path::PathBuf};
 
-use preader::{Config, Error, IteratorBuild, PReader, State};
+use preader::{Config, Error, IteratorBuild, PReader, STATE_FILE_EXTENSION, State};
 use rstest::{fixture, rstest};
 use tempfile::TempDir;
 
@@ -179,7 +179,11 @@ fn path_reports_the_state_file_location(sandbox: Sandbox) {
 
     assert_eq!(
         path,
-        sandbox.reader.config().state_dir.join("job-1.state.json")
+        sandbox
+            .reader
+            .config()
+            .state_dir
+            .join(format!("{TEST_STATE_NAME}{STATE_FILE_EXTENSION}"))
     );
 }
 
@@ -409,7 +413,7 @@ fn a_suffix_shaped_directory_stays_in_the_name(sandbox: Sandbox) {
     let mut state = sandbox
         .reader
         .bytes(&path)
-        .state(format!("{name}.state.json"))
+        .state(format!("{name}{STATE_FILE_EXTENSION}"))
         .build()
         .unwrap()
         .state()
@@ -418,7 +422,11 @@ fn a_suffix_shaped_directory_stays_in_the_name(sandbox: Sandbox) {
 
     assert_eq!(
         written,
-        sandbox.reader.states().state_dir().join(format!("{name}.state.json"))
+        sandbox
+            .reader
+            .states()
+            .state_dir()
+            .join(format!("{name}{STATE_FILE_EXTENSION}"))
     );
     assert_eq!(names_of(&sandbox), [name.as_str()]);
     assert_eq!(sandbox.reader.states().load(&name).unwrap().name, name);
@@ -434,7 +442,7 @@ fn names_ignores_a_symlinked_state(sandbox: Sandbox) {
         .reader
         .states()
         .state_dir()
-        .join(format!("{OTHER_STATE_NAME}.state.json"));
+        .join(format!("{OTHER_STATE_NAME}{STATE_FILE_EXTENSION}"));
 
     symlink(&real, &alias).unwrap();
 
@@ -756,7 +764,7 @@ fn a_blocked_state_dir_still_answers_the_lookups(tmp_dir: TempDir) {
 fn delete_fails_when_the_state_is_a_directory(sandbox: Sandbox) {
     let state_dir = sandbox.reader.states().state_dir().to_path_buf();
 
-    fs::create_dir_all(state_dir.join(format!("{TEST_STATE_NAME}.state.json"))).unwrap();
+    fs::create_dir_all(state_dir.join(format!("{TEST_STATE_NAME}{STATE_FILE_EXTENSION}"))).unwrap();
 
     let error = sandbox.reader.states().delete(TEST_STATE_NAME).err().unwrap();
 

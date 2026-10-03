@@ -1,19 +1,18 @@
 use std::ops::Range;
 
 use crate::{
-    AutoSave, Error, Progress, Result, State,
+    AutoSave, Progress, Result, State,
     interfaces::{iterator::IteratorRead, segmented::Segmented},
-    types::core::Reader,
+    types::core::FileReader,
 };
 
 #[derive(Debug)]
 pub struct PReaderIterator<I> {
-    pub(crate) reader: Reader,
+    pub(crate) reader: FileReader,
     pub(crate) progress: Progress,
     pub(crate) state: State,
     pub(crate) autosave: AutoSave,
     pub(crate) saved: u64,
-    pub(crate) failure: Option<Error>,
     pub(crate) inner: I,
 }
 
@@ -22,36 +21,39 @@ impl<I> PReaderIterator<I> {
         &mut self.state
     }
 
-    pub fn error(&mut self) -> Option<Error> {
-        self.failure.take()
-    }
-
     pub(crate) fn done(&self) -> bool {
         self.progress.done(self.state.position)
     }
 
-    pub(crate) fn advance(&mut self, bytes: usize) {
+    pub(crate) fn advance(&mut self, bytes: usize) -> Result<()> {
         self.state.advance(bytes as u64);
 
-        if let AutoSave::Every(threshold) = self.autosave {
-            self.save(threshold);
+        match self.autosave {
+            AutoSave::Every(threshold) => self.save(threshold),
+            AutoSave::Off | AutoSave::Final => Ok(()),
         }
     }
 
     pub(crate) fn stop<T>(&mut self) -> Result<Option<T>> {
-        self.save(0);
+        self.save(0)?;
         Ok(None)
     }
 
-    fn save(&mut self, threshold: u64) {
+    fn save(&mut self, threshold: u64) -> Result<()> {
         let pending = self.state.position - self.saved;
 
         if !self.autosave.active() || pending == 0 || pending < threshold {
-            return;
+            return Ok(());
         }
 
+        self.state.save().inspect_err(|_| {
+            self.autosave = AutoSave::Off;
+            self.progress.limit = self.progress.yielded;
+        })?;
+
         self.saved = self.state.position;
-        self.failure = self.state.save().err();
+
+        Ok(())
     }
 }
 
@@ -68,7 +70,7 @@ impl<I: Segmented> PReaderIterator<I> {
                 return self.stop();
             }
 
-            self.advance(read);
+            self.advance(read)?;
 
             if self.progress.skip() {
                 continue;
@@ -96,9 +98,7 @@ where
 
 impl<I> Drop for PReaderIterator<I> {
     fn drop(&mut self) {
-        self.save(0);
-
-        if let Some(error) = &self.failure {
+        if let Err(error) = self.save(0) {
             eprintln!("preader: save failed: {error}");
         }
     }

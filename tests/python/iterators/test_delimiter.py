@@ -1,6 +1,5 @@
 import json
 import os
-import warnings
 
 from collections.abc import Callable
 from pathlib import Path
@@ -16,7 +15,7 @@ from constants import (
     TEST_WINDOWS_UNSAFE_STATE_NAME_IDS,
     TEST_WINDOWS_UNSAFE_STATE_NAMES,
 )
-from preader import Config, IteratorOptions, PReader, SaveWarning, State, StateError
+from preader import Config, IteratorOptions, PReader, State, StateError
 
 SEGMENTS = [f"seg-{i}" for i in range(10)]
 DELIMITER_CONTENT = TEST_DEFAULT_DELIMITER.join(SEGMENTS).encode()
@@ -357,39 +356,60 @@ def test_extra_next_after_exhaustion_does_not_resave(
     assert reader.states[TEST_STATE_NAME].path().stat().st_mtime == mtime_before
 
 
-def test_a_failing_autosave_warns_and_keeps_every_item(
+def test_a_failing_threshold_save_stops_the_read(
     config: Config,
     make_reader: Callable[..., PReader],
     data_file: Path,
 ) -> None:
     config.state_dir.write_bytes(b"foo")
 
-    reader = make_reader(auto_save_state=True, auto_save_state_bytes=5)
-
-    with pytest.warns(SaveWarning):
-        segments = list(
-            reader.delimiter(
-                data_file, delimiter=TEST_DEFAULT_DELIMITER, state=TEST_STATE_NAME
-            )
-        )
+    reader = make_reader(auto_save_state=True, auto_save_state_bytes=100)
+    iterator = reader.delimiter(
+        data_file, delimiter=TEST_DEFAULT_DELIMITER, state=TEST_STATE_NAME
+    )
+    segments = [next(iterator) for _ in range(len(SEGMENTS))]
 
     assert segments == [segment.encode() for segment in SEGMENTS]
 
+    with pytest.raises(StateError):
+        next(iterator)
 
-def test_a_failing_final_save_keeps_every_item(
+
+def test_a_failed_save_exhausts_the_iterator(
+    config: Config,
+    make_reader: Callable[..., PReader],
+    data_file: Path,
+) -> None:
+    config.state_dir.write_bytes(b"foo")
+
+    reader = make_reader(auto_save_state=True, auto_save_state_bytes=1)
+    iterator = reader.delimiter(
+        data_file, delimiter=TEST_DEFAULT_DELIMITER, state=TEST_STATE_NAME
+    )
+
+    with pytest.raises(StateError):
+        next(iterator)
+
+    with pytest.raises(StopIteration):
+        next(iterator)
+
+
+def test_a_failing_final_save_reaches_every_item_first(
     data_file: Path, make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(auto_save_state=True)
-    segments = list(
-        reader.delimiter(
-            data_file, state="../../etc/passwd", delimiter=TEST_DEFAULT_DELIMITER
-        )
+    iterator = reader.delimiter(
+        data_file, state="../../etc/passwd", delimiter=TEST_DEFAULT_DELIMITER
     )
+    segments = [next(iterator) for _ in range(len(SEGMENTS))]
 
     assert segments == [segment.encode() for segment in SEGMENTS]
 
+    with pytest.raises(StateError, match="path escapes root"):
+        next(iterator)
 
-def test_a_failing_autosave_keeps_the_items_read_before_a_truncation(
+
+def test_a_failing_autosave_stops_the_read_after_a_truncation(
     data_file: Path,
     make_reader: Callable[..., PReader],
     truncate: Callable[[Path, int], None],
@@ -403,10 +423,11 @@ def test_a_failing_autosave_keeps_the_items_read_before_a_truncation(
 
     truncate(data_file, 1)
 
-    assert list(iterator) == []
+    with pytest.raises(StateError, match="path escapes root"):
+        list(iterator)
 
 
-def test_a_failing_autosave_does_not_interrupt_skipping(
+def test_a_failing_autosave_stops_the_read_while_skipping(
     data_file: Path,
     make_reader: Callable[..., PReader],
     truncate: Callable[[Path, int], None],
@@ -422,10 +443,11 @@ def test_a_failing_autosave_does_not_interrupt_skipping(
 
     truncate(data_file, 1)
 
-    assert list(iterator) == []
+    with pytest.raises(StateError, match="path escapes root"):
+        list(iterator)
 
 
-def test_a_failing_autosave_keeps_an_item_reached_by_skipping(
+def test_a_failing_autosave_stops_the_read_on_a_skipped_item(
     data_file: Path, make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(auto_save_state=True, auto_save_state_bytes=1)
@@ -437,14 +459,13 @@ def test_a_failing_autosave_keeps_an_item_reached_by_skipping(
         options=options,
     )
 
-    with pytest.warns(SaveWarning, match="path escapes root"):
-        segments = list(iterator)
+    with pytest.raises(StateError, match="path escapes root"):
+        next(iterator)
 
-    assert segments == [segment.encode() for segment in SEGMENTS[2:]]
-    assert iterator.state.position == len(DELIMITER_CONTENT)
+    assert iterator.state.position == len(SEGMENTS[0]) + 1
 
 
-def test_a_failing_autosave_keeps_an_item_after_a_filtered_blank(
+def test_a_failing_autosave_stops_the_read_on_a_filtered_blank(
     make_file: Callable[..., Path], make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(auto_save_state=True, auto_save_state_bytes=1)
@@ -457,28 +478,10 @@ def test_a_failing_autosave_keeps_an_item_after_a_filtered_blank(
         skip_empty=True,
     )
 
-    with pytest.warns(SaveWarning, match="path escapes root"):
-        assert list(iterator) == [b"foo"]
+    with pytest.raises(StateError, match="path escapes root"):
+        next(iterator)
 
-    assert iterator.state.position == 4
-
-
-def test_a_failing_autosave_can_be_made_fatal(
-    data_file: Path, make_reader: Callable[..., PReader]
-) -> None:
-    reader = make_reader(auto_save_state=True, auto_save_state_bytes=1)
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", SaveWarning)
-
-        with pytest.raises(SaveWarning, match="path escapes root"):
-            list(
-                reader.delimiter(
-                    data_file,
-                    state="../../etc/passwd",
-                    delimiter=TEST_DEFAULT_DELIMITER,
-                )
-            )
+    assert iterator.state.position == 1
 
 
 def test_delimiter_iterator_repr(

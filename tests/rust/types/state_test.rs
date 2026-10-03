@@ -4,8 +4,8 @@ use std::{fs, path::PathBuf};
 
 use chrono::{DateTime, Timelike};
 use preader::{
-    Config, Error, FileMetadata, IteratorBuild, IteratorRead, State, StateData, StateManager,
-    Timestamps,
+    Config, Error, FileMetadata, IteratorBuild, IteratorRead, STATE_FILE_EXTENSION, State,
+    StateData, StateManager, Timestamps,
 };
 use rstest::rstest;
 use tempfile::TempDir;
@@ -198,7 +198,10 @@ fn state_fields_describe_the_tracked_file(tmp_dir: TempDir) {
     assert_eq!(state.file.path, path.canonicalize().unwrap());
     assert_eq!(
         state.path().unwrap(),
-        reader.config().state_dir.join(format!("{TEST_STATE_NAME}.state.json"))
+        reader
+            .config()
+            .state_dir
+            .join(format!("{TEST_STATE_NAME}{STATE_FILE_EXTENSION}"))
     );
     assert_eq!(state.timestamps.created_at, state.timestamps.updated_at);
 }
@@ -901,7 +904,7 @@ fn save_leaves_the_state_untouched_when_it_fails(tmp_dir: TempDir, #[case] name:
     let reader = reader(&tmp_dir, Config::default());
     let state_dir = reader.config().state_dir.clone();
 
-    fs::create_dir_all(state_dir.join(format!("{TEST_STATE_NAME}.state.json"))).unwrap();
+    fs::create_dir_all(state_dir.join(format!("{TEST_STATE_NAME}{STATE_FILE_EXTENSION}"))).unwrap();
 
     let path = write(&tmp_dir, "data.bin", b"foo\n");
     let mut bytes = reader.bytes(&path).state(name).build().unwrap();
@@ -920,7 +923,8 @@ fn save_leaves_no_temporary_file(tmp_dir: TempDir, #[case] blocked: bool) {
     let state_dir = reader.config().state_dir.clone();
 
     if blocked {
-        fs::create_dir_all(state_dir.join(format!("{TEST_STATE_NAME}.state.json"))).unwrap();
+        fs::create_dir_all(state_dir.join(format!("{TEST_STATE_NAME}{STATE_FILE_EXTENSION}")))
+            .unwrap();
     }
 
     let path = write(&tmp_dir, "data.bin", b"foo\n");
@@ -973,14 +977,14 @@ fn name_drops_the_state_suffix(tmp_dir: TempDir) {
     let path = write(&tmp_dir, "data.bin", b"foo\n");
     let mut bytes = reader
         .bytes(&path)
-        .state(format!("{TEST_STATE_NAME}.state.json"))
+        .state(format!("{TEST_STATE_NAME}{STATE_FILE_EXTENSION}"))
         .build()
         .unwrap();
 
     assert_eq!(bytes.state().name, TEST_STATE_NAME);
     assert_eq!(
         bytes.state().path().unwrap().file_name().unwrap(),
-        format!("{TEST_STATE_NAME}.state.json").as_str()
+        format!("{TEST_STATE_NAME}{STATE_FILE_EXTENSION}").as_str()
     );
 }
 
@@ -1162,6 +1166,6 @@ fn a_state_path_is_relative_without_a_state_dir(tmp_dir: TempDir) {
 
     assert_eq!(
         bytes.state().path().unwrap(),
-        PathBuf::from(format!("{TEST_STATE_NAME}.state.json"))
+        PathBuf::from(format!("{TEST_STATE_NAME}{STATE_FILE_EXTENSION}"))
     );
 }

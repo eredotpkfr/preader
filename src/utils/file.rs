@@ -1,12 +1,12 @@
 use std::{
     fs::File,
-    io::{Read, Result, Seek, SeekFrom},
+    io::{self, Read, Seek, SeekFrom},
     path::Path,
 };
 
 use sha2::{Digest, Sha256};
 
-pub fn fingerprint(path: &Path, window: u64) -> Result<String> {
+pub fn fingerprint(path: &Path, window: u64) -> io::Result<String> {
     let mut buffer = Vec::with_capacity(window as usize);
 
     File::open(path)?.take(window).read_to_end(&mut buffer)?;
@@ -14,7 +14,7 @@ pub fn fingerprint(path: &Path, window: u64) -> Result<String> {
     Ok(hex::encode(Sha256::digest(&buffer)))
 }
 
-pub fn starts_mid_item(file: &File, position: u64, boundary: u8) -> Result<bool> {
+pub fn starts_mid_item(file: &File, position: u64, boundary: u8) -> io::Result<bool> {
     let Some(previous) = position.checked_sub(1) else {
         return Ok(false);
     };
