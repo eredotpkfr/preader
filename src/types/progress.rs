@@ -1,5 +1,5 @@
 #[derive(Debug)]
-pub struct Progress {
+pub(crate) struct Progress {
     pub(crate) end: u64,
     pub(crate) limit: u64,
     pub(crate) yielded: u64,

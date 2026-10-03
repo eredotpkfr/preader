@@ -1,4 +1,4 @@
-use preader::{Config, IteratorBuild, IteratorRead, PReader};
+use preader::{Config, Error, IteratorBuild, IteratorRead, PReader};
 use rstest::rstest;
 use tempfile::TempDir;
 
@@ -226,7 +226,7 @@ fn lines_reject_binary_content(tmp_dir: TempDir) {
 
     let error = error.expect("binary content produced no error");
 
-    assert!(error.to_string().contains("valid UTF-8"), "got {error}");
+    assert!(matches!(error, Error::Utf8(_)), "got {error}");
 }
 
 #[rstest]

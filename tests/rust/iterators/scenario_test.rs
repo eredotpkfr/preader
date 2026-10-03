@@ -3,7 +3,7 @@ use std::{
     io::Write,
 };
 
-use preader::{Config, Error, IteratorBuild, IteratorRead};
+use preader::{Config, IteratorBuild, IteratorRead};
 use rstest::rstest;
 use tempfile::TempDir;
 
@@ -279,13 +279,13 @@ fn lines_read_multi_byte_characters_and_count_bytes(tmp_dir: TempDir) {
 }
 
 #[rstest]
-fn lines_fail_when_a_skipped_item_is_invalid_utf8(tmp_dir: TempDir) {
+fn a_skipped_item_is_not_validated(tmp_dir: TempDir) {
     let reader = reader(&tmp_dir, Config::default());
     let path = write(&tmp_dir, "data.txt", b"\xff\xfe\nok\n");
     let mut lines = reader.lines(&path).skip(1).build().unwrap();
-    let error = lines.read().err().unwrap();
 
-    assert!(matches!(error, Error::Io(_)), "unexpected error: {error}");
+    assert_eq!(lines.read().unwrap(), Some("ok"));
+    assert_eq!(lines.state().position, 6);
 }
 
 #[rstest]
