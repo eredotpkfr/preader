@@ -7,7 +7,7 @@ use crate::{
     utils::path::default_state_dir,
 };
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Config {
     pub buffer_capacity: usize,
     pub state_dir: PathBuf,

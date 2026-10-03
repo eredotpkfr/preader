@@ -151,6 +151,15 @@ fn exists_reports_only_saved_states(sandbox: Sandbox) {
 }
 
 #[rstest]
+fn exists_is_false_when_the_state_is_a_directory(sandbox: Sandbox) {
+    let path = sandbox.reader.states().path(TEST_STATE_NAME).unwrap();
+
+    fs::create_dir_all(&path).unwrap();
+
+    assert!(!sandbox.reader.states().exists(TEST_STATE_NAME));
+}
+
+#[rstest]
 #[case("")]
 #[case("../escape")]
 #[case("/absolute")]

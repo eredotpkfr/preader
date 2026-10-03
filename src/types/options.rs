@@ -1,6 +1,6 @@
-use crate::{Error, Result, Skip, types::window::Window};
+use crate::{Error, Result, enums::skip::Skip, types::window::Window};
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct IteratorOptions {
     pub start: u64,
     pub end: u64,

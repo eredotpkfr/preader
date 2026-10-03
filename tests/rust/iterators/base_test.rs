@@ -332,6 +332,35 @@ fn a_manual_save_does_not_reset_the_autosave_baseline(tmp_dir: TempDir) {
 }
 
 #[rstest]
+fn replacing_the_state_with_an_earlier_one_keeps_reading(tmp_dir: TempDir) {
+    let config = Config {
+        auto_save_state: true,
+        auto_save_state_bytes: 5,
+        auto_load_state: true,
+        ..Config::default()
+    };
+    let reader = reader(&tmp_dir, config);
+    let path = write(&tmp_dir, "data.bin", CONTENT);
+    let mut bytes = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap();
+
+    for _ in 0..10 {
+        bytes.read().unwrap();
+    }
+
+    drop(bytes);
+
+    let rewound = reader.bytes(&path).state("rewound").build().unwrap().state().clone();
+    let mut resumed = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap();
+
+    assert_eq!(resumed.state().position, 10);
+
+    *resumed.state() = rewound;
+
+    assert_eq!(resumed.read().unwrap(), Some(CONTENT[10]));
+    assert_eq!(resumed.state().position, 1);
+}
+
+#[rstest]
 fn a_failing_threshold_save_stops_the_read(tmp_dir: TempDir) {
     let config = Config {
         auto_save_state: true,

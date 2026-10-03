@@ -1,9 +1,10 @@
 use std::path::PathBuf;
 
 use crate::{
-    AutoSave, Config, IteratorOptions, Result, StateInput, StateManager,
+    AutoSave, Config, IteratorOptions, Result, StateInput,
     bases::iterator::PReaderIterator,
     interfaces::{builder::IteratorBuild, iterator::IteratorRead, skippable::Skippable},
+    manager::StateManager,
 };
 
 #[derive(Debug)]

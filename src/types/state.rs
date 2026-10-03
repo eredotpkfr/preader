@@ -4,7 +4,7 @@ use std::{
 };
 
 use chrono::Utc;
-use derive_more::{Deref, From, PartialEq};
+use derive_more::{Deref, Eq, From, PartialEq};
 use serde::{Deserialize, Serialize};
 use serde_json::to_string_pretty;
 
@@ -14,7 +14,7 @@ use crate::{
     types::{checksum::ChecksumBody, file::FileMetadata, time::Timestamps},
 };
 
-#[derive(Clone, Debug, Deref, From, PartialEq)]
+#[derive(Clone, Debug, Deref, Eq, From, PartialEq)]
 pub struct State {
     #[deref]
     pub(crate) data: StateData,
@@ -22,7 +22,7 @@ pub struct State {
     pub(crate) manager: StateManager,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct StateData {
     pub name: String,
     pub file: FileMetadata,
@@ -72,7 +72,7 @@ impl State {
 
         let current = FileMetadata::try_from(self.file.path.as_path())?;
 
-        Ok(self.file.compare(&current)?)
+        self.file.compare(&current)
     }
 
     pub fn save(&mut self) -> Result<PathBuf> {

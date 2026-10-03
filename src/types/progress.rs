@@ -25,10 +25,18 @@ impl Progress {
     }
 
     pub(crate) fn skip(&mut self) -> bool {
-        (self.skipping > 0).then(|| self.skipping -= 1).is_some()
+        let skipping = self.skipping > 0;
+
+        self.skipping -= u64::from(skipping);
+
+        skipping
     }
 
     pub(crate) fn count(&mut self) {
         self.yielded += 1;
+    }
+
+    pub(crate) fn exhaust(&mut self) {
+        self.limit = self.yielded;
     }
 }

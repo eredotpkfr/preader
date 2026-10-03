@@ -1,8 +1,9 @@
 use std::{io::BufRead, ops::Range};
 
 use crate::{
-    DelimiterIterator, Result, Skip,
+    DelimiterIterator, Result,
     constants::DEFAULT_DELIMITER,
+    enums::skip::Skip,
     interfaces::{iterator::IteratorRead, segmented::Segmented, skippable::Skippable},
     types::core::FileReader,
 };

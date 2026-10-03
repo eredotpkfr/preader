@@ -40,15 +40,15 @@ impl<I> PReaderIterator<I> {
     }
 
     fn save(&mut self, threshold: u64) -> Result<()> {
-        let pending = self.state.position - self.saved;
+        let pending = self.state.position.saturating_sub(self.saved);
 
-        if !self.autosave.active() || pending == 0 || pending < threshold {
+        if !self.autosave.active() || pending < threshold.max(1) {
             return Ok(());
         }
 
         self.state.save().inspect_err(|_| {
             self.autosave = AutoSave::Off;
-            self.progress.limit = self.progress.yielded;
+            self.progress.exhaust();
         })?;
 
         self.saved = self.state.position;

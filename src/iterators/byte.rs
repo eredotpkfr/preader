@@ -1,7 +1,8 @@
 use std::io::Read;
 
 use crate::{
-    ByteIterator, Result, Skip,
+    ByteIterator, Result,
+    enums::skip::Skip,
     interfaces::{iterator::IteratorRead, skippable::Skippable},
 };
 
