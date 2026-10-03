@@ -11,6 +11,10 @@ use crate::{
     Error, Mismatch, Result, constants::FINGERPRINT_SAMPLE_BYTES, utils::file::fingerprint,
 };
 
+#[cfg_attr(
+    feature = "python",
+    pyo3::pyclass(module = "preader", eq, frozen, get_all, skip_from_py_object)
+)]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct FileMetadata {
     pub path: PathBuf,

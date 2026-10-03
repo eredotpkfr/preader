@@ -7,6 +7,10 @@ use crate::{
     utils::path::default_state_dir,
 };
 
+#[cfg_attr(
+    feature = "python",
+    pyo3::pyclass(module = "preader", eq, frozen, from_py_object, get_all)
+)]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Config {
     pub buffer_capacity: usize,

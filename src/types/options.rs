@@ -1,5 +1,9 @@
 use crate::{Error, Result, enums::skip::Skip, types::window::Window};
 
+#[cfg_attr(
+    feature = "python",
+    pyo3::pyclass(module = "preader", eq, frozen, from_py_object, get_all)
+)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct IteratorOptions {
     pub start: u64,

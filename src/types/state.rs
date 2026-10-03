@@ -14,6 +14,10 @@ use crate::{
     types::{checksum::ChecksumBody, file::FileMetadata, time::Timestamps},
 };
 
+#[cfg_attr(
+    feature = "python",
+    pyo3::pyclass(module = "preader", eq, from_py_object)
+)]
 #[derive(Clone, Debug, Deref, Eq, PartialEq)]
 pub struct State {
     #[deref]

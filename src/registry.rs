@@ -5,7 +5,11 @@ use std::{
 
 use crate::{Error, Result, State, StateIterator, manager::StateManager, types::config::Config};
 
-#[derive(Debug)]
+#[cfg_attr(
+    feature = "python",
+    pyo3::pyclass(module = "preader", skip_from_py_object)
+)]
+#[derive(Clone, Debug)]
 pub struct StateRegistry {
     manager: StateManager,
 }

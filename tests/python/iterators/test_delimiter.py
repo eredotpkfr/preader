@@ -382,7 +382,7 @@ def test_a_failing_threshold_save_stops_the_read(
 
     assert segments == [segment.encode() for segment in SEGMENTS]
 
-    with pytest.raises(StateError):
+    with pytest.raises(FileExistsError):
         next(iterator)
 
 
@@ -398,7 +398,7 @@ def test_a_failed_save_exhausts_the_iterator(
         data_file, delimiter=TEST_DEFAULT_DELIMITER, state=TEST_STATE_NAME
     )
 
-    with pytest.raises(StateError):
+    with pytest.raises(FileExistsError):
         next(iterator)
 
     with pytest.raises(StopIteration):
@@ -940,7 +940,7 @@ def test_raises_when_resumed_file_replaced_by_directory(
     data_file.unlink()
     data_file.mkdir()
 
-    with pytest.raises(StateError, match="io failed"):
+    with pytest.raises(StateError, match="not a file"):
         reader.delimiter(data_file, delimiter=TEST_DEFAULT_DELIMITER, state=state)
 
 

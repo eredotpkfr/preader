@@ -8,6 +8,8 @@ mod interfaces;
 mod iterators;
 mod manager;
 mod preader;
+#[cfg(feature = "python")]
+mod python;
 mod registry;
 mod types;
 mod utils;
