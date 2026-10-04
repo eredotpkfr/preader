@@ -9,7 +9,7 @@ use crate::common::{
     fixtures::sandbox,
     funcs::digest,
     guards::set_pre_epoch_mtime,
-    macros::asserts::assert_err_is,
+    macros::{asserts::assert_err_is, skip::skip},
     sandbox::Sandbox,
 };
 
@@ -82,7 +82,7 @@ fn rejects_a_pre_epoch_mtime(sandbox: Sandbox) {
     let path = sandbox.line_file();
 
     if !set_pre_epoch_mtime(&path) {
-        return;
+        skip!("a pre-epoch mtime cannot be set here");
     }
 
     assert_err_is!(FileMetadata::try_from(path.as_path()), Error::Time(_));

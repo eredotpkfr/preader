@@ -11,7 +11,10 @@ use crate::common::{
     fixtures::sandbox,
     funcs::{names, native},
     guards::Blocked,
-    macros::asserts::{assert_err, assert_err_is},
+    macros::{
+        asserts::{assert_err, assert_err_is},
+        skip::skip,
+    },
     sandbox::Sandbox,
 };
 
@@ -268,7 +271,7 @@ fn unreadable_subdirectory_fails_every_walk(sandbox: Sandbox) {
     let mut blocked = Blocked::default();
 
     if !Blocked::enforced(&sandbox.path().join("probe")) {
-        return;
+        skip!("directory permissions are not enforced here");
     }
 
     sandbox.save(TEST_STATE_NAME);

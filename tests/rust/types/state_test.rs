@@ -17,7 +17,10 @@ use crate::common::{
     fixtures::sandbox,
     funcs::{consume, drain, state_data, tamper},
     guards::{Blocked, mtime, set_mtime, set_pre_epoch_mtime},
-    macros::asserts::{assert_err, assert_err_is},
+    macros::{
+        asserts::{assert_err, assert_err_is},
+        skip::skip,
+    },
     sandbox::Sandbox,
 };
 
@@ -585,7 +588,7 @@ fn resync_fails_when_mtime_precedes_epoch(sandbox: Sandbox) {
     let path = sandbox.path().join(TEST_TRACKED_NAME);
 
     if !set_pre_epoch_mtime(&path) {
-        return;
+        skip!("a pre-epoch mtime cannot be set here");
     }
 
     assert!(matches!(saved.resync(&path), Err(Error::Time(_))));
@@ -703,7 +706,7 @@ fn resync_fails_when_the_path_is_not_utf8(sandbox: Sandbox) {
     let odd = sandbox.path().join(OsStr::from_bytes(TEST_NON_UTF8_NAME));
 
     if fs::write(&odd, &content).is_err() {
-        return;
+        skip!("a non-UTF-8 file name cannot be created here");
     }
 
     assert_err!(saved.resync(&odd), "invalid UTF-8");
@@ -718,7 +721,7 @@ fn resync_fails_when_the_file_is_unreadable(sandbox: Sandbox) {
     let mut blocked = Blocked::default();
 
     if !Blocked::enforced(&sandbox.path().join("probe")) {
-        return;
+        skip!("file permissions are not enforced here");
     }
 
     blocked.block(&path);

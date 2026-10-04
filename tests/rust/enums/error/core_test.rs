@@ -7,7 +7,7 @@ use crate::common::{
     constants::{TEST_INVALID_UTF8, TEST_MISSING_STATE_NAME, TEST_STATE_NAME},
     fixtures::sandbox,
     guards::set_pre_epoch_mtime,
-    macros::asserts::assert_err_is,
+    macros::{asserts::assert_err_is, skip::skip},
     sandbox::Sandbox,
 };
 
@@ -57,7 +57,7 @@ fn time_errors_are_transparent(sandbox: Sandbox) {
     let path = sandbox.line_file();
 
     if !set_pre_epoch_mtime(&path) {
-        return;
+        skip!("a pre-epoch mtime cannot be set here");
     }
 
     let error = sandbox.reader().bytes(&path).build().unwrap_err();

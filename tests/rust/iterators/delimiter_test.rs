@@ -182,9 +182,7 @@ fn read_reports_a_mid_segment_io_error(sandbox: Sandbox) {
 
     *segments.state() = sandbox.state_at(&directory, TEST_REWOUND_TO);
 
-    let read = segments.read().map(|segment| segment.map(<[u8]>::to_vec));
+    assert_err_is!(segments.read(), Error::Io(_));
 
     assert_eq!(segments.state().position, TEST_READ_FROM);
-
-    assert_err_is!(read, Error::Io(_));
 }

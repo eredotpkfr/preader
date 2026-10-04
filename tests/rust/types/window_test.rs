@@ -72,14 +72,14 @@ fn open_fails_when_the_position_is_unseekable(sandbox: Sandbox) {
 fn open_fails_when_the_path_is_a_directory(sandbox: Sandbox) {
     let path = sandbox.dir_at("folder");
     let mut content = Vec::new();
-    let opened = window(0).open(&path, 64);
-
-    let Ok(mut reader) = opened else {
-        return;
+    let kind = match window(0).open(&path, 64) {
+        Err(Error::Io(error)) => error.kind(),
+        Err(error) => panic!("{error}"),
+        Ok(mut reader) => reader.read_to_end(&mut content).unwrap_err().kind(),
     };
 
     assert!(matches!(
-        reader.read_to_end(&mut content).unwrap_err().kind(),
+        kind,
         ErrorKind::IsADirectory | ErrorKind::PermissionDenied
     ));
 }
