@@ -7,28 +7,30 @@ use preader::{ChecksumBody, FileMetadata, StateData, Timestamps};
 use rstest::{fixture, rstest};
 use sha2::{Digest, Sha256};
 
-use crate::common::constants::{TEST_FILE_PATH, TEST_FINGERPRINT, TEST_STATE_NAME};
+use crate::common::constants::{
+    TEST_EMPTY_FINGERPRINT, TEST_FILE_PATH, TEST_LINE, TEST_LINE_FINGERPRINT,
+    TEST_OTHER_STATE_NAME, TEST_STATE_NAME,
+};
 
-const PRECOMPUTED_DIGEST: &str = "16065da22c1c78d8f8495f3c0db2d285a411d7f0eba6fc29bc14c2244097216b";
-const OTHER_FINGERPRINT: &str = "fcde2b2edba56bf408601fb721fe9b5c338d10ee429ea04fae5511b68fbf8fb9";
-
+const DIGEST: &str = "f74d122580787555a6f2d245be2066bbe5af3e83fe5e39092c479e0e1b41225a";
 const POSITION: u64 = 7;
+const MTIME: i64 = 1_700_000_000;
 
 #[fixture]
 fn file() -> FileMetadata {
     FileMetadata {
         path: PathBuf::from(TEST_FILE_PATH),
-        size: 4,
-        mtime: DateTime::from_timestamp(1_700_000_000, 0).unwrap(),
-        fingerprint: TEST_FINGERPRINT.to_string(),
+        size: TEST_LINE.len() as u64,
+        mtime: DateTime::from_timestamp(MTIME, 0).unwrap(),
+        fingerprint: TEST_LINE_FINGERPRINT.to_owned(),
     }
 }
 
 #[fixture]
 fn timestamps() -> Timestamps {
     Timestamps {
-        created_at: DateTime::from_timestamp(1_700_000_001, 0).unwrap(),
-        updated_at: DateTime::from_timestamp(1_700_000_002, 0).unwrap(),
+        created_at: DateTime::from_timestamp(MTIME + 1, 0).unwrap(),
+        updated_at: DateTime::from_timestamp(MTIME + 2, 0).unwrap(),
     }
 }
 
@@ -42,15 +44,12 @@ fn body<'a>(file: &'a FileMetadata, timestamps: &'a Timestamps) -> ChecksumBody<
 }
 
 #[rstest]
-fn compute_matches_the_precomputed_digest(file: FileMetadata, timestamps: Timestamps) {
-    assert_eq!(
-        body(&file, &timestamps).compute().unwrap(),
-        PRECOMPUTED_DIGEST
-    );
+fn compute_matches_a_known_digest(file: FileMetadata, timestamps: Timestamps) {
+    assert_eq!(body(&file, &timestamps).compute().unwrap(), DIGEST);
 }
 
 #[rstest]
-fn compute_hashes_the_compact_serialization(file: FileMetadata, timestamps: Timestamps) {
+fn compute_hashes_the_compact_json(file: FileMetadata, timestamps: Timestamps) {
     let body = body(&file, &timestamps);
     let expected = hex::encode(Sha256::digest(serde_json::to_string(&body).unwrap()));
 
@@ -58,9 +57,9 @@ fn compute_hashes_the_compact_serialization(file: FileMetadata, timestamps: Time
 }
 
 #[rstest]
-#[case::name(|body: &mut ChecksumBody| body.name = "job-2")]
-#[case::position(|body: &mut ChecksumBody| body.position = 8)]
-fn compute_includes_every_body_field(
+#[case::name(|body: &mut ChecksumBody| body.name = TEST_OTHER_STATE_NAME)]
+#[case::position(|body: &mut ChecksumBody| body.position = POSITION + 1)]
+fn compute_covers_every_body_field(
     file: FileMetadata,
     timestamps: Timestamps,
     #[case] change: fn(&mut ChecksumBody),
@@ -69,51 +68,42 @@ fn compute_includes_every_body_field(
 
     change(&mut body);
 
-    assert_ne!(body.compute().unwrap(), PRECOMPUTED_DIGEST);
+    assert_ne!(body.compute().unwrap(), DIGEST);
 }
 
 #[rstest]
 #[case::path(|file: &mut FileMetadata| file.path = PathBuf::from("/tmp/other.bin"))]
-#[case::size(|file: &mut FileMetadata| file.size = 5)]
+#[case::size(|file: &mut FileMetadata| file.size += 1)]
 #[case::mtime(|file: &mut FileMetadata| file.mtime = DateTime::from_timestamp(1, 0).unwrap())]
-#[case::fingerprint(|file: &mut FileMetadata| file.fingerprint = OTHER_FINGERPRINT.to_string())]
-fn compute_includes_every_file_field(
+#[case::fingerprint(|file: &mut FileMetadata| file.fingerprint = TEST_EMPTY_FINGERPRINT.to_owned())]
+fn compute_covers_every_file_field(
     mut file: FileMetadata,
     timestamps: Timestamps,
     #[case] change: fn(&mut FileMetadata),
 ) {
     change(&mut file);
 
-    assert_ne!(
-        body(&file, &timestamps).compute().unwrap(),
-        PRECOMPUTED_DIGEST
-    );
+    assert_ne!(body(&file, &timestamps).compute().unwrap(), DIGEST);
 }
 
 #[rstest]
-#[case::created_at(|timestamps: &mut Timestamps| timestamps.created_at = DateTime::from_timestamp(1, 0).unwrap())]
-#[case::updated_at(|timestamps: &mut Timestamps| timestamps.updated_at = DateTime::from_timestamp(1, 0).unwrap())]
-fn compute_includes_every_timestamp_field(
+#[case::created_at(|stamps: &mut Timestamps| stamps.created_at = DateTime::from_timestamp(1, 0).unwrap())]
+#[case::updated_at(|stamps: &mut Timestamps| stamps.updated_at = DateTime::from_timestamp(1, 0).unwrap())]
+fn compute_covers_every_timestamp(
     file: FileMetadata,
     mut timestamps: Timestamps,
     #[case] change: fn(&mut Timestamps),
 ) {
     change(&mut timestamps);
 
-    assert_ne!(
-        body(&file, &timestamps).compute().unwrap(),
-        PRECOMPUTED_DIGEST
-    );
+    assert_ne!(body(&file, &timestamps).compute().unwrap(), DIGEST);
 }
 
 #[rstest]
 fn compute_ignores_sub_second_precision(file: FileMetadata, mut timestamps: Timestamps) {
-    timestamps.updated_at = DateTime::from_timestamp(1_700_000_002, 500_000_000).unwrap();
+    timestamps.updated_at = DateTime::from_timestamp(MTIME + 2, 500_000_000).unwrap();
 
-    assert_eq!(
-        body(&file, &timestamps).compute().unwrap(),
-        PRECOMPUTED_DIGEST
-    );
+    assert_eq!(body(&file, &timestamps).compute().unwrap(), DIGEST);
 }
 
 #[rstest]
@@ -125,16 +115,14 @@ fn compute_ignores_the_stored_checksum(
     #[case] checksum: &str,
 ) {
     let data = StateData {
-        name: TEST_STATE_NAME.to_string(),
+        name: TEST_STATE_NAME.to_owned(),
         file,
         position: POSITION,
         timestamps,
-        checksum: checksum.to_string(),
+        checksum: checksum.to_owned(),
     };
-    assert_eq!(
-        ChecksumBody::from(&data).compute().unwrap(),
-        PRECOMPUTED_DIGEST
-    );
+
+    assert_eq!(ChecksumBody::from(&data).compute().unwrap(), DIGEST);
 }
 
 #[cfg(unix)]

@@ -1,130 +1,123 @@
-use preader::{Config, IteratorBuild, IteratorRead};
+use preader::{IteratorBuild, IteratorRead};
 use rstest::rstest;
-use tempfile::TempDir;
 
 use crate::common::{
-    fixtures::tmp_dir,
-    funcs::{reader, write},
+    constants::{TEST_ALPHABET, TEST_INVALID_UTF8},
+    fixtures::sandbox,
+    funcs::items,
+    sandbox::Sandbox,
 };
 
-const CONTENT: &[u8] = b"abcdefgh";
+#[rstest]
+fn read_keeps_a_short_final_chunk(sandbox: Sandbox) {
+    let path = sandbox.file(TEST_ALPHABET);
+    let read = items(sandbox.reader().chunks(&path).size(10).build().unwrap());
 
-fn chunks(tmp_dir: &TempDir, size: usize, drop_partial: bool) -> Vec<Vec<u8>> {
-    let reader = reader(tmp_dir, Config::default());
-    let path = write(tmp_dir, "data.bin", CONTENT);
-    let mut iterator = reader.chunks(&path).size(size).drop_partial(drop_partial).build().unwrap();
-    let mut collected = Vec::new();
-
-    while let Some(chunk) = iterator.read().unwrap() {
-        collected.push(chunk.to_vec());
-    }
-
-    collected
+    assert_eq!(read.last().unwrap(), b"uvwxyz");
+    assert_eq!(read.concat(), TEST_ALPHABET);
 }
 
 #[rstest]
-fn read_keeps_a_short_final_chunk(tmp_dir: TempDir) {
-    assert_eq!(
-        chunks(&tmp_dir, 3, false),
-        [b"abc".to_vec(), b"def".to_vec(), b"gh".to_vec()]
-    );
+fn drop_partial_keeps_an_exactly_divisible_tail(sandbox: Sandbox) {
+    let path = sandbox.file(TEST_ALPHABET);
+    let read = items(sandbox.reader().chunks(&path).size(13).drop_partial(true).build().unwrap());
+
+    assert_eq!(read.len(), 2);
+    assert_eq!(read.concat(), TEST_ALPHABET);
 }
 
 #[rstest]
-fn drop_partial_discards_a_short_final_chunk(tmp_dir: TempDir) {
-    assert_eq!(
-        chunks(&tmp_dir, 3, true),
-        [b"abc".to_vec(), b"def".to_vec()]
-    );
+fn drop_partial_discards_a_chunk_cut_short_by_the_end(sandbox: Sandbox) {
+    let path = sandbox.file(TEST_ALPHABET);
+    let mut chunks = sandbox
+        .reader()
+        .chunks(&path)
+        .size(10)
+        .end(15)
+        .drop_partial(true)
+        .build()
+        .unwrap();
+
+    assert_eq!(chunks.read().unwrap(), Some(&TEST_ALPHABET[..10]));
+    assert_eq!(chunks.read().unwrap(), None);
+    assert_eq!(chunks.state().position, 10);
 }
 
 #[rstest]
-fn drop_partial_keeps_an_exactly_divisible_tail(tmp_dir: TempDir) {
-    assert_eq!(
-        chunks(&tmp_dir, 4, true),
-        [b"abcd".to_vec(), b"efgh".to_vec()]
-    );
+fn drop_partial_discards_a_truncated_chunk(sandbox: Sandbox) {
+    let path = sandbox.file(TEST_ALPHABET);
+    let reader = sandbox.capped(1);
+    let mut chunks = reader.chunks(&path).size(10).drop_partial(true).build().unwrap();
+
+    chunks.read().unwrap();
+    sandbox.truncate(&path, 14);
+
+    assert_eq!(chunks.read().unwrap(), None);
+    assert_eq!(chunks.state().position, 14);
 }
 
 #[rstest]
-fn a_chunk_larger_than_the_file_yields_one_chunk(tmp_dir: TempDir) {
-    assert_eq!(chunks(&tmp_dir, 1024, false), [CONTENT.to_vec()]);
+fn a_zero_size_yields_nothing(sandbox: Sandbox) {
+    let path = sandbox.file(TEST_ALPHABET);
+
+    assert!(items(sandbox.reader().chunks(&path).size(0).build().unwrap()).is_empty());
 }
 
 #[rstest]
-fn the_largest_possible_chunk_size_still_reads_the_file(tmp_dir: TempDir) {
-    assert_eq!(chunks(&tmp_dir, usize::MAX, false), [CONTENT.to_vec()]);
+fn a_size_larger_than_the_file_yields_one_chunk(sandbox: Sandbox) {
+    let path = sandbox.file(TEST_ALPHABET);
+    let read = items(sandbox.reader().chunks(&path).size(1024).build().unwrap());
+
+    assert_eq!(read, [TEST_ALPHABET]);
 }
 
 #[rstest]
-fn a_zero_sized_chunk_yields_nothing(tmp_dir: TempDir) {
-    assert!(chunks(&tmp_dir, 0, false).is_empty());
+fn a_size_of_one_matches_the_byte_iterator(sandbox: Sandbox) {
+    let path = sandbox.file(TEST_ALPHABET);
+    let reader = sandbox.reader();
+    let chunks = items(reader.chunks(&path).size(1).build().unwrap());
+    let bytes = items(reader.bytes(&path).build().unwrap());
+
+    assert_eq!(chunks, bytes);
 }
 
 #[rstest]
-fn read_keeps_invalid_bytes(tmp_dir: TempDir) {
-    let reader = reader(&tmp_dir, Config::default());
-    let path = write(&tmp_dir, "data.bin", b"ab\xff\xfeefgh");
-    let mut chunks = reader.chunks(&path).size(4).build().unwrap();
-    let mut collected = Vec::new();
+fn read_keeps_invalid_bytes_verbatim(sandbox: Sandbox) {
+    let content = [TEST_ALPHABET, TEST_INVALID_UTF8].concat();
+    let path = sandbox.file(&content);
+    let read = items(sandbox.reader().chunks(&path).size(4).build().unwrap());
 
-    while let Some(chunk) = chunks.read().unwrap() {
-        collected.push(chunk.to_vec());
-    }
-
-    assert_eq!(collected, [b"ab\xff\xfe".to_vec(), b"efgh".to_vec()]);
-    assert_eq!(chunks.state().position, 8);
-    assert_eq!(chunks.state().percent(), 100.0);
+    assert_eq!(read.concat(), content);
 }
 
 #[rstest]
-fn a_chunk_of_one_matches_the_byte_iterator(tmp_dir: TempDir) {
-    let expected: Vec<Vec<u8>> = CONTENT.iter().map(|byte| vec![*byte]).collect();
+fn read_fills_a_chunk_across_a_buffer_refill(sandbox: Sandbox) {
+    let path = sandbox.file(TEST_ALPHABET);
+    let reader = sandbox.capped(1);
+    let read = items(reader.chunks(&path).size(10).build().unwrap());
 
-    assert_eq!(chunks(&tmp_dir, 1, false), expected);
+    assert_eq!(read[0], &TEST_ALPHABET[..10]);
+    assert_eq!(read.concat(), TEST_ALPHABET);
 }
 
 #[rstest]
-fn skip_counts_chunks_not_bytes(tmp_dir: TempDir) {
-    let reader = reader(&tmp_dir, Config::default());
-    let path = write(&tmp_dir, "data.bin", CONTENT);
-    let mut iterator = reader.chunks(&path).size(2).skip(2).build().unwrap();
-    let mut collected = Vec::new();
+fn the_position_counts_bytes_not_chunks(sandbox: Sandbox) {
+    let path = sandbox.file(TEST_ALPHABET);
+    let mut chunks = sandbox.reader().chunks(&path).size(4).build().unwrap();
 
-    while let Some(chunk) = iterator.read().unwrap() {
-        collected.push(chunk.to_vec());
-    }
+    chunks.read().unwrap();
 
-    assert_eq!(collected, [b"ef".to_vec(), b"gh".to_vec()]);
+    assert_eq!(chunks.state().position, 4);
 }
 
 #[rstest]
-fn drop_partial_discards_a_chunk_cut_short_by_end(tmp_dir: TempDir) {
-    let reader = reader(&tmp_dir, Config::default());
-    let path = write(&tmp_dir, "data.bin", CONTENT);
-    let mut iterator = reader.chunks(&path).size(3).end(5).drop_partial(true).build().unwrap();
-    let mut collected = Vec::new();
+fn the_iterator_yields_owned_chunks(sandbox: Sandbox) {
+    let path = sandbox.file(TEST_ALPHABET);
+    let mut collected: Vec<Vec<u8>> = Vec::new();
 
-    while let Some(chunk) = iterator.read().unwrap() {
-        collected.push(chunk.to_vec());
-    }
-
-    assert_eq!(collected, [b"abc".to_vec()]);
-    assert_eq!(iterator.state().position, 3);
-}
-
-#[rstest]
-fn a_for_loop_yields_owned_chunks(tmp_dir: TempDir) {
-    let reader = reader(&tmp_dir, Config::default());
-    let path = write(&tmp_dir, "data.bin", CONTENT);
-    let mut collected = Vec::new();
-
-    for chunk in reader.chunks(&path).size(3).build().unwrap() {
+    for chunk in sandbox.reader().chunks(&path).size(13).build().unwrap() {
         collected.push(chunk.unwrap());
     }
 
-    assert_eq!(
-        collected,
-        [b"abc".to_vec(), b"def".to_vec(), b"gh".to_vec()]
-    );
+    assert_eq!(collected.concat(), TEST_ALPHABET);
 }

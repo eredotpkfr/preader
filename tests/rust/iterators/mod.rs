@@ -1,8 +1,5 @@
-pub mod base_test;
-pub mod byte_test;
-pub mod chunk_test;
-pub mod delimiter_test;
-pub mod line_test;
-pub mod matrix_test;
-pub mod parity_test;
-pub mod scenario_test;
+mod byte_test;
+mod chunk_test;
+mod delimiter_test;
+mod line_test;
+mod state_test;
