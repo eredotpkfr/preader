@@ -9,7 +9,10 @@ from typing import Any
 import pytest
 
 from constants import (
+    TEST_DIRECTORY_ERRORS,
+    TEST_LONG_NAME_ERROR,
     TEST_STATE_NAME,
+    TEST_UNRESOLVED_PATH_ERROR,
     TEST_UNSAFE_STATE_NAME_IDS,
     TEST_UNSAFE_STATE_NAMES,
     TEST_WINDOWS_UNSAFE_STATE_NAME_IDS,
@@ -137,7 +140,7 @@ def test_save_raises_when_state_path_is_a_directory(
     state = reader.bytes(tmp_file).state
     state.path().mkdir(parents=True)
 
-    with pytest.raises(IsADirectoryError):
+    with pytest.raises(TEST_DIRECTORY_ERRORS):
         state.save()
 
 
@@ -165,10 +168,10 @@ def test_verify_raises_when_checksum_mismatch(
     make_reader: Callable[..., PReader], tmp_large_file: Path
 ) -> None:
     state = _new_unverified_state(make_reader, tmp_large_file)
-    payload = json.loads(state.path().read_text())
+    payload = json.loads(state.path().read_text(encoding="utf-8"))
 
     payload.update(position=999)
-    state.path().write_text(json.dumps(payload))
+    state.path().write_text(json.dumps(payload), encoding="utf-8")
 
     tampered = _get_unverified_state(make_reader, state.name)
 
@@ -312,7 +315,7 @@ def test_resync_does_not_mutate_original(
     ("name", "error", "message"),
     [
         ("../../etc/passwd", StateError, "path escapes root"),
-        (TEST_STATE_NAME, IsADirectoryError, "Is a directory"),
+        (TEST_STATE_NAME, TEST_DIRECTORY_ERRORS, None),
     ],
     ids=["path_rejected", "commit_failed"],
 )
@@ -357,7 +360,7 @@ def test_save_leaves_no_temporary_file(
     state = make_reader().bytes(tmp_file, state=TEST_STATE_NAME).state
 
     if blocked:
-        with pytest.raises(IsADirectoryError):
+        with pytest.raises(TEST_DIRECTORY_ERRORS):
             state.save()
     else:
         state.save()
@@ -576,7 +579,7 @@ def test_resync_keeps_an_unsafe_name_for_the_save(
     state = reader.bytes(path, state="../../etc/passwd").state
     resynced = state.resync(path)
 
-    assert resynced.name == "../../etc/passwd"
+    assert resynced.name == str(Path("../../etc/passwd"))
 
     with pytest.raises(StateError, match="path escapes root"):
         resynced.save()
@@ -792,7 +795,7 @@ def test_resync_raises_when_the_path_cannot_be_resolved(
         target.symlink_to(second)
         second.symlink_to(target)
 
-    with pytest.raises(OSError, match=r"No such file|Too many levels"):
+    with pytest.raises(OSError, match=TEST_UNRESOLVED_PATH_ERROR):
         state.resync(target)
 
 
@@ -930,7 +933,7 @@ def test_percent_treats_a_zero_size_as_one_byte(
 def test_save_raises_when_the_name_is_too_long(reader: PReader, tmp_file: Path) -> None:
     state = reader.bytes(tmp_file, state="x" * 300).state
 
-    with pytest.raises(OSError, match="File name too long"):
+    with pytest.raises(OSError, match=TEST_LONG_NAME_ERROR):
         state.save()
 
 
@@ -1031,10 +1034,10 @@ def test_verify_reports_the_checksum_first(
 ) -> None:
     state = _new_unverified_state(make_reader, tmp_large_file)
     original_mtime = tmp_large_file.stat().st_mtime
-    payload = json.loads(state.path().read_text())
+    payload = json.loads(state.path().read_text(encoding="utf-8"))
 
     payload.update(position=999)
-    state.path().write_text(json.dumps(payload))
+    state.path().write_text(json.dumps(payload), encoding="utf-8")
 
     truncate(tmp_large_file, 4500)
 

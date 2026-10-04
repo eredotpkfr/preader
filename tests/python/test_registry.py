@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 
 from constants import (
+    TEST_DIRECTORY_ERRORS,
     TEST_STATE_NAME,
     TEST_UNSAFE_STATE_NAME_IDS,
     TEST_UNSAFE_STATE_NAMES,
@@ -180,7 +181,7 @@ def test_delete_raises_when_state_is_a_directory(
     config.state_dir.mkdir(parents=True, exist_ok=True)
     (config.state_dir / f"{TEST_STATE_NAME}.state.json").mkdir()
 
-    with pytest.raises(OSError, match=r"Operation not permitted|Is a directory"):
+    with pytest.raises(TEST_DIRECTORY_ERRORS):
         del registry[TEST_STATE_NAME]
 
 
@@ -191,10 +192,10 @@ def test_getitem_ignores_unknown_fields(
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
 
     path = reader.states.path(TEST_STATE_NAME)
-    payload = json.loads(path.read_text())
+    payload = json.loads(path.read_text(encoding="utf-8"))
 
     payload["foo"] = 42
-    path.write_text(json.dumps(payload))
+    path.write_text(json.dumps(payload), encoding="utf-8")
 
     state = reader.states[TEST_STATE_NAME]
 
@@ -650,10 +651,10 @@ def test_getitem_returns_the_payload_name(
     reader = make_reader(verify_state=False)
     state_path = reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
 
-    payload = json.loads(state_path.read_text())
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
     payload["name"] = "a-different-name"
 
-    state_path.write_text(json.dumps(payload))
+    state_path.write_text(json.dumps(payload), encoding="utf-8")
 
     assert reader.states[TEST_STATE_NAME].name == "a-different-name"
 
@@ -664,10 +665,10 @@ def test_getitem_raises_when_a_field_has_the_wrong_type(
     reader = make_reader(verify_state=False)
     state_path = reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
 
-    payload = json.loads(state_path.read_text())
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
     payload["position"] = "abc"
 
-    state_path.write_text(json.dumps(payload))
+    state_path.write_text(json.dumps(payload), encoding="utf-8")
 
     with pytest.raises(StateError, match="invalid type"):
         reader.states[TEST_STATE_NAME]

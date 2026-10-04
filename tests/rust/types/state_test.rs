@@ -17,7 +17,7 @@ use crate::common::{
         TEST_TRACKED_NAME, TEST_WINDOW,
     },
     fixtures::sandbox,
-    funcs::{consume, drain, state_data, tamper},
+    funcs::{consume, drain, native, state_data, tamper},
     guards::{mtime, set_mtime, set_pre_epoch_mtime},
     macros::{
         asserts::{assert_err, assert_err_is},
@@ -563,7 +563,7 @@ fn resync_keeps_an_unsafe_name_for_the_save(sandbox: Sandbox) {
     let saved = sandbox.named_state(&path, "../../escape");
     let mut resynced = saved.resync(&path).unwrap();
 
-    assert_eq!(resynced.name, "../../escape");
+    assert_eq!(resynced.name, native("../../escape"));
 
     assert_err!(resynced.save(), "path escapes root");
 }
