@@ -1,10 +1,11 @@
-use preader::{IteratorBuild, IteratorRead};
+use preader::{Error, IteratorBuild, IteratorRead};
 use rstest::rstest;
 
 use crate::common::{
-    constants::{TEST_ALPHABET, TEST_INVALID_UTF8},
+    constants::{TEST_ALPHABET, TEST_INVALID_UTF8, TEST_READ_FROM, TEST_REWOUND_TO},
     fixtures::sandbox,
     funcs::items,
+    macros::asserts::assert_err_is,
     sandbox::Sandbox,
 };
 
@@ -110,4 +111,20 @@ fn iterator_yields_owned_chunks(sandbox: Sandbox) {
     }
 
     assert_eq!(collected.concat(), TEST_ALPHABET);
+}
+
+#[cfg(unix)]
+#[rstest]
+fn read_reports_a_mid_chunk_io_error(sandbox: Sandbox) {
+    let directory = sandbox.dir_at("folder");
+    let opened = sandbox.state_at(&directory, TEST_READ_FROM);
+    let mut chunks = sandbox.lenient().chunks(&directory).state(opened).build().unwrap();
+
+    *chunks.state() = sandbox.state_at(&directory, TEST_REWOUND_TO);
+
+    let read = chunks.read().map(|chunk| chunk.map(<[u8]>::to_vec));
+
+    assert_eq!(chunks.state().position, TEST_READ_FROM);
+
+    assert_err_is!(read, Error::Io(_));
 }

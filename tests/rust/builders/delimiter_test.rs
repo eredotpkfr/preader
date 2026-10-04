@@ -65,17 +65,17 @@ fn align_drops_a_partial_segment(sandbox: Sandbox, #[case] align: bool, #[case] 
 
 #[rstest]
 fn last_character_wins(sandbox: Sandbox) {
-    let path = sandbox.file(TEST_SEGMENT_CONTENT);
+    let path = sandbox.file(b"seg-0,seg-1|seg-2");
     let read = items(
         sandbox
             .reader()
             .delimiter(&path)
-            .character(b'x')
             .character(DEFAULT_DELIMITER)
+            .character(b'|')
             .limit(1)
             .build()
             .unwrap(),
     );
 
-    assert_eq!(texts(&read), ["seg-0"]);
+    assert_eq!(texts(&read), ["seg-0,seg-1"]);
 }
