@@ -43,6 +43,7 @@ fn resume_skips_again_when_position_equals_start(sandbox: Sandbox) {
     while first.read().unwrap().is_some() {}
 
     first.state().save().unwrap();
+
     drop(first);
 
     let mut resumed = reader.bytes(&path).state(TEST_STATE_NAME).start(3).skip(1).build().unwrap();
@@ -176,6 +177,7 @@ fn auto_load_ignores_an_unreadable_payload(sandbox: Sandbox, #[case] payload: &s
     let state_path = bytes.state().save().unwrap();
 
     drop(bytes);
+
     fs::write(&state_path, payload).unwrap();
 
     assert_eq!(reader.bytes(&path).build().unwrap().state().position, 0);
@@ -189,6 +191,7 @@ fn auto_load_ignores_an_unverifiable_state(sandbox: Sandbox) {
 
     bytes.read().unwrap();
     bytes.state().save().unwrap();
+
     drop(bytes);
 
     sandbox.append(&path, b"more");
@@ -208,6 +211,7 @@ fn auto_load_resumes_stale_state_without_verification(sandbox: Sandbox) {
 
     bytes.read().unwrap();
     bytes.state().save().unwrap();
+
     drop(bytes);
 
     sandbox.append(&path, b"more");
@@ -259,6 +263,7 @@ fn changing_state_dir_creates_fresh_state(sandbox: Sandbox) {
 
     bytes.read().unwrap();
     bytes.state().save().unwrap();
+
     drop(bytes);
 
     let elsewhere = sandbox.reader_in(
@@ -283,6 +288,7 @@ fn autoname_changes_when_the_file_moves(sandbox: Sandbox) {
 
     bytes.read().unwrap();
     bytes.state().save().unwrap();
+
     drop(bytes);
 
     let moved = sandbox.path().join("moved.bin");

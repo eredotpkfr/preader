@@ -9,9 +9,7 @@ use crate::common::{
 };
 
 const INVALID_LINES: &[u8] = b"line-0\n\xff\xfe\nline-2\n";
-
 const CRLF_CONTENT: &[u8] = b"line-0\r\nline-1\r\n";
-
 const LINES: [&str; 6] = ["line-0", "line-1", "line-2", "line-3", "line-4", "line-5"];
 
 fn lines(sandbox: &Sandbox, content: &[u8]) -> Vec<String> {
@@ -158,6 +156,7 @@ fn resume_after_an_invalid_line_stays_aligned(sandbox: Sandbox) {
     lines.read().unwrap();
     lines.read().unwrap_err();
     lines.state().save().unwrap();
+
     drop(lines);
 
     let resumed = items(reader.lines(&path).state("job-1").build().unwrap());

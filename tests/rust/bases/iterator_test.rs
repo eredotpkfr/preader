@@ -143,6 +143,7 @@ fn dropping_with_autosave_off_writes_nothing(sandbox: Sandbox) {
     let mut bytes = sandbox.reader().bytes(&path).state(TEST_STATE_NAME).build().unwrap();
 
     bytes.read().unwrap();
+
     drop(bytes);
 
     assert!(!sandbox.states().exists(TEST_STATE_NAME));
@@ -185,6 +186,7 @@ fn resumed_read_floors_last_saved_position(sandbox: Sandbox) {
     while first.read().unwrap().is_some() {}
 
     first.state().save().unwrap();
+
     drop(first);
 
     let resumed = sandbox.reader_with(Config {
@@ -220,6 +222,7 @@ fn resumed_read_continues_where_it_stopped(sandbox: Sandbox) {
     while first.read().unwrap().is_some() {}
 
     first.state().save().unwrap();
+
     drop(first);
 
     let resumed = items(reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap());
@@ -250,6 +253,7 @@ fn resumed_read_applies_the_limit_again(sandbox: Sandbox) {
     while first.read().unwrap().is_some() {}
 
     first.state().save().unwrap();
+
     drop(first);
 
     let second = items(reader.bytes(&path).state(TEST_STATE_NAME).limit(3).build().unwrap());
@@ -266,6 +270,7 @@ fn resumed_read_ignores_start_it_is_already_past(sandbox: Sandbox) {
     while first.read().unwrap().is_some() {}
 
     first.state().save().unwrap();
+
     drop(first);
 
     let second = take(
@@ -285,6 +290,7 @@ fn fully_consumed_file_yields_nothing_on_resume(sandbox: Sandbox) {
     while first.read().unwrap().is_some() {}
 
     first.state().save().unwrap();
+
     drop(first);
 
     let mut second = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap();
@@ -341,6 +347,7 @@ fn end_below_position_does_not_rewind_state(sandbox: Sandbox) {
     while first.read().unwrap().is_some() {}
 
     first.state().save().unwrap();
+
     drop(first);
 
     let mut second = reader.bytes(&path).state(TEST_STATE_NAME).end(4).build().unwrap();
@@ -601,6 +608,7 @@ fn dropping_reports_failed_save_without_panicking(sandbox: Sandbox) {
     consume(&mut bytes, 3);
 
     sandbox.block_states();
+
     drop(bytes);
 
     assert!(!sandbox.states().exists(TEST_STATE_NAME));
