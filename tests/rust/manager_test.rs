@@ -16,6 +16,7 @@ use crate::common::{
         TEST_FILE_PATH, TEST_LINE, TEST_LINE_FINGERPRINT, TEST_STATE_NAME, TEST_UNSAFE_NAMES,
     },
     fixtures::sandbox,
+    macros::asserts::assert_err,
     sandbox::Sandbox,
 };
 
@@ -147,6 +148,7 @@ fn autoname_is_lowercase_hex(sandbox: Sandbox, #[case] file: &str) {
     let name = sandbox.manager().autoname(Path::new(file));
 
     assert_eq!(name.len(), 64);
+
     assert!(name.bytes().all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()));
 }
 
@@ -213,6 +215,7 @@ fn path_does_not_need_the_state_dir(sandbox: Sandbox) {
     let path = manager_in(&sandbox, "not-created-yet").path(TEST_STATE_NAME).unwrap();
 
     assert!(!state_dir.exists());
+
     assert_eq!(path.parent().unwrap(), state_dir);
 }
 
@@ -223,9 +226,8 @@ fn path_does_not_need_the_state_dir(sandbox: Sandbox) {
 #[case::current_dir(TEST_UNSAFE_NAMES[3])]
 fn path_fails_when_the_name_is_unsafe(sandbox: Sandbox, #[case] unsafe_name: (&str, &str)) {
     let (name, message) = unsafe_name;
-    let error = sandbox.manager().path(name).unwrap_err();
 
-    assert!(error.to_string().contains(message), "{error}");
+    assert_err!(sandbox.manager().path(name), message);
 }
 
 #[cfg(windows)]
@@ -255,6 +257,7 @@ fn tmp_carries_both_suffixes(sandbox: Sandbox) {
     let name = tmp.file_name().unwrap().to_str().unwrap();
 
     assert_eq!(tmp.parent().unwrap(), sandbox.state_dir());
+
     assert!(name.starts_with(&format!("{TEST_STATE_NAME}.")));
     assert!(name.ends_with(&format!("{STATE_FILE_EXTENSION}.{TMP_FILE_EXTENSION}")));
 }
@@ -315,6 +318,7 @@ fn tmp_does_not_need_the_state_dir(sandbox: Sandbox) {
     let tmp = manager_in(&sandbox, "not-created-yet").tmp(TEST_STATE_NAME).unwrap();
 
     assert!(!state_dir.exists());
+
     assert_eq!(tmp.parent().unwrap(), state_dir);
 }
 
@@ -325,9 +329,8 @@ fn tmp_does_not_need_the_state_dir(sandbox: Sandbox) {
 #[case::current_dir(TEST_UNSAFE_NAMES[3])]
 fn tmp_fails_when_the_name_is_unsafe(sandbox: Sandbox, #[case] unsafe_name: (&str, &str)) {
     let (name, message) = unsafe_name;
-    let error = sandbox.manager().tmp(name).unwrap_err();
 
-    assert!(error.to_string().contains(message), "{error}");
+    assert_err!(sandbox.manager().tmp(name), message);
 }
 
 #[rstest]

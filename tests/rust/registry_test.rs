@@ -11,6 +11,7 @@ use crate::common::{
     fixtures::sandbox,
     funcs::{names, native},
     guards::Blocked,
+    macros::asserts::assert_err,
     sandbox::Sandbox,
 };
 
@@ -91,9 +92,10 @@ fn every_lookup_rejects_an_unsafe_name(sandbox: Sandbox, #[case] unsafe_name: (&
     let (name, message) = unsafe_name;
     let registry = sandbox.states();
 
-    assert!(registry.load(name).unwrap_err().to_string().contains(message));
-    assert!(registry.delete(name).unwrap_err().to_string().contains(message));
-    assert!(registry.path(name).unwrap_err().to_string().contains(message));
+    assert_err!(registry.load(name), message);
+    assert_err!(registry.delete(name), message);
+    assert_err!(registry.path(name), message);
+
     assert!(registry.find(name).is_none());
     assert!(!registry.exists(name));
 }
@@ -151,6 +153,7 @@ fn count_includes_states_that_all_rejects(sandbox: Sandbox) {
     corrupt(&sandbox, "broken");
 
     assert_eq!(sandbox.states().count().unwrap(), 2);
+
     assert!(matches!(
         sandbox.states().all().unwrap_err(),
         Error::Serde(_)

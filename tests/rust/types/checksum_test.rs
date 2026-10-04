@@ -7,9 +7,12 @@ use preader::{ChecksumBody, FileMetadata, StateData, Timestamps};
 use rstest::{fixture, rstest};
 use sha2::{Digest, Sha256};
 
-use crate::common::constants::{
-    TEST_EMPTY_FINGERPRINT, TEST_FILE_PATH, TEST_LINE, TEST_LINE_FINGERPRINT,
-    TEST_OTHER_STATE_NAME, TEST_STAMP, TEST_STATE_NAME,
+use crate::common::{
+    constants::{
+        TEST_EMPTY_FINGERPRINT, TEST_FILE_PATH, TEST_LINE, TEST_LINE_FINGERPRINT,
+        TEST_OTHER_STATE_NAME, TEST_STAMP, TEST_STATE_NAME,
+    },
+    macros::asserts::assert_err,
 };
 
 const DIGEST: &str = "f74d122580787555a6f2d245be2066bbe5af3e83fe5e39092c479e0e1b41225a";
@@ -129,7 +132,5 @@ fn compute_ignores_the_stored_checksum(
 fn compute_fails_when_the_path_is_not_utf8(mut file: FileMetadata, timestamps: Timestamps) {
     file.path = PathBuf::from(OsStr::from_bytes(b"/tmp/data-\xff\xfe.bin"));
 
-    let error = body(&file, &timestamps).compute().unwrap_err();
-
-    assert!(error.to_string().contains("invalid UTF-8"));
+    assert_err!(body(&file, &timestamps).compute(), "invalid UTF-8");
 }

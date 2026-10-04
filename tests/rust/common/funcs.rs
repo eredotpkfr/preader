@@ -33,6 +33,13 @@ where
     items(iterator.take(count))
 }
 
+pub fn drain<I, T>(iterator: &mut I) -> usize
+where
+    I: Iterator<Item = Result<T>>,
+{
+    items(iterator).len()
+}
+
 pub fn consume<I, T>(iterator: &mut I, count: usize)
 where
     I: Iterator<Item = Result<T>>,

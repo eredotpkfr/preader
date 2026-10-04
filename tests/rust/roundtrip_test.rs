@@ -7,7 +7,7 @@ use crate::common::{
     constants::TEST_TIMEOUT,
     fixtures::sandbox,
     funcs::items,
-    macros::{cycle::cycle, drain::drain},
+    macros::{asserts::assert_percent, cycle::cycle},
     rng::{seeded_bytes, seeded_text},
     sandbox::Sandbox,
 };
@@ -134,10 +134,10 @@ fn percent_reaches_hundred_for_every_iterator(sandbox: Sandbox) {
     let path = sandbox.file(text.as_bytes());
     let size = text.len() as u64;
 
-    drain!(reader.bytes(&path), size);
-    drain!(reader.chunks(&path).size(CHUNK), size);
-    drain!(reader.delimiter(&path).keep(true), size);
-    drain!(reader.lines(&path).keepends(true), size);
+    assert_percent!(reader.bytes(&path), size);
+    assert_percent!(reader.chunks(&path).size(CHUNK), size);
+    assert_percent!(reader.delimiter(&path).keep(true), size);
+    assert_percent!(reader.lines(&path).keepends(true), size);
 }
 
 #[rstest]

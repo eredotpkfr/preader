@@ -6,7 +6,8 @@ use rstest::rstest;
 use crate::common::{
     constants::{TEST_FILE_NAME, TEST_LINE, TEST_NON_UTF8_NAME, TEST_STATE_NAME},
     fixtures::sandbox,
-    funcs::items,
+    funcs::{drain, items},
+    macros::asserts::assert_err,
     sandbox::Sandbox,
 };
 
@@ -104,9 +105,9 @@ fn every_iterator_counts_invalid_bytes(sandbox: Sandbox) {
     let mut segments = reader.delimiter(&path).character(b'\n').build().unwrap();
     let mut lines = reader.lines(&path).build().unwrap();
 
-    while bytes.read().unwrap().is_some() {}
-    while chunks.read().unwrap().is_some() {}
-    while segments.read().unwrap().is_some() {}
+    drain(&mut bytes);
+    drain(&mut chunks);
+    drain(&mut segments);
 
     lines.by_ref().for_each(drop);
 
@@ -177,9 +178,8 @@ fn socket_is_rejected(sandbox: Sandbox) {
 
     let socket = sandbox.path().join("a-socket");
     let _listener = UnixListener::bind(&socket).unwrap();
-    let error = sandbox.reader().bytes(&socket).build().unwrap_err();
 
-    assert!(error.to_string().contains("not a file"), "{error}");
+    assert_err!(sandbox.reader().bytes(&socket).build(), "not a file");
 }
 
 #[cfg(unix)]
@@ -193,7 +193,5 @@ fn non_utf8_path_is_rejected(sandbox: Sandbox) {
         return;
     }
 
-    let error = sandbox.reader().bytes(&path).build().unwrap_err();
-
-    assert!(error.to_string().contains("invalid UTF-8"), "{error}");
+    assert_err!(sandbox.reader().bytes(&path).build(), "invalid UTF-8");
 }

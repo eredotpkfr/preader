@@ -6,7 +6,7 @@ use rstest::rstest;
 use crate::common::{
     constants::{TEST_ALPHABET, TEST_OTHER_STATE_NAME, TEST_STATE_NAME, TEST_UNSAFE_NAME},
     fixtures::sandbox,
-    funcs::{consume, items, state_data, take},
+    funcs::{consume, drain, items, state_data, take},
     guards::Blocked,
     sandbox::Sandbox,
 };
@@ -20,7 +20,7 @@ fn autosave_off_writes_nothing(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let mut bytes = sandbox.reader().bytes(&path).state(TEST_STATE_NAME).build().unwrap();
 
-    while bytes.read().unwrap().is_some() {}
+    drain(&mut bytes);
 
     drop(bytes);
 
@@ -37,7 +37,7 @@ fn zero_threshold_saves_only_at_the_end(sandbox: Sandbox) {
 
     assert!(!sandbox.states().exists(TEST_STATE_NAME));
 
-    while bytes.read().unwrap().is_some() {}
+    drain(&mut bytes);
 
     assert_eq!(
         sandbox.states().load(TEST_STATE_NAME).unwrap().position,
@@ -87,7 +87,7 @@ fn late_final_save_flushes_the_tail(sandbox: Sandbox) {
 
     assert!(!sandbox.states().exists(TEST_STATE_NAME));
 
-    while bytes.read().unwrap().is_some() {}
+    drain(&mut bytes);
 
     assert_eq!(
         sandbox.states().load(TEST_STATE_NAME).unwrap().position,
@@ -101,7 +101,7 @@ fn reading_past_exhaustion_does_not_resave(sandbox: Sandbox) {
     let reader = sandbox.autosaving(DEFAULT_AUTO_SAVE_STATE_BYTES);
     let mut bytes = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap();
 
-    while bytes.read().unwrap().is_some() {}
+    drain(&mut bytes);
 
     assert_eq!(
         sandbox.states().load(TEST_STATE_NAME).unwrap().position,
@@ -183,7 +183,7 @@ fn resumed_read_floors_last_saved_position(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let mut first = sandbox.reader().bytes(&path).state(TEST_STATE_NAME).limit(7).build().unwrap();
 
-    while first.read().unwrap().is_some() {}
+    drain(&mut first);
 
     first.state().save().unwrap();
 
@@ -217,13 +217,8 @@ fn resumed_read_floors_last_saved_position(sandbox: Sandbox) {
 fn resumed_read_continues_where_it_stopped(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let reader = sandbox.resuming();
-    let mut first = reader.bytes(&path).state(TEST_STATE_NAME).limit(4).build().unwrap();
 
-    while first.read().unwrap().is_some() {}
-
-    first.state().save().unwrap();
-
-    drop(first);
+    sandbox.checkpoint(&path, TEST_STATE_NAME, 4);
 
     let resumed = items(reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap());
 
@@ -248,13 +243,8 @@ fn iterators_with_one_name_advance_independently(sandbox: Sandbox) {
 fn resumed_read_applies_the_limit_again(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let reader = sandbox.resuming();
-    let mut first = reader.bytes(&path).state(TEST_STATE_NAME).limit(3).build().unwrap();
 
-    while first.read().unwrap().is_some() {}
-
-    first.state().save().unwrap();
-
-    drop(first);
+    sandbox.checkpoint(&path, TEST_STATE_NAME, 3);
 
     let second = items(reader.bytes(&path).state(TEST_STATE_NAME).limit(3).build().unwrap());
 
@@ -265,13 +255,8 @@ fn resumed_read_applies_the_limit_again(sandbox: Sandbox) {
 fn resumed_read_ignores_start_it_is_already_past(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let reader = sandbox.resuming();
-    let mut first = reader.bytes(&path).state(TEST_STATE_NAME).limit(5).build().unwrap();
 
-    while first.read().unwrap().is_some() {}
-
-    first.state().save().unwrap();
-
-    drop(first);
+    sandbox.checkpoint(&path, TEST_STATE_NAME, 5);
 
     let second = take(
         &mut reader.bytes(&path).state(TEST_STATE_NAME).start(2).build().unwrap(),
@@ -287,7 +272,7 @@ fn fully_consumed_file_yields_nothing_on_resume(sandbox: Sandbox) {
     let reader = sandbox.resuming();
     let mut first = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap();
 
-    while first.read().unwrap().is_some() {}
+    drain(&mut first);
 
     first.state().save().unwrap();
 
@@ -306,7 +291,7 @@ fn finished_read_reports_full_progress(sandbox: Sandbox) {
 
     assert_eq!(bytes.state().percent(), 0.0);
 
-    while bytes.read().unwrap().is_some() {}
+    drain(&mut bytes);
 
     assert_eq!(bytes.state().position, CONTENT_SIZE);
     assert_eq!(bytes.state().percent(), 100.0);
@@ -342,13 +327,8 @@ fn replacing_state_with_earlier_one_keeps_reading(sandbox: Sandbox) {
 fn end_below_position_does_not_rewind_state(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let reader = sandbox.resuming();
-    let mut first = reader.bytes(&path).state(TEST_STATE_NAME).limit(10).build().unwrap();
 
-    while first.read().unwrap().is_some() {}
-
-    first.state().save().unwrap();
-
-    drop(first);
+    sandbox.checkpoint(&path, TEST_STATE_NAME, 10);
 
     let mut second = reader.bytes(&path).state(TEST_STATE_NAME).end(4).build().unwrap();
 
@@ -364,13 +344,7 @@ fn file_growth_during_iteration_is_ignored(sandbox: Sandbox) {
     bytes.read().unwrap();
     sandbox.append(&path, b"0123456789");
 
-    let mut count = 1;
-
-    while bytes.read().unwrap().is_some() {
-        count += 1;
-    }
-
-    assert_eq!(count, TEST_ALPHABET.len());
+    assert_eq!(drain(&mut bytes) + 1, TEST_ALPHABET.len());
     assert_eq!(bytes.state().file.size, CONTENT_SIZE);
 }
 
@@ -382,13 +356,7 @@ fn iteration_survives_the_file_being_deleted(sandbox: Sandbox) {
     bytes.read().unwrap();
     fs::remove_file(&path).unwrap();
 
-    let mut count = 1;
-
-    while bytes.read().unwrap().is_some() {
-        count += 1;
-    }
-
-    assert_eq!(count, TEST_ALPHABET.len());
+    assert_eq!(drain(&mut bytes) + 1, TEST_ALPHABET.len());
 }
 
 #[rstest]
@@ -400,13 +368,7 @@ fn iteration_stops_at_a_truncation(sandbox: Sandbox) {
     bytes.read().unwrap();
     sandbox.truncate(&path, 4);
 
-    let mut count = 1;
-
-    while bytes.read().unwrap().is_some() {
-        count += 1;
-    }
-
-    assert_eq!(count, 4);
+    assert_eq!(drain(&mut bytes) + 1, 4);
     assert_eq!(bytes.state().position, 4);
 }
 
@@ -454,6 +416,7 @@ fn failing_threshold_save_stops_the_read(sandbox: Sandbox) {
     };
 
     assert!(matches!(error, Error::Io(_)), "{error}");
+
     assert_eq!(yielded, &TEST_ALPHABET[..4]);
 }
 
@@ -489,6 +452,7 @@ fn failing_final_save_reaches_every_item_first(sandbox: Sandbox) {
     };
 
     assert!(error.to_string().contains("path escapes root"), "{error}");
+
     assert_eq!(yielded, TEST_ALPHABET);
 }
 
@@ -567,6 +531,7 @@ fn resumed_read_covers_what_failed_save_left_behind(sandbox: Sandbox) {
     drop(blocked);
 
     assert!(matches!(error, Error::Io(_)), "{error}");
+
     assert_eq!(
         sandbox.states().load(TEST_STATE_NAME).unwrap().position,
         checkpoint
@@ -575,6 +540,7 @@ fn resumed_read_covers_what_failed_save_left_behind(sandbox: Sandbox) {
     let third = items(reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap());
 
     assert_eq!([first.as_slice(), third.as_slice()].concat(), TEST_ALPHABET);
+
     assert!(second.iter().all(|byte| third.contains(byte)));
 }
 

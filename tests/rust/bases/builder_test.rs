@@ -1,12 +1,12 @@
 use std::io::ErrorKind;
 
-use preader::{Error, IteratorBuild, IteratorRead};
+use preader::{Error, IteratorBuild};
 use rstest::rstest;
 
 use crate::common::{
     constants::{TEST_ALPHABET, TEST_FILE_NAME, TEST_LINE_CONTENT, TEST_STATE_NAME},
     fixtures::sandbox,
-    funcs::items,
+    funcs::{drain, items},
     iterators::{ITERATORS, IteratorKind, Plan},
     sandbox::Sandbox,
 };
@@ -44,6 +44,7 @@ fn empty_file_builds_and_yields_nothing(sandbox: Sandbox) {
         let (read, state) = iterator.read(&sandbox.reader(), &path, Plan::default()).unwrap();
 
         assert!(read.is_empty(), "{iterator:?}");
+
         assert_eq!(state.position, 0, "{iterator:?}");
     }
 }
@@ -57,6 +58,7 @@ fn zero_buffer_capacity_still_reads_every_item(sandbox: Sandbox) {
         let (read, state) = iterator.read(&reader, &path, Plan::default()).unwrap();
 
         assert!(!read.is_empty(), "{iterator:?}");
+
         assert_eq!(
             state.position,
             TEST_LINE_CONTENT.len() as u64,
@@ -117,7 +119,7 @@ fn resumed_state_starts_at_its_position(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let mut bytes = sandbox.reader().bytes(&path).state(TEST_STATE_NAME).limit(3).build().unwrap();
 
-    while bytes.read().unwrap().is_some() {}
+    drain(&mut bytes);
 
     bytes.state().save().unwrap();
 

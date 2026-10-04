@@ -12,8 +12,9 @@ use crate::common::{
         TEST_SEGMENT_CONTENT, TEST_STATE_NAME, TEST_UNSAFE_NAME,
     },
     fixtures::sandbox,
-    funcs::{items, texts},
+    funcs::{drain, items, texts},
     iterators::{ITERATORS, LOSSLESS_ITERATORS, Plan},
+    macros::asserts::assert_err,
     sandbox::Sandbox,
 };
 
@@ -40,7 +41,7 @@ fn resume_skips_again_when_position_equals_start(sandbox: Sandbox) {
     let reader = sandbox.resuming();
     let mut first = reader.bytes(&path).state(TEST_STATE_NAME).start(2).limit(1).build().unwrap();
 
-    while first.read().unwrap().is_some() {}
+    drain(&mut first);
 
     first.state().save().unwrap();
 
@@ -65,7 +66,7 @@ fn resume_honours_a_different_chunk_size(sandbox: Sandbox) {
     let reader = sandbox.reader();
     let mut chunks = reader.chunks(&path).state(TEST_STATE_NAME).size(4).limit(1).build().unwrap();
 
-    while chunks.read().unwrap().is_some() {}
+    drain(&mut chunks);
 
     chunks.state().save().unwrap();
 
@@ -90,7 +91,7 @@ fn resume_honours_a_different_delimiter(sandbox: Sandbox) {
         .build()
         .unwrap();
 
-    while segments.read().unwrap().is_some() {}
+    drain(&mut segments);
 
     segments.state().save().unwrap();
 
@@ -109,7 +110,7 @@ fn resume_honours_a_different_keepends(sandbox: Sandbox) {
     let reader = sandbox.reader();
     let mut lines = reader.lines(&path).state(TEST_STATE_NAME).limit(1).build().unwrap();
 
-    while lines.read().unwrap().is_some() {}
+    drain(&mut lines);
 
     lines.state().save().unwrap();
 
@@ -253,6 +254,7 @@ fn changing_state_name_leaves_old_state_in_place(sandbox: Sandbox) {
     let mut fresh = sandbox.reader().bytes(&path).state(TEST_OTHER_STATE_NAME).build().unwrap();
 
     assert_eq!(fresh.state().position, 0);
+
     assert!(sandbox.states().exists(TEST_STATE_NAME));
 }
 
@@ -378,9 +380,9 @@ fn save_error_stops_read_on_skipped_item(sandbox: Sandbox) {
     let path = sandbox.file(TEST_LINE_CONTENT);
     let reader = sandbox.autosaving(1);
     let mut lines = reader.lines(&path).state(TEST_UNSAFE_NAME).skip(2).build().unwrap();
-    let error = lines.read().unwrap_err();
 
-    assert!(error.to_string().contains("path escapes root"), "{error}");
+    assert_err!(lines.read(), "path escapes root");
+
     assert_eq!(lines.state().position, 7);
 }
 
@@ -389,9 +391,9 @@ fn save_error_stops_read_on_filtered_blank(sandbox: Sandbox) {
     let path = sandbox.file(b"\nfoo\n");
     let reader = sandbox.autosaving(1);
     let mut lines = reader.lines(&path).state(TEST_UNSAFE_NAME).skip_empty(true).build().unwrap();
-    let error = lines.read().unwrap_err();
 
-    assert!(error.to_string().contains("path escapes root"), "{error}");
+    assert_err!(lines.read(), "path escapes root");
+
     assert_eq!(lines.state().position, 1);
 }
 

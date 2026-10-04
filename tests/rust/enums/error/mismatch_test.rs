@@ -98,5 +98,6 @@ fn mismatch_converts_into_an_error() {
     let error = Error::from(checksum());
 
     assert!(matches!(error, Error::Mismatch(Mismatch::Checksum { .. })));
+
     assert_eq!(error.to_string(), checksum().to_string());
 }

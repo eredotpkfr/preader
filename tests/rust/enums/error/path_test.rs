@@ -17,6 +17,7 @@ fn path_error_converts_into_an_error() {
     let error = preader::Error::from(PathError::Symlink(TEST_STATE_NAME.to_owned()));
 
     assert!(matches!(error, preader::Error::Path(PathError::Symlink(_))));
+
     assert_eq!(
         error.to_string(),
         format!("path escapes root via symlink: {TEST_STATE_NAME}")

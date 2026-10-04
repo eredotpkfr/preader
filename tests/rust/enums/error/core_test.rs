@@ -73,6 +73,7 @@ fn path_errors_are_transparent(sandbox: Sandbox) {
         matches!(error, Error::Path(PathError::Escapes(_))),
         "{error}"
     );
+
     assert_eq!(error.to_string(), "path escapes root: ../escape");
 }
 
@@ -96,6 +97,7 @@ fn missing_state_names_itself(sandbox: Sandbox) {
     let error = sandbox.states().load(TEST_MISSING_STATE_NAME).unwrap_err();
 
     assert!(matches!(&error, Error::NotFound(name) if name == TEST_MISSING_STATE_NAME));
+
     assert_eq!(
         error.to_string(),
         format!("state not found: {TEST_MISSING_STATE_NAME}")
@@ -108,6 +110,7 @@ fn inverted_range_reports_both_bounds(sandbox: Sandbox) {
     let error = sandbox.reader().bytes(&path).start(9).end(4).build().unwrap_err();
 
     assert!(matches!(error, Error::InvalidRange { start: 9, end: 4 }));
+
     assert_eq!(error.to_string(), "start (9) must be <= end (4)");
 }
 
@@ -120,6 +123,7 @@ fn directory_is_not_a_file(sandbox: Sandbox) {
         matches!(&error, Error::NotAFile(found) if *found == directory),
         "{error}"
     );
+
     assert_eq!(
         error.to_string(),
         format!("not a file: {}", directory.display())

@@ -39,6 +39,7 @@ fn compares_by_value() {
             ..IteratorOptions::default()
         }
     );
+
     assert_ne!(
         options,
         IteratorOptions {
@@ -69,6 +70,7 @@ fn build_rejects_an_inverted_range(sandbox: Sandbox, #[case] options: IteratorOp
     let (start, end) = (options.start, options.end);
 
     assert!(matches!(error, Error::InvalidRange { start: s, end: e } if s == start && e == end));
+
     assert_eq!(
         error.to_string(),
         format!("start ({start}) must be <= end ({end})")
@@ -155,5 +157,6 @@ fn window_resolves_an_empty_file() {
 
     assert_eq!(window.position, 0);
     assert_eq!(window.end, 0);
+
     assert!(window.skipping.is_none());
 }
