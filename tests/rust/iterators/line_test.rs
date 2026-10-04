@@ -2,14 +2,17 @@ use preader::{Error, IteratorBuild, IteratorRead};
 use rstest::rstest;
 
 use crate::common::{
-    constants::{
-        TEST_BLANK_LINE_CONTENT, TEST_CRLF_CONTENT, TEST_INVALID_LINES, TEST_LINE_CONTENT,
-        TEST_LINES, TEST_UNICODE_TEXT,
-    },
+    constants::{TEST_BLANK_LINE_CONTENT, TEST_LINE_CONTENT, TEST_UNICODE_TEXT},
     fixtures::sandbox,
     funcs::items,
     sandbox::Sandbox,
 };
+
+const INVALID_LINES: &[u8] = b"line-0\n\xff\xfe\nline-2\n";
+
+const CRLF_CONTENT: &[u8] = b"line-0\r\nline-1\r\n";
+
+const LINES: [&str; 6] = ["line-0", "line-1", "line-2", "line-3", "line-4", "line-5"];
 
 fn lines(sandbox: &Sandbox, content: &[u8]) -> Vec<String> {
     let path = sandbox.file(content);
@@ -19,7 +22,7 @@ fn lines(sandbox: &Sandbox, content: &[u8]) -> Vec<String> {
 
 #[rstest]
 fn read_strips_the_line_ending(sandbox: Sandbox) {
-    assert_eq!(lines(&sandbox, TEST_LINE_CONTENT), TEST_LINES);
+    assert_eq!(lines(&sandbox, TEST_LINE_CONTENT), LINES);
 }
 
 #[rstest]
@@ -37,7 +40,7 @@ fn read_yields_blank_only_file_as_blank_lines(sandbox: Sandbox) {
 
 #[rstest]
 fn read_strips_both_crlf_characters(sandbox: Sandbox) {
-    assert_eq!(lines(&sandbox, TEST_CRLF_CONTENT), ["line-0", "line-1"]);
+    assert_eq!(lines(&sandbox, CRLF_CONTENT), ["line-0", "line-1"]);
 }
 
 #[rstest]
@@ -55,7 +58,7 @@ fn lone_carriage_return_is_not_a_separator(sandbox: Sandbox) {
 
 #[rstest]
 fn keepends_preserves_the_full_crlf(sandbox: Sandbox) {
-    let path = sandbox.file(TEST_CRLF_CONTENT);
+    let path = sandbox.file(CRLF_CONTENT);
     let read = items(sandbox.reader().lines(&path).keepends(true).build().unwrap());
 
     assert_eq!(read, ["line-0\r\n", "line-1\r\n"]);
@@ -80,6 +83,14 @@ fn keepends_does_not_change_the_position(sandbox: Sandbox) {
     while kept.read().unwrap().is_some() {}
 
     assert_eq!(stripped.state().position, kept.state().position);
+}
+
+#[rstest]
+fn a_skipped_blank_line_does_not_consume_the_limit(sandbox: Sandbox) {
+    let path = sandbox.file(TEST_BLANK_LINE_CONTENT);
+    let read = items(sandbox.reader().lines(&path).skip_empty(true).limit(2).build().unwrap());
+
+    assert_eq!(read, ["line-0", "line-2"]);
 }
 
 #[rstest]
@@ -125,7 +136,7 @@ fn read_fails_on_invalid_utf8(sandbox: Sandbox) {
 
 #[rstest]
 fn read_counts_the_invalid_line(sandbox: Sandbox) {
-    let path = sandbox.file(TEST_INVALID_LINES);
+    let path = sandbox.file(INVALID_LINES);
     let mut lines = sandbox.reader().lines(&path).build().unwrap();
 
     assert_eq!(lines.read().unwrap(), Some("line-0"));
@@ -134,13 +145,13 @@ fn read_counts_the_invalid_line(sandbox: Sandbox) {
     assert_eq!(lines.state().position, 10);
     assert_eq!(lines.read().unwrap(), Some("line-2"));
     assert_eq!(lines.read().unwrap(), None);
-    assert_eq!(lines.state().position, TEST_INVALID_LINES.len() as u64);
+    assert_eq!(lines.state().position, INVALID_LINES.len() as u64);
     assert_eq!(lines.state().percent(), 100.0);
 }
 
 #[rstest]
 fn resume_after_an_invalid_line_stays_aligned(sandbox: Sandbox) {
-    let path = sandbox.file(TEST_INVALID_LINES);
+    let path = sandbox.file(INVALID_LINES);
     let reader = sandbox.resuming();
     let mut lines = reader.lines(&path).state("job-1").build().unwrap();
 
@@ -156,7 +167,7 @@ fn resume_after_an_invalid_line_stays_aligned(sandbox: Sandbox) {
 
 #[rstest]
 fn skipped_content_is_not_validated(sandbox: Sandbox) {
-    let path = sandbox.file(TEST_INVALID_LINES);
+    let path = sandbox.file(INVALID_LINES);
     let read = items(sandbox.reader().lines(&path).skip(2).build().unwrap());
 
     assert_eq!(read, ["line-2"]);
@@ -227,5 +238,5 @@ fn iterator_yields_owned_lines(sandbox: Sandbox) {
         collected.push(line.unwrap());
     }
 
-    assert_eq!(collected, TEST_LINES);
+    assert_eq!(collected, LINES);
 }

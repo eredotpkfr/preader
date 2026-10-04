@@ -4,7 +4,7 @@ use preader::{Config, IteratorBuild, IteratorRead, PReader};
 use rstest::rstest;
 
 use crate::common::{
-    constants::{TEST_FILE_NAME, TEST_LINE, TEST_STATE_NAME},
+    constants::{TEST_FILE_NAME, TEST_LINE, TEST_NON_UTF8_NAME, TEST_STATE_NAME},
     fixtures::sandbox,
     funcs::items,
     sandbox::Sandbox,
@@ -187,7 +187,7 @@ fn socket_is_rejected(sandbox: Sandbox) {
 fn non_utf8_path_is_rejected(sandbox: Sandbox) {
     use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 
-    let path = sandbox.path().join(OsStr::from_bytes(b"data-\xff.bin"));
+    let path = sandbox.path().join(OsStr::from_bytes(TEST_NON_UTF8_NAME));
 
     if fs::write(&path, TEST_LINE).is_err() {
         return;

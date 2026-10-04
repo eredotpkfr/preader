@@ -12,13 +12,15 @@ use rstest::rstest;
 use crate::common::{
     constants::{
         TEST_FILE_NAME, TEST_FILE_PATH, TEST_LARGE_COPIES, TEST_LINE, TEST_NON_UTF8_NAME,
-        TEST_PAST_WINDOW, TEST_STATE_NAME, TEST_TRACKED_NAME, TEST_WINDOW,
+        TEST_STATE_NAME, TEST_TRACKED_NAME, TEST_WINDOW,
     },
     fixtures::sandbox,
     funcs::{consume, state_data, tamper},
     guards::{Blocked, mtime, set_mtime, set_pre_epoch_mtime},
     sandbox::Sandbox,
 };
+
+const PAST_WINDOW: usize = TEST_WINDOW + 404;
 
 #[rstest]
 fn fields_describe_the_tracked_file(sandbox: Sandbox) {
@@ -220,7 +222,7 @@ fn verify_fails_when_the_mtime_changed(sandbox: Sandbox) {
 
 #[rstest]
 #[case::inside_the_window(10, true)]
-#[case::past_the_window(TEST_PAST_WINDOW as u64, false)]
+#[case::past_the_window(PAST_WINDOW as u64, false)]
 fn verify_watches_only_the_fingerprint_window(
     sandbox: Sandbox,
     #[case] offset: u64,
@@ -403,7 +405,7 @@ fn resync_clamps_the_position_to_the_new_size(sandbox: Sandbox) {
 fn resync_ignores_changes_past_the_window(sandbox: Sandbox) {
     let mut after = TEST_LINE.repeat(TEST_LARGE_COPIES);
 
-    after[TEST_PAST_WINDOW] = b'\xff';
+    after[PAST_WINDOW] = b'\xff';
 
     let saved = sandbox.recorded(&TEST_LINE.repeat(TEST_LARGE_COPIES), 6000);
     let path = sandbox.write(TEST_TRACKED_NAME, &after);

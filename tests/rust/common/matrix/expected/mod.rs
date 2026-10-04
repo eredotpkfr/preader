@@ -5,4 +5,4 @@ pub mod split;
 
 pub use bytes::bytes;
 pub use chunks::chunks;
-pub use split::{Split, split};
+pub use split::{lines, segments};
