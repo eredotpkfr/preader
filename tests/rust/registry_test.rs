@@ -21,12 +21,8 @@ fn corrupt(sandbox: &Sandbox, name: &str) {
     fs::write(path, "not valid json").unwrap();
 }
 
-fn block_the_state_dir(sandbox: &Sandbox) {
-    fs::write(sandbox.state_dir(), "not a directory").unwrap();
-}
-
 #[rstest]
-fn state_dir_points_at_the_configured_directory(sandbox: Sandbox) {
+fn state_dir_points_at_configured_directory(sandbox: Sandbox) {
     assert_eq!(sandbox.states().state_dir(), sandbox.config().state_dir);
 }
 
@@ -59,7 +55,7 @@ fn load_reports_a_missing_state(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn load_reports_a_state_shaped_directory_as_missing(sandbox: Sandbox) {
+fn load_reports_state_shaped_directory_as_missing(sandbox: Sandbox) {
     fs::create_dir_all(sandbox.states().path(TEST_STATE_NAME).unwrap()).unwrap();
 
     assert!(matches!(
@@ -133,7 +129,7 @@ fn exists_reports_only_saved_states(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn exists_is_false_for_a_state_shaped_directory(sandbox: Sandbox) {
+fn exists_is_false_for_state_shaped_directory(sandbox: Sandbox) {
     fs::create_dir_all(sandbox.states().path(TEST_STATE_NAME).unwrap()).unwrap();
 
     assert!(!sandbox.states().exists(TEST_STATE_NAME));
@@ -247,7 +243,7 @@ fn clear_removes_states_at_every_depth(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn registries_sharing_a_state_dir_see_each_other(sandbox: Sandbox) {
+fn registries_sharing_state_dir_see_each_other(sandbox: Sandbox) {
     sandbox.save(TEST_STATE_NAME);
     sandbox.reader().states().delete(TEST_STATE_NAME).unwrap();
 
@@ -255,8 +251,8 @@ fn registries_sharing_a_state_dir_see_each_other(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_state_dir_that_is_a_file_fails_every_walk(sandbox: Sandbox) {
-    block_the_state_dir(&sandbox);
+fn state_dir_that_is_a_file_fails_every_walk(sandbox: Sandbox) {
+    sandbox.block_states();
 
     let registry = sandbox.states();
 
@@ -268,8 +264,8 @@ fn a_state_dir_that_is_a_file_fails_every_walk(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_state_dir_that_is_a_file_still_answers_lookups(sandbox: Sandbox) {
-    block_the_state_dir(&sandbox);
+fn state_dir_that_is_file_still_answers_lookups(sandbox: Sandbox) {
+    sandbox.block_states();
 
     let registry = sandbox.states();
 
@@ -280,7 +276,7 @@ fn a_state_dir_that_is_a_file_still_answers_lookups(sandbox: Sandbox) {
 
 #[cfg(unix)]
 #[rstest]
-fn an_unreadable_subdirectory_fails_every_walk(sandbox: Sandbox) {
+fn unreadable_subdirectory_fails_every_walk(sandbox: Sandbox) {
     let mut blocked = Blocked::default();
 
     if !Blocked::enforced(&sandbox.path().join("probe")) {

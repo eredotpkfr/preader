@@ -6,13 +6,13 @@ use rstest::rstest;
 use crate::common::{
     constants::{TEST_ALPHABET, TEST_FILE_NAME, TEST_LINE_CONTENT, TEST_STATE_NAME},
     fixtures::sandbox,
+    flows::{FLOWS, Flow, Plan},
     funcs::items,
-    kinds::{KINDS, Kind, Setup},
     sandbox::Sandbox,
 };
 
 #[rstest]
-fn the_options_are_validated_before_the_file_is_opened(sandbox: Sandbox) {
+fn options_are_validated_before_file_is_opened(sandbox: Sandbox) {
     let missing = sandbox.path().join("missing.bin");
     let error = sandbox.reader().bytes(&missing).start(9).end(4).build().unwrap_err();
 
@@ -20,7 +20,7 @@ fn the_options_are_validated_before_the_file_is_opened(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_missing_file_fails_to_build(sandbox: Sandbox) {
+fn missing_file_fails_to_build(sandbox: Sandbox) {
     let missing = sandbox.path().join("missing.bin");
     let error = sandbox.reader().bytes(&missing).build().unwrap_err();
 
@@ -28,7 +28,7 @@ fn a_missing_file_fails_to_build(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn the_file_is_canonicalized(sandbox: Sandbox) {
+fn file_is_canonicalized(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let detoured = sandbox.path().join(".").join(TEST_FILE_NAME);
     let state = sandbox.reader().bytes(&detoured).build().unwrap().state().clone();
@@ -37,32 +37,32 @@ fn the_file_is_canonicalized(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn an_empty_file_builds_and_yields_nothing(sandbox: Sandbox) {
+fn empty_file_builds_and_yields_nothing(sandbox: Sandbox) {
     let path = sandbox.empty_file();
 
-    for kind in KINDS {
-        let (read, state) = kind.read(&sandbox.reader(), &path, Setup::default()).unwrap();
+    for flow in FLOWS {
+        let (read, state) = flow.read(&sandbox.reader(), &path, Plan::default()).unwrap();
 
-        assert!(read.is_empty(), "{kind:?}");
-        assert_eq!(state.position, 0, "{kind:?}");
+        assert!(read.is_empty(), "{flow:?}");
+        assert_eq!(state.position, 0, "{flow:?}");
     }
 }
 
 #[rstest]
-fn a_zero_buffer_capacity_still_reads_every_item(sandbox: Sandbox) {
+fn zero_buffer_capacity_still_reads_every_item(sandbox: Sandbox) {
     let path = sandbox.file(TEST_LINE_CONTENT);
     let reader = sandbox.capped(0);
 
-    for kind in KINDS {
-        let (read, state) = kind.read(&reader, &path, Setup::default()).unwrap();
+    for flow in FLOWS {
+        let (read, state) = flow.read(&reader, &path, Plan::default()).unwrap();
 
-        assert!(!read.is_empty(), "{kind:?}");
-        assert_eq!(state.position, TEST_LINE_CONTENT.len() as u64, "{kind:?}");
+        assert!(!read.is_empty(), "{flow:?}");
+        assert_eq!(state.position, TEST_LINE_CONTENT.len() as u64, "{flow:?}");
     }
 }
 
 #[rstest]
-fn the_largest_chunk_size_still_reads_the_file(sandbox: Sandbox) {
+fn largest_chunk_size_still_reads_the_file(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let read = items(sandbox.reader().chunks(&path).size(usize::MAX).build().unwrap());
 
@@ -109,7 +109,7 @@ fn skip_past_the_end_yields_nothing(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_resumed_state_starts_at_its_position(sandbox: Sandbox) {
+fn resumed_state_starts_at_its_position(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let mut bytes = sandbox.reader().bytes(&path).state(TEST_STATE_NAME).limit(3).build().unwrap();
 
@@ -121,13 +121,13 @@ fn a_resumed_state_starts_at_its_position(sandbox: Sandbox) {
 
     drop(bytes);
 
-    let (read, resumed) = Kind::Byte
+    let (read, resumed) = Flow::Bytes
         .read(
             &sandbox.reader(),
             &path,
-            Setup {
+            Plan {
                 take: Some(1),
-                ..Setup::stateful(state)
+                ..Plan::resuming(state)
             },
         )
         .unwrap();
@@ -137,7 +137,7 @@ fn a_resumed_state_starts_at_its_position(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn the_maximum_start_and_end_yield_nothing(sandbox: Sandbox) {
+fn maximum_start_and_end_yield_nothing(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let read = items(sandbox.reader().bytes(&path).start(u64::MAX).end(u64::MAX).build().unwrap());
 

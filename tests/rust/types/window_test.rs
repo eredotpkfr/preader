@@ -3,11 +3,13 @@ use std::io::{ErrorKind, Read};
 use preader::{Error, IteratorOptions, Skip, Window};
 use rstest::rstest;
 
-use crate::common::{constants::TEST_LINE_CONTENT, fixtures::sandbox, sandbox::Sandbox};
+use crate::common::{
+    constants::{TEST_LINE_CONTENT, TEST_UNSEEKABLE_POSITION},
+    fixtures::sandbox,
+    sandbox::Sandbox,
+};
 
 const CONTENT_SIZE: u64 = TEST_LINE_CONTENT.len() as u64;
-const UNSEEKABLE_POSITION: u64 = i64::MAX as u64 + 1;
-
 fn window(position: u64) -> Window {
     IteratorOptions::default().window(position, CONTENT_SIZE, Skip::Bytes(0))
 }
@@ -56,7 +58,7 @@ fn open_fails_when_the_file_is_missing(sandbox: Sandbox) {
 fn open_fails_when_the_position_is_unseekable(sandbox: Sandbox) {
     let path = sandbox.file(TEST_LINE_CONTENT);
     let window = Window {
-        position: UNSEEKABLE_POSITION,
+        position: TEST_UNSEEKABLE_POSITION,
         end: 0,
         skipping: None,
     };

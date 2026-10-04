@@ -59,7 +59,7 @@ fn read_stays_exhausted_after_the_end(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn the_iterator_yields_owned_bytes(sandbox: Sandbox) {
+fn iterator_yields_owned_bytes(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let mut collected = Vec::new();
 
@@ -71,7 +71,7 @@ fn the_iterator_yields_owned_bytes(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn the_iterator_composes_with_adapters(sandbox: Sandbox) {
+fn iterator_composes_with_adapters(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let collected: Vec<u8> = sandbox
         .reader()

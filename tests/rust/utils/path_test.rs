@@ -20,7 +20,7 @@ fn root() -> &'static Path {
 #[case::plain("job-1.state.json")]
 #[case::nested("nested/job-1.state.json")]
 #[case::unnormalized("./job-1")]
-fn scoped_join_keeps_a_contained_path_verbatim(root: &Path, #[case] contained: &str) {
+fn scoped_join_keeps_contained_path_verbatim(root: &Path, #[case] contained: &str) {
     assert_eq!(scoped_join(root, contained).unwrap(), root.join(contained));
 }
 
@@ -51,7 +51,7 @@ fn scoped_join_fails_when_the_path_is_unsafe(
 #[case::unc_share("\\\\server\\share\\job-1")]
 #[case::verbatim_drive("\\\\?\\C:\\job-1")]
 #[case::backslash_traversal("..\\..\\etc\\passwd")]
-fn scoped_join_fails_when_a_windows_path_is_unsafe(root: &Path, #[case] unsafe_path: &str) {
+fn scoped_join_fails_when_windows_path_is_unsafe(root: &Path, #[case] unsafe_path: &str) {
     let error = scoped_join(root, unsafe_path).unwrap_err();
 
     assert!(error.to_string().contains("escapes root"));
@@ -72,7 +72,7 @@ fn scoped_join_does_not_validate_the_root() {
 }
 
 #[rstest]
-fn default_state_dir_ends_with_the_directory_name() {
+fn default_state_dir_ends_with_directory_name() {
     assert_eq!(default_state_dir().file_name().unwrap(), DEFAULT_STATE_DIR);
 }
 
@@ -101,7 +101,7 @@ fn normalize_path_reduces_to_the_native_form(#[case] path: &str, #[case] expecte
 
 #[cfg(unix)]
 #[rstest]
-fn normalize_path_treats_a_backslash_as_a_name_character() {
+fn normalize_path_treats_backslash_as_name_character() {
     assert_eq!(normalize_path("sub\\job-1"), "sub\\job-1");
 }
 
@@ -180,7 +180,7 @@ fn has_no_symlinks_rejects_a_symlinked_file(tmp_dir: TempDir) {
 
 #[cfg(unix)]
 #[rstest]
-fn has_no_symlinks_rejects_an_escaping_symlink(tmp_dir: TempDir) {
+fn has_no_symlinks_rejects_escaping_symlink(tmp_dir: TempDir) {
     let root = tmp_dir.path().join("root");
     let outside = tmp_dir.path().join("outside");
 

@@ -1,222 +1,152 @@
 use std::str;
 
-use preader::{Error, IteratorBuild};
+use preader::{DEFAULT_DELIMITER, Error, IteratorBuild, IteratorOptions};
 use rstest::rstest;
 
 use crate::common::{
-    constants::TEST_DELIMITER,
+    expected::{self, Split},
     fixtures::sandbox,
     funcs::{items, try_items},
-    oracle::{self, ENDS, FLAGS, LIMITS, SIZES, SKIPS, SPLITS, STARTS, Split, TEXTS},
+    matrix::{
+        BLANK_LINES, BLANK_SEGMENTS, CRLF_LINES, EMPTY, LINES, SEGMENTS, UNTERMINATED_LINES,
+        UNTERMINATED_SEGMENTS, WHOLE_SEGMENT, shapes, sizings, windows,
+    },
     sandbox::Sandbox,
 };
 
-fn assert_bounds<T: std::fmt::Debug>(built: Result<T, Error>, start: u64, end: u64) {
+fn assert_bounds<T: std::fmt::Debug>(built: Result<T, Error>, options: IteratorOptions) {
     let error = built.unwrap_err();
+    let reported = Error::InvalidRange {
+        start: options.start,
+        end: options.end,
+    };
 
-    assert!(
-        matches!(error, Error::InvalidRange { start: from, end: to } if from == start && to == end),
-        "start={start} end={end} produced {error}"
-    );
+    assert_eq!(error.to_string(), reported.to_string(), "{options:?}");
 }
 
 #[rstest]
-fn bytes_match_the_oracle(
+fn bytes_match_the_reference(
     sandbox: Sandbox,
-    #[values(TEXTS[0], TEXTS[1], TEXTS[2], TEXTS[3], TEXTS[4])] content: &[u8],
+    #[values(EMPTY, LINES, UNTERMINATED_LINES, CRLF_LINES, BLANK_LINES)] content: &[u8],
 ) {
     let path = sandbox.file(content);
     let reader = sandbox.reader();
 
-    for start in STARTS {
-        for end in ENDS {
-            for skip in SKIPS {
-                for limit in LIMITS {
-                    let built =
-                        reader.bytes(&path).start(start).end(end).skip(skip).limit(limit).build();
+    for options in windows() {
+        let built = reader.bytes(&path).options(options).build();
 
-                    if start > end {
-                        assert_bounds(built, start, end);
+        if options.start > options.end {
+            assert_bounds(built, options);
 
-                        continue;
-                    }
+            continue;
+        }
 
-                    let read = items(built.unwrap()).concat();
+        assert_eq!(
+            items(built.unwrap()).concat(),
+            expected::bytes(content, options),
+            "{options:?}"
+        );
+    }
+}
 
-                    assert_eq!(
-                        read,
-                        oracle::bytes(content, start, end, skip, limit),
-                        "start={start} end={end} skip={skip} limit={limit}"
-                    );
-                }
+#[rstest]
+fn chunks_match_the_reference(
+    sandbox: Sandbox,
+    #[values(EMPTY, LINES, UNTERMINATED_LINES, CRLF_LINES, BLANK_LINES)] content: &[u8],
+) {
+    let path = sandbox.file(content);
+    let reader = sandbox.reader();
+
+    for options in windows() {
+        for (size, drop_partial) in sizings() {
+            let built = reader
+                .chunks(&path)
+                .options(options)
+                .size(size)
+                .drop_partial(drop_partial)
+                .build();
+
+            if options.start > options.end {
+                assert_bounds(built, options);
+
+                continue;
             }
+
+            assert_eq!(
+                items(built.unwrap()),
+                expected::chunks(content, size, options, drop_partial),
+                "{options:?} size={size} drop_partial={drop_partial}"
+            );
         }
     }
 }
 
 #[rstest]
-fn chunks_match_the_oracle(
+fn lines_match_the_reference(
     sandbox: Sandbox,
-    #[values(TEXTS[0], TEXTS[1], TEXTS[2], TEXTS[3], TEXTS[4])] content: &[u8],
+    #[values(EMPTY, LINES, UNTERMINATED_LINES, CRLF_LINES, BLANK_LINES)] content: &[u8],
 ) {
     let path = sandbox.file(content);
     let reader = sandbox.reader();
 
-    for size in SIZES {
-        for start in STARTS {
-            for end in ENDS {
-                for skip in SKIPS {
-                    for limit in LIMITS {
-                        for drop_partial in FLAGS {
-                            let built = reader
-                                .chunks(&path)
-                                .size(size)
-                                .start(start)
-                                .end(end)
-                                .skip(skip)
-                                .limit(limit)
-                                .drop_partial(drop_partial)
-                                .build();
+    for options in windows() {
+        for shape in shapes() {
+            let built = reader
+                .lines(&path)
+                .options(options)
+                .keepends(shape.keep)
+                .skip_empty(shape.skip_empty)
+                .align(shape.align)
+                .build();
 
-                            if start > end {
-                                assert_bounds(built, start, end);
+            if options.start > options.end {
+                assert_bounds(built, options);
 
-                                continue;
-                            }
-
-                            assert_eq!(
-                                items(built.unwrap()),
-                                oracle::chunks(
-                                    content,
-                                    size,
-                                    start,
-                                    end,
-                                    skip,
-                                    limit,
-                                    drop_partial
-                                ),
-                                "size={size} start={start} end={end} skip={skip} \
-                                 limit={limit} drop_partial={drop_partial}"
-                            );
-                        }
-                    }
-                }
+                continue;
             }
+
+            assert_eq!(
+                try_items(built.unwrap()).unwrap(),
+                expected::split(content, &Split::lines(shape), options),
+                "content={:?} {options:?} {shape:?}",
+                str::from_utf8(content).unwrap()
+            );
         }
     }
 }
 
 #[rstest]
-fn lines_match_the_oracle(
+fn segments_match_the_reference(
     sandbox: Sandbox,
-    #[values(TEXTS[0], TEXTS[1], TEXTS[2], TEXTS[3], TEXTS[4])] content: &[u8],
+    #[values(EMPTY, SEGMENTS, UNTERMINATED_SEGMENTS, BLANK_SEGMENTS, WHOLE_SEGMENT)]
+    content: &[u8],
 ) {
     let path = sandbox.file(content);
     let reader = sandbox.reader();
 
-    for start in STARTS {
-        for end in ENDS {
-            for skip in SKIPS {
-                for limit in LIMITS {
-                    for keepends in FLAGS {
-                        for skip_empty in FLAGS {
-                            for align in FLAGS {
-                                let built = reader
-                                    .lines(&path)
-                                    .start(start)
-                                    .end(end)
-                                    .skip(skip)
-                                    .limit(limit)
-                                    .keepends(keepends)
-                                    .skip_empty(skip_empty)
-                                    .align(align)
-                                    .build();
+    for options in windows() {
+        for shape in shapes() {
+            let built = reader
+                .delimiter(&path)
+                .options(options)
+                .character(DEFAULT_DELIMITER)
+                .keep(shape.keep)
+                .skip_empty(shape.skip_empty)
+                .align(shape.align)
+                .build();
 
-                                if start > end {
-                                    assert_bounds(built, start, end);
+            if options.start > options.end {
+                assert_bounds(built, options);
 
-                                    continue;
-                                }
-
-                                let options = Split {
-                                    boundary: b'\n',
-                                    keep: keepends,
-                                    skip_empty,
-                                    align,
-                                    carriage: true,
-                                };
-
-                                assert_eq!(
-                                    try_items(built.unwrap()).unwrap(),
-                                    oracle::split(content, &options, start, end, skip, limit),
-                                    "content={:?} start={start} end={end} skip={skip} \
-                                     limit={limit} keepends={keepends} \
-                                     skip_empty={skip_empty} align={align}",
-                                    str::from_utf8(content).unwrap()
-                                );
-                            }
-                        }
-                    }
-                }
+                continue;
             }
-        }
-    }
-}
 
-#[rstest]
-fn segments_match_the_oracle(
-    sandbox: Sandbox,
-    #[values(SPLITS[0], SPLITS[1], SPLITS[2], SPLITS[3], SPLITS[4])] content: &[u8],
-) {
-    let path = sandbox.file(content);
-    let reader = sandbox.reader();
-
-    for start in STARTS {
-        for end in ENDS {
-            for skip in SKIPS {
-                for limit in LIMITS {
-                    for keep in FLAGS {
-                        for skip_empty in FLAGS {
-                            for align in FLAGS {
-                                let built = reader
-                                    .delimiter(&path)
-                                    .character(TEST_DELIMITER)
-                                    .start(start)
-                                    .end(end)
-                                    .skip(skip)
-                                    .limit(limit)
-                                    .keep(keep)
-                                    .skip_empty(skip_empty)
-                                    .align(align)
-                                    .build();
-
-                                if start > end {
-                                    assert_bounds(built, start, end);
-
-                                    continue;
-                                }
-
-                                let options = Split {
-                                    boundary: TEST_DELIMITER,
-                                    keep,
-                                    skip_empty,
-                                    align,
-                                    carriage: false,
-                                };
-
-                                assert_eq!(
-                                    items(built.unwrap()),
-                                    oracle::split(content, &options, start, end, skip, limit),
-                                    "content={:?} start={start} end={end} skip={skip} \
-                                     limit={limit} keep={keep} skip_empty={skip_empty} \
-                                     align={align}",
-                                    str::from_utf8(content).unwrap()
-                                );
-                            }
-                        }
-                    }
-                }
-            }
+            assert_eq!(
+                items(built.unwrap()),
+                expected::split(content, &Split::segments(shape), options),
+                "content={:?} {options:?} {shape:?}",
+                str::from_utf8(content).unwrap()
+            );
         }
     }
 }

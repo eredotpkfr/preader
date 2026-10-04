@@ -9,7 +9,7 @@ use crate::common::{
 };
 
 #[rstest]
-fn the_defaults_strip_the_terminator(sandbox: Sandbox) {
+fn defaults_strip_the_terminator(sandbox: Sandbox) {
     let path = sandbox.file(TEST_LINE_CONTENT);
     let read = items(sandbox.reader().lines(&path).build().unwrap());
 
@@ -55,7 +55,7 @@ fn align_drops_a_partial_line(sandbox: Sandbox, #[case] align: bool, #[case] exp
 }
 
 #[rstest]
-fn the_last_flag_wins(sandbox: Sandbox) {
+fn last_flag_wins(sandbox: Sandbox) {
     let path = sandbox.file(TEST_LINE_CONTENT);
     let read = items(
         sandbox

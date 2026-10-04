@@ -1,8 +1,8 @@
-macro_rules! read_kind {
-    ($builder:expr, $setup:expr) => {{
-        let setup = $setup;
-        let take = setup.take;
-        let mut iterator = setup.apply($builder).build()?;
+macro_rules! read_flow {
+    ($builder:expr, $plan:expr) => {{
+        let plan = $plan;
+        let take = plan.take;
+        let mut iterator = plan.apply($builder).build()?;
         let items = match take {
             Some(count) => $crate::common::funcs::try_items(iterator.by_ref().take(count)),
             None => $crate::common::funcs::try_items(iterator.by_ref()),
@@ -12,4 +12,4 @@ macro_rules! read_kind {
     }};
 }
 
-pub(crate) use read_kind;
+pub(crate) use read_flow;

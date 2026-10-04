@@ -9,7 +9,7 @@ use crate::common::{
 };
 
 #[rstest]
-fn the_defaults_read_the_whole_file(sandbox: Sandbox) {
+fn defaults_read_the_whole_file(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let read = items(sandbox.reader().bytes(&path).build().unwrap());
 
@@ -26,7 +26,7 @@ fn each_setter_patches_one_option(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn the_setters_can_be_chained_in_any_order(sandbox: Sandbox) {
+fn setters_can_be_chained_in_any_order(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let reader = sandbox.reader();
     let forward = items(reader.bytes(&path).start(2).end(6).skip(1).limit(2).build().unwrap());
@@ -36,7 +36,7 @@ fn the_setters_can_be_chained_in_any_order(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn the_last_call_wins(sandbox: Sandbox) {
+fn last_call_wins(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let read = items(sandbox.reader().bytes(&path).limit(5).limit(1).build().unwrap());
 
@@ -56,7 +56,7 @@ fn options_replaces_every_field(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_setter_after_options_patches_it(sandbox: Sandbox) {
+fn setter_after_options_patches_it(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let options = IteratorOptions {
         start: 1,

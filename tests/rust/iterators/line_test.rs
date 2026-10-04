@@ -3,15 +3,13 @@ use rstest::rstest;
 
 use crate::common::{
     constants::{
-        TEST_BLANK_LINE_CONTENT, TEST_CRLF_CONTENT, TEST_LINE_CONTENT, TEST_LINES,
-        TEST_UNICODE_TEXT,
+        TEST_BLANK_LINE_CONTENT, TEST_CRLF_CONTENT, TEST_INVALID_LINES, TEST_LINE_CONTENT,
+        TEST_LINES, TEST_UNICODE_TEXT,
     },
     fixtures::sandbox,
     funcs::{items, texts},
     sandbox::Sandbox,
 };
-
-const INVALID: &[u8] = b"line-0\n\xff\xfe\nline-2\n";
 
 fn lines(sandbox: &Sandbox, content: &[u8]) -> Vec<String> {
     let path = sandbox.file(content);
@@ -33,7 +31,7 @@ fn read_keeps_a_blank_line(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn read_yields_a_blank_only_file_as_blank_lines(sandbox: Sandbox) {
+fn read_yields_blank_only_file_as_blank_lines(sandbox: Sandbox) {
     assert_eq!(lines(&sandbox, b"\n\n\n"), ["", "", ""]);
 }
 
@@ -51,7 +49,7 @@ fn read_strips_repeated_carriage_returns(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_lone_carriage_return_is_not_a_separator(sandbox: Sandbox) {
+fn lone_carriage_return_is_not_a_separator(sandbox: Sandbox) {
     assert_eq!(lines(&sandbox, b"line-0\rline-1"), ["line-0\rline-1"]);
 }
 
@@ -108,7 +106,7 @@ fn read_yields_multi_byte_characters(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn the_position_counts_bytes_not_characters(sandbox: Sandbox) {
+fn position_counts_bytes_not_characters(sandbox: Sandbox) {
     let path = sandbox.file(TEST_UNICODE_TEXT.as_bytes());
     let mut lines = sandbox.reader().lines(&path).build().unwrap();
 
@@ -127,7 +125,7 @@ fn read_fails_on_invalid_utf8(sandbox: Sandbox) {
 
 #[rstest]
 fn read_counts_the_invalid_line(sandbox: Sandbox) {
-    let path = sandbox.file(INVALID);
+    let path = sandbox.file(TEST_INVALID_LINES);
     let mut lines = sandbox.reader().lines(&path).build().unwrap();
 
     assert_eq!(lines.read().unwrap(), Some("line-0"));
@@ -136,13 +134,13 @@ fn read_counts_the_invalid_line(sandbox: Sandbox) {
     assert_eq!(lines.state().position, 10);
     assert_eq!(lines.read().unwrap(), Some("line-2"));
     assert_eq!(lines.read().unwrap(), None);
-    assert_eq!(lines.state().position, INVALID.len() as u64);
+    assert_eq!(lines.state().position, TEST_INVALID_LINES.len() as u64);
     assert_eq!(lines.state().percent(), 100.0);
 }
 
 #[rstest]
-fn a_resume_after_an_invalid_line_stays_aligned(sandbox: Sandbox) {
-    let path = sandbox.file(INVALID);
+fn resume_after_an_invalid_line_stays_aligned(sandbox: Sandbox) {
+    let path = sandbox.file(TEST_INVALID_LINES);
     let reader = sandbox.resuming();
     let mut lines = reader.lines(&path).state("job-1").build().unwrap();
 
@@ -158,14 +156,14 @@ fn a_resume_after_an_invalid_line_stays_aligned(sandbox: Sandbox) {
 
 #[rstest]
 fn skipped_content_is_not_validated(sandbox: Sandbox) {
-    let path = sandbox.file(INVALID);
+    let path = sandbox.file(TEST_INVALID_LINES);
     let read = items(sandbox.reader().lines(&path).skip(2).build().unwrap());
 
     assert_eq!(texts(&read), ["line-2"]);
 }
 
 #[rstest]
-fn align_skips_a_line_the_window_starts_inside(sandbox: Sandbox) {
+fn align_skips_line_window_starts_inside(sandbox: Sandbox) {
     let path = sandbox.file(TEST_BLANK_LINE_CONTENT);
     let reader = sandbox.reader();
     let mut aligned = reader.lines(&path).start(2).align(true).build().unwrap();
@@ -192,7 +190,7 @@ fn align_and_skip_combine(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_resumed_read_ignores_align(sandbox: Sandbox) {
+fn resumed_read_ignores_align(sandbox: Sandbox) {
     let path = sandbox.file(TEST_BLANK_LINE_CONTENT);
     let reader = sandbox.reader();
     let mut first = reader.bytes(&path).limit(3).build().unwrap();
@@ -211,7 +209,7 @@ fn a_resumed_read_ignores_align(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_line_crossing_the_end_is_yielded_whole(sandbox: Sandbox) {
+fn line_crossing_the_end_is_yielded_whole(sandbox: Sandbox) {
     let path = sandbox.file(TEST_BLANK_LINE_CONTENT);
     let mut lines = sandbox.reader().lines(&path).end(10).build().unwrap();
     let read = texts(&items(&mut lines));
@@ -221,7 +219,7 @@ fn a_line_crossing_the_end_is_yielded_whole(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn the_iterator_yields_owned_lines(sandbox: Sandbox) {
+fn iterator_yields_owned_lines(sandbox: Sandbox) {
     let path = sandbox.file(TEST_LINE_CONTENT);
     let mut collected: Vec<String> = Vec::new();
 

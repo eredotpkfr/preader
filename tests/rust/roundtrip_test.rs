@@ -1,4 +1,4 @@
-use preader::{Config, Error, IteratorBuild, IteratorRead};
+use preader::{Config, DEFAULT_BUFFER_CAPACITY, Error, IteratorBuild, IteratorRead};
 use rstest::rstest;
 
 use crate::common::{
@@ -9,109 +9,106 @@ use crate::common::{
     sandbox::Sandbox,
 };
 
-const SEEDS: [u64; 3] = [1, 2, 3];
-const SIZES: [usize; 3] = [512, 4096, 51_200];
 const CYCLES: usize = 5;
 const CHUNK: usize = 7;
+const SAMPLE: usize = 4096;
 
 #[rstest]
-fn bytes_reproduce_the_content(sandbox: Sandbox) {
-    let reader = sandbox.reader();
+fn bytes_reproduce_the_content(
+    sandbox: Sandbox,
+    #[values(1, 2, 3)] seed: u64,
+    #[values(512, SAMPLE, 51_200)] size: usize,
+) {
+    let content = seeded_bytes(seed, size);
+    let path = sandbox.file(&content);
 
-    for seed in SEEDS {
-        for size in SIZES {
-            let content = seeded_bytes(seed, size);
-            let path = sandbox.file(&content);
-
-            assert_eq!(
-                items(reader.bytes(&path).build().unwrap()).concat(),
-                content,
-                "seed {seed} size {size}"
-            );
-        }
-    }
+    assert_eq!(
+        items(sandbox.reader().bytes(&path).build().unwrap()).concat(),
+        content
+    );
 }
 
 #[rstest]
-#[case::single_byte(1)]
-#[case::uneven(CHUNK)]
-#[case::page(4096)]
-fn chunks_reproduce_the_content(sandbox: Sandbox, #[case] size_of: usize) {
-    let reader = sandbox.reader();
+fn chunks_reproduce_the_content(
+    sandbox: Sandbox,
+    #[values(1, 2, 3)] seed: u64,
+    #[values(512, SAMPLE, 51_200)] size: usize,
+    #[values(1, CHUNK, SAMPLE)] size_of: usize,
+) {
+    let content = seeded_bytes(seed, size);
+    let path = sandbox.file(&content);
+    let chunks = sandbox.reader().chunks(&path).size(size_of).build().unwrap();
 
-    for seed in SEEDS {
-        for size in SIZES {
-            let content = seeded_bytes(seed, size);
-            let path = sandbox.file(&content);
-
-            assert_eq!(
-                items(reader.chunks(&path).size(size_of).build().unwrap()).concat(),
-                content,
-                "seed {seed} size {size}"
-            );
-        }
-    }
+    assert_eq!(items(chunks).concat(), content);
 }
 
 #[rstest]
-#[case::small(1024)]
-#[case::default(65_536)]
-fn drop_partial_stops_at_the_last_whole_chunk(sandbox: Sandbox, #[case] capacity: usize) {
+fn segments_reproduce_the_content(
+    sandbox: Sandbox,
+    #[values(1, 2, 3)] seed: u64,
+    #[values(512, SAMPLE, 51_200)] size: usize,
+) {
+    let content = seeded_bytes(seed, size);
+    let path = sandbox.file(&content);
+    let segments = sandbox.reader().delimiter(&path).keep(true).build().unwrap();
+
+    assert_eq!(items(segments).concat(), content);
+}
+
+#[rstest]
+fn drop_partial_stops_at_the_last_whole_chunk(
+    sandbox: Sandbox,
+    #[values(1, 2, 3)] seed: u64,
+    #[values(512, SAMPLE, 51_200)] size: usize,
+    #[values(1024, DEFAULT_BUFFER_CAPACITY)] capacity: usize,
+) {
+    let content = seeded_bytes(seed, size);
+    let path = sandbox.file(&content);
+    let chunks = sandbox
+        .capped(capacity)
+        .chunks(&path)
+        .size(CHUNK)
+        .drop_partial(true)
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        items(chunks).concat(),
+        content[..content.len() - content.len() % CHUNK]
+    );
+}
+
+#[rstest]
+fn lines_reproduce_the_text(
+    sandbox: Sandbox,
+    #[values(1, 2, 3)] seed: u64,
+    #[values(512, SAMPLE, 51_200)] size: usize,
+    #[values(1024, DEFAULT_BUFFER_CAPACITY)] capacity: usize,
+) {
+    let text = seeded_text(seed, size);
+    let path = sandbox.file(text.as_bytes());
     let reader = sandbox.capped(capacity);
+    let kept = items(reader.lines(&path).keepends(true).build().unwrap());
+    let stripped = items(reader.lines(&path).build().unwrap());
 
-    for seed in SEEDS {
-        for size in SIZES {
-            let content = seeded_bytes(seed, size);
-            let path = sandbox.file(&content);
-            let chunks = reader.chunks(&path).size(CHUNK).drop_partial(true).build().unwrap();
-
-            assert_eq!(
-                items(chunks).concat(),
-                content[..content.len() - content.len() % CHUNK],
-                "seed {seed} size {size}"
-            );
-        }
-    }
+    assert_eq!(texts(&kept).concat(), text);
+    assert_eq!(texts(&stripped).concat(), text.replace('\n', ""));
+    assert_eq!(stripped.len(), text.matches('\n').count());
 }
 
 #[rstest]
-fn segments_reproduce_the_content(sandbox: Sandbox) {
-    let reader = sandbox.reader();
+fn skip_empty_drops_the_blank_lines(sandbox: Sandbox, #[values(1, 2, 3)] seed: u64) {
+    let text = seeded_text(seed, SAMPLE);
+    let path = sandbox.file(text.as_bytes());
+    let expected: Vec<&str> = text.lines().filter(|line| !line.is_empty()).collect();
+    let read = items(sandbox.reader().lines(&path).skip_empty(true).build().unwrap());
 
-    for seed in SEEDS {
-        for size in SIZES {
-            let content = seeded_bytes(seed, size);
-            let path = sandbox.file(&content);
-            let segments = reader.delimiter(&path).keep(true).build().unwrap();
-
-            assert_eq!(items(segments).concat(), content, "seed {seed} size {size}");
-        }
-    }
-}
-
-#[rstest]
-#[case::small(1024)]
-#[case::default(65_536)]
-fn lines_reproduce_the_text(sandbox: Sandbox, #[case] capacity: usize) {
-    let reader = sandbox.capped(capacity);
-
-    for seed in SEEDS {
-        for size in SIZES {
-            let text = seeded_text(seed, size);
-            let path = sandbox.file(text.as_bytes());
-            let kept = items(reader.lines(&path).keepends(true).build().unwrap());
-            let stripped = items(reader.lines(&path).build().unwrap());
-
-            assert_eq!(texts(&kept).concat(), text);
-            assert_eq!(texts(&stripped).concat(), text.replace('\n', ""));
-            assert_eq!(stripped.len(), text.matches('\n').count());
-        }
-    }
+    assert_eq!(texts(&read), expected);
 }
 
 #[rstest]
 fn lines_reject_binary_content(sandbox: Sandbox) {
-    let path = sandbox.file(&seeded_bytes(1, 4096));
+    let path = sandbox.file(&seeded_bytes(1, SAMPLE));
     let mut lines = sandbox.reader().lines(&path).build().unwrap();
     let mut error = None;
 
@@ -127,23 +124,9 @@ fn lines_reject_binary_content(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn skip_empty_drops_the_blank_lines(sandbox: Sandbox) {
+fn percent_reaches_hundred_for_every_iterator(sandbox: Sandbox) {
     let reader = sandbox.reader();
-
-    for seed in SEEDS {
-        let text = seeded_text(seed, 4096);
-        let path = sandbox.file(text.as_bytes());
-        let expected: Vec<&str> = text.lines().filter(|line| !line.is_empty()).collect();
-        let read = items(reader.lines(&path).skip_empty(true).build().unwrap());
-
-        assert_eq!(texts(&read), expected, "seed {seed}");
-    }
-}
-
-#[rstest]
-fn percent_reaches_a_hundred_for_every_iterator(sandbox: Sandbox) {
-    let reader = sandbox.reader();
-    let text = seeded_text(1, 4096);
+    let text = seeded_text(1, SAMPLE);
     let path = sandbox.file(text.as_bytes());
     let size = text.len() as u64;
 
@@ -154,15 +137,15 @@ fn percent_reaches_a_hundred_for_every_iterator(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_resume_rebuilds_the_file_in_cycles(sandbox: Sandbox) {
+fn resume_rebuilds_the_file_in_cycles(sandbox: Sandbox) {
     let plain = sandbox.reader();
     let cycling = sandbox.reader_with(Config {
         auto_load_state: true,
         auto_save_state: true,
         ..sandbox.config()
     });
-    let binary = sandbox.write("data.bin", &seeded_bytes(1, 4096));
-    let textual = sandbox.write("data.txt", seeded_text(1, 4096).as_bytes());
+    let binary = sandbox.write("data.bin", &seeded_bytes(1, SAMPLE));
+    let textual = sandbox.write("data.txt", seeded_text(1, SAMPLE).as_bytes());
 
     cycle!(
         CYCLES,
@@ -193,7 +176,7 @@ fn a_resume_rebuilds_the_file_in_cycles(sandbox: Sandbox) {
 #[rstest]
 fn options_window_the_byte_range(sandbox: Sandbox) {
     let reader = sandbox.reader();
-    let content = seeded_bytes(1, 4096);
+    let content = seeded_bytes(1, SAMPLE);
     let path = sandbox.file(&content);
     let bytes = items(reader.bytes(&path).start(100).end(500).build().unwrap());
     let chunked = items(reader.chunks(&path).size(CHUNK).start(100).end(500).build().unwrap());

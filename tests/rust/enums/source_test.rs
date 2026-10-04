@@ -8,7 +8,7 @@ use crate::common::{
 };
 
 #[rstest]
-fn the_default_is_auto() {
+fn default_is_auto() {
     assert!(matches!(StateSource::default(), StateSource::Auto));
 }
 
@@ -37,7 +37,7 @@ fn auto_is_stable_for_the_same_file(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_name_accepts_every_string_shape(sandbox: Sandbox) {
+fn name_accepts_every_string_shape(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let owned = TEST_STATE_NAME.to_owned();
     let reader = sandbox.reader();
@@ -68,7 +68,7 @@ fn none_falls_back_to_auto(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn an_existing_state_is_carried_through(sandbox: Sandbox) {
+fn existing_state_is_carried_through(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let mut bytes = sandbox.reader().bytes(&path).state(TEST_STATE_NAME).build().unwrap();
 
@@ -85,7 +85,7 @@ fn an_existing_state_is_carried_through(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn an_advanced_state_needs_a_save_before_it_is_reused(sandbox: Sandbox) {
+fn advanced_state_needs_save_before_it_is_reused(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let mut bytes = sandbox.reader().bytes(&path).state(TEST_STATE_NAME).build().unwrap();
 
@@ -104,7 +104,7 @@ fn an_advanced_state_needs_a_save_before_it_is_reused(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn an_existing_state_accepts_a_box(sandbox: Sandbox) {
+fn existing_state_accepts_a_box(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let state = sandbox.state(&path);
     let source = StateSource::from(Box::new(state));
@@ -113,7 +113,7 @@ fn an_existing_state_accepts_a_box(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_name_is_normalized_before_it_is_used(sandbox: Sandbox) {
+fn name_is_normalized_before_it_is_used(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let source = StateSource::from(format!("{TEST_STATE_NAME}.state.json"));
 
@@ -148,7 +148,7 @@ fn auto_load_resumes_only_a_matching_file(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn an_existing_state_is_rejected_for_another_file(sandbox: Sandbox) {
+fn existing_state_is_rejected_for_another_file(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let other = sandbox.write("other.bin", TEST_LINE);
     let state: State = sandbox.state(&path);
@@ -158,7 +158,7 @@ fn an_existing_state_is_rejected_for_another_file(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn an_existing_state_skips_the_check_without_verification(sandbox: Sandbox) {
+fn existing_state_skips_check_without_verification(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let other = sandbox.write("other.bin", TEST_LINE);
     let state = sandbox.state(&path);
@@ -168,7 +168,7 @@ fn an_existing_state_skips_the_check_without_verification(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_missing_name_starts_a_fresh_state(sandbox: Sandbox) {
+fn missing_name_starts_a_fresh_state(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let state = sandbox.named_state(&path, TEST_OTHER_STATE_NAME);
 

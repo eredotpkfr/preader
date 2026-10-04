@@ -4,7 +4,7 @@ use rstest::rstest;
 use crate::common::{constants::TEST_ALPHABET, fixtures::sandbox, funcs::items, sandbox::Sandbox};
 
 #[rstest]
-fn the_default_size_comes_from_the_constant(sandbox: Sandbox) {
+fn default_size_comes_from_the_constant(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let read = items(sandbox.reader().chunks(&path).build().unwrap());
 
@@ -24,7 +24,7 @@ fn size_sets_the_item_length(sandbox: Sandbox, #[case] size: usize, #[case] expe
 }
 
 #[rstest]
-fn the_last_size_wins(sandbox: Sandbox) {
+fn last_size_wins(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let read = items(sandbox.reader().chunks(&path).size(1).size(2).build().unwrap());
 

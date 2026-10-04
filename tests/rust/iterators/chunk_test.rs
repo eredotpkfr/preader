@@ -18,7 +18,7 @@ fn read_keeps_a_short_final_chunk(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn drop_partial_keeps_an_exactly_divisible_tail(sandbox: Sandbox) {
+fn drop_partial_keeps_exactly_divisible_tail(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let read = items(sandbox.reader().chunks(&path).size(13).drop_partial(true).build().unwrap());
 
@@ -27,7 +27,7 @@ fn drop_partial_keeps_an_exactly_divisible_tail(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn drop_partial_discards_a_chunk_cut_short_by_the_end(sandbox: Sandbox) {
+fn drop_partial_discards_chunk_cut_short_by_end(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let mut chunks = sandbox
         .reader()
@@ -57,14 +57,14 @@ fn drop_partial_discards_a_truncated_chunk(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_zero_size_yields_nothing(sandbox: Sandbox) {
+fn zero_size_yields_nothing(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
 
     assert!(items(sandbox.reader().chunks(&path).size(0).build().unwrap()).is_empty());
 }
 
 #[rstest]
-fn a_size_larger_than_the_file_yields_one_chunk(sandbox: Sandbox) {
+fn size_larger_than_the_file_yields_one_chunk(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let read = items(sandbox.reader().chunks(&path).size(1024).build().unwrap());
 
@@ -72,7 +72,7 @@ fn a_size_larger_than_the_file_yields_one_chunk(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_size_of_one_matches_the_byte_iterator(sandbox: Sandbox) {
+fn size_of_one_matches_the_byte_iterator(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let reader = sandbox.reader();
     let chunks = items(reader.chunks(&path).size(1).build().unwrap());
@@ -101,7 +101,7 @@ fn read_fills_a_chunk_across_a_buffer_refill(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn the_position_counts_bytes_not_chunks(sandbox: Sandbox) {
+fn position_counts_bytes_not_chunks(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let mut chunks = sandbox.reader().chunks(&path).size(4).build().unwrap();
 
@@ -111,7 +111,7 @@ fn the_position_counts_bytes_not_chunks(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn the_iterator_yields_owned_chunks(sandbox: Sandbox) {
+fn iterator_yields_owned_chunks(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let mut collected: Vec<Vec<u8>> = Vec::new();
 

@@ -151,7 +151,7 @@ fn clear_keeps_a_state_shaped_directory(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_state_shaped_parent_does_not_hide_its_states(sandbox: Sandbox) {
+fn state_shaped_parent_does_not_hide_states(sandbox: Sandbox) {
     let saved = sandbox.save(&native("archive.state.json/job-1")).path().unwrap();
 
     assert_eq!(
@@ -166,7 +166,7 @@ fn a_state_shaped_parent_does_not_hide_its_states(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_suffix_shaped_directory_stays_in_the_name(sandbox: Sandbox) {
+fn suffix_shaped_directory_stays_in_the_name(sandbox: Sandbox) {
     let name = native("sub-1/.state.json/sub-2/job-1");
     let path = sandbox.line_file();
     let mut state = sandbox
@@ -223,7 +223,7 @@ fn names_ignores_a_broken_symlink(sandbox: Sandbox) {
 
 #[cfg(unix)]
 #[rstest]
-fn names_does_not_descend_into_a_symlinked_directory(sandbox: Sandbox) {
+fn names_does_not_descend_into_symlinked_directory(sandbox: Sandbox) {
     use std::os::unix::fs::symlink;
 
     outside_state(&sandbox);
@@ -241,7 +241,7 @@ fn names_does_not_descend_into_a_symlinked_directory(sandbox: Sandbox) {
 
 #[cfg(unix)]
 #[rstest]
-fn names_ignores_a_symlink_that_leaves_the_state_dir(sandbox: Sandbox) {
+fn names_ignores_symlink_that_leaves_state_dir(sandbox: Sandbox) {
     use std::os::unix::fs::symlink;
 
     let target = outside_state(&sandbox);
@@ -310,7 +310,7 @@ fn search_fails_on_an_invalid_pattern(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_bare_suffix_file_yields_an_empty_name(sandbox: Sandbox) {
+fn bare_suffix_file_yields_an_empty_name(sandbox: Sandbox) {
     sandbox.save(TEST_STATE_NAME);
     fs::write(sandbox.state_dir().join(STATE_FILE_EXTENSION), "{}").unwrap();
 
@@ -322,7 +322,7 @@ fn a_bare_suffix_file_yields_an_empty_name(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_state_iterator_can_be_reused_for_each_walk(sandbox: Sandbox) {
+fn state_iterator_can_be_reused_for_each_walk(sandbox: Sandbox) {
     sandbox.save(TEST_STATE_NAME);
 
     let first = names(&sandbox.states());
@@ -332,7 +332,7 @@ fn a_state_iterator_can_be_reused_for_each_walk(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn an_item_is_yielded_once_per_state(sandbox: Sandbox) {
+fn item_is_yielded_once_per_state(sandbox: Sandbox) {
     sandbox.save(TEST_STATE_NAME);
     sandbox.append(&sandbox.line_file(), TEST_LINE);
 
