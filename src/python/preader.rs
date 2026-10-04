@@ -3,7 +3,8 @@ use std::path::PathBuf;
 use pyo3::{exceptions::PyValueError, prelude::*};
 
 use crate::{
-    Config, DEFAULT_CHUNK_SIZE, IteratorBuild, IteratorOptions, PReader, StateInput, StateRegistry,
+    Config, DEFAULT_CHUNK_SIZE, IteratorBuild, IteratorOptions, PReader, StateRegistry,
+    StateSource,
     python::{
         bases::iterator::IteratorBase,
         iterators::{
@@ -35,13 +36,13 @@ impl PReader {
     }
 
     #[pyo3(name = "bytes", signature = (
-        file, *, state = StateInput::Auto, options = IteratorOptions::default()
+        file, *, state = StateSource::Auto, options = IteratorOptions::default()
     ))]
     fn py_bytes(
         &self,
         py: Python<'_>,
         file: PathBuf,
-        state: StateInput,
+        state: StateSource,
         options: IteratorOptions,
     ) -> PyResult<Py<ByteIterator>> {
         let iterator = self.bytes(file).state(state).options(options).build()?;
@@ -51,7 +52,7 @@ impl PReader {
 
     #[pyo3(name = "chunks", signature = (
         file, *,
-        state = StateInput::Auto,
+        state = StateSource::Auto,
         options = IteratorOptions::default(),
         chunk_size = DEFAULT_CHUNK_SIZE,
         drop_partial = false
@@ -60,7 +61,7 @@ impl PReader {
         &self,
         py: Python<'_>,
         file: PathBuf,
-        state: StateInput,
+        state: StateSource,
         options: IteratorOptions,
         chunk_size: usize,
         drop_partial: bool,
@@ -73,7 +74,7 @@ impl PReader {
 
     #[pyo3(name = "lines", signature = (
         file, *,
-        state = StateInput::Auto,
+        state = StateSource::Auto,
         options = IteratorOptions::default(),
         keepends = false,
         align_start = false,
@@ -84,7 +85,7 @@ impl PReader {
         &self,
         py: Python<'_>,
         file: PathBuf,
-        state: StateInput,
+        state: StateSource,
         options: IteratorOptions,
         keepends: bool,
         align_start: bool,
@@ -98,7 +99,7 @@ impl PReader {
 
     #[pyo3(name = "delimiter", signature = (
         file, *,
-        state = StateInput::Auto,
+        state = StateSource::Auto,
         options = IteratorOptions::default(),
         delimiter,
         keep_delimiter = false,
@@ -110,7 +111,7 @@ impl PReader {
         &self,
         py: Python<'_>,
         file: PathBuf,
-        state: StateInput,
+        state: StateSource,
         options: IteratorOptions,
         delimiter: char,
         keep_delimiter: bool,

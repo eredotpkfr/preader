@@ -13,13 +13,13 @@ macro_rules! pyiterator {
 
         #[::pyo3::pymethods]
         impl $name {
-            fn percent(&mut self) -> f64 {
-                self.0.state().percent()
+            fn percent(&self) -> f64 {
+                self.0.state.percent()
             }
 
             #[getter]
-            fn state(&mut self) -> $crate::State {
-                self.0.state().clone()
+            fn state(&self) -> $crate::State {
+                self.0.state.clone()
             }
 
             fn __iter__(slf: ::pyo3::PyRef<'_, Self>) -> ::pyo3::PyRef<'_, Self> {
@@ -35,10 +35,10 @@ macro_rules! pyiterator {
                 Ok($convert)
             }
 
-            fn __repr__(&mut self) -> String {
+            fn __repr__(&self) -> String {
                 $crate::python::macros::repr::pyrepr!($label {
-                    state = self.state().__repr__(),
-                    $($field = self.$field()),*
+                    state = self.0.state.__repr__(),
+                    $($field = ::std::format!("{:?}", self.$field())),*
                 })
             }
 

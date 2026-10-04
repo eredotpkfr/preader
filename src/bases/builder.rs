@@ -1,18 +1,19 @@
 use std::path::PathBuf;
 
 use crate::{
-    Config, IteratorOptions, Result, StateInput,
+    Config, IteratorOptions, Result, StateSource,
     bases::iterator::PReaderIterator,
     interfaces::{builder::IteratorBuild, iterator::IteratorRead, skippable::Skippable},
     manager::StateManager,
 };
 
 #[derive(Debug)]
+#[must_use]
 pub struct PReaderIteratorBuilder<'a, I> {
     pub(crate) config: &'a Config,
     pub(crate) manager: &'a StateManager,
     pub(crate) options: IteratorOptions,
-    pub(crate) state: StateInput,
+    pub(crate) state: StateSource,
     pub(crate) file: PathBuf,
     pub(crate) inner: I,
 }
@@ -27,7 +28,7 @@ impl<'a, I: Default> PReaderIteratorBuilder<'a, I> {
             config,
             manager,
             file: file.into(),
-            state: StateInput::default(),
+            state: StateSource::default(),
             options: IteratorOptions::default(),
             inner: I::default(),
         }

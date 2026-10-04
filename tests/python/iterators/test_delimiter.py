@@ -508,7 +508,7 @@ def test_delimiter_iterator_repr(
     assert repr(iterator) == expected_repr(
         "DelimiterIterator",
         state=reindent(repr(iterator.state), 2),
-        delimiter=iterator.delimiter,
+        delimiter=f"'{iterator.delimiter}'",
         keep_delimiter=str(iterator.keep_delimiter).lower(),
         skip_empty=str(iterator.skip_empty).lower(),
         skip_remaining=iterator.skip_remaining,

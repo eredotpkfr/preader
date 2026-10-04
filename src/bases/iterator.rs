@@ -1,8 +1,8 @@
 use std::{io::Seek, ops::Range};
 
 use crate::{
-    AutoSave, Config, IteratorOptions, Progress, Result, State,
-    enums::skip::Skip,
+    Config, IteratorOptions, Progress, Result, State,
+    enums::{autosave::AutoSave, skip::Skip},
     interfaces::{iterator::IteratorRead, segmented::Segmented},
     types::{core::FileReader, window::Window},
 };
@@ -64,8 +64,8 @@ impl<I> PReaderIterator<I> {
         self.state.advance(bytes as u64);
 
         match self.autosave {
-            AutoSave::Every(threshold) => self.save(threshold)?,
-            AutoSave::Off | AutoSave::Final => (),
+            AutoSave::EveryBytes(threshold) => self.save(threshold)?,
+            AutoSave::Never | AutoSave::AtEnd => (),
         }
 
         Ok(bytes)
@@ -84,7 +84,7 @@ impl<I> PReaderIterator<I> {
         }
 
         self.state.save().inspect_err(|_| {
-            self.autosave = AutoSave::Off;
+            self.autosave = AutoSave::Never;
             self.progress.exhaust();
         })?;
 
