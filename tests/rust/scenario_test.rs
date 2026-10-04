@@ -118,7 +118,7 @@ fn resume_honours_a_different_keepends(sandbox: Sandbox) {
 
     let read = items(reader.lines(&path).state(state).keepends(true).limit(1).build().unwrap());
 
-    assert_eq!(texts(&read), ["line-1\n"]);
+    assert_eq!(read, ["line-1\n"]);
 }
 
 #[rstest]
@@ -128,8 +128,8 @@ fn skip_counts_blank_items_before_skip_empty(sandbox: Sandbox) {
     let kept = items(reader.lines(&path).skip(1).build().unwrap());
     let filtered = items(reader.lines(&path).skip(1).skip_empty(true).build().unwrap());
 
-    assert_eq!(texts(&kept), ["", "line-2"]);
-    assert_eq!(texts(&filtered), ["line-2"]);
+    assert_eq!(kept, ["", "line-2"]);
+    assert_eq!(filtered, ["line-2"]);
 }
 
 #[rstest]

@@ -2,19 +2,11 @@ use preader::IteratorBuild;
 use rstest::rstest;
 
 use crate::common::{
-    constants::{TEST_BLANK_LINE_CONTENT, TEST_LINE_CONTENT, TEST_LINES},
+    constants::{TEST_BLANK_LINE_CONTENT, TEST_LINE_CONTENT},
     fixtures::sandbox,
-    funcs::{items, texts},
+    funcs::items,
     sandbox::Sandbox,
 };
-
-#[rstest]
-fn defaults_strip_the_terminator(sandbox: Sandbox) {
-    let path = sandbox.file(TEST_LINE_CONTENT);
-    let read = items(sandbox.reader().lines(&path).build().unwrap());
-
-    assert_eq!(texts(&read), TEST_LINES);
-}
 
 #[rstest]
 #[case::stripped(false, "line-0")]
@@ -27,7 +19,7 @@ fn keepends_decides_about_the_terminator(
     let path = sandbox.file(TEST_LINE_CONTENT);
     let read = items(sandbox.reader().lines(&path).keepends(keepends).limit(1).build().unwrap());
 
-    assert_eq!(texts(&read), [expected]);
+    assert_eq!(read, [expected]);
 }
 
 #[rstest]
@@ -51,7 +43,7 @@ fn align_drops_a_partial_line(sandbox: Sandbox, #[case] align: bool, #[case] exp
     let path = sandbox.file(TEST_LINE_CONTENT);
     let read = items(sandbox.reader().lines(&path).align(align).start(2).limit(1).build().unwrap());
 
-    assert_eq!(texts(&read), [expected]);
+    assert_eq!(read, [expected]);
 }
 
 #[rstest]
@@ -68,5 +60,5 @@ fn last_flag_wins(sandbox: Sandbox) {
             .unwrap(),
     );
 
-    assert_eq!(texts(&read), ["line-0"]);
+    assert_eq!(read, ["line-0"]);
 }

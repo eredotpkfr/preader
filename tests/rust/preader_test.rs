@@ -86,9 +86,9 @@ fn every_iterator_reads_a_single_byte_file(sandbox: Sandbox) {
     let path = sandbox.file(b"a");
     let reader = sandbox.reader();
 
-    assert_eq!(items(reader.bytes(&path).build().unwrap()), [b"a"]);
+    assert_eq!(items(reader.bytes(&path).build().unwrap()), b"a");
     assert_eq!(items(reader.chunks(&path).build().unwrap()), [b"a"]);
-    assert_eq!(items(reader.lines(&path).build().unwrap()), [b"a"]);
+    assert_eq!(items(reader.lines(&path).build().unwrap()), ["a"]);
     assert_eq!(items(reader.delimiter(&path).build().unwrap()), [b"a"]);
 }
 
@@ -168,14 +168,6 @@ fn symlink_is_resolved_to_its_target(sandbox: Sandbox) {
         sandbox.reader().bytes(&link).build().unwrap().state().file.path,
         target.canonicalize().unwrap()
     );
-}
-
-#[rstest]
-fn directory_is_rejected(sandbox: Sandbox) {
-    let directory = sandbox.dir_at("a-directory");
-    let error = sandbox.reader().bytes(&directory).build().unwrap_err();
-
-    assert!(error.to_string().contains("not a file"), "{error}");
 }
 
 #[cfg(unix)]

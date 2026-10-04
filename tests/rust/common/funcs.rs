@@ -14,36 +14,40 @@ use crate::common::{
 
 const STAMP: i64 = 1_700_000_000;
 
-pub fn items<I, T: Item>(iterator: I) -> Vec<Vec<u8>>
+pub fn items<I, T>(iterator: I) -> Vec<T>
 where
     I: Iterator<Item = Result<T>>,
 {
     try_items(iterator).unwrap()
 }
 
-pub fn try_items<I, T: Item>(iterator: I) -> Result<Vec<Vec<u8>>>
+pub fn try_items<I, T>(iterator: I) -> Result<Vec<T>>
 where
     I: Iterator<Item = Result<T>>,
 {
-    iterator.map(|item| item.map(Item::bytes)).collect()
+    iterator.collect()
 }
 
-pub fn consume<I, T: Item>(iterator: &mut I, count: usize)
-where
-    I: Iterator<Item = Result<T>>,
-{
-    take(iterator, count);
-}
-
-pub fn take<I, T: Item>(iterator: &mut I, count: usize) -> Vec<Vec<u8>>
+pub fn take<I, T>(iterator: &mut I, count: usize) -> Vec<T>
 where
     I: Iterator<Item = Result<T>>,
 {
     items(iterator.take(count))
 }
 
+pub fn consume<I, T>(iterator: &mut I, count: usize)
+where
+    I: Iterator<Item = Result<T>>,
+{
+    take(iterator, count);
+}
+
 pub fn texts(items: &[Vec<u8>]) -> Vec<String> {
     items.iter().map(|item| String::from_utf8(item.clone()).unwrap()).collect()
+}
+
+pub fn flatten<T: Item>(items: Vec<T>) -> Vec<Vec<u8>> {
+    items.into_iter().map(Item::bytes).collect()
 }
 
 pub fn digest(content: &[u8]) -> String {

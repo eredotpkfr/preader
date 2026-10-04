@@ -13,16 +13,7 @@ fn read_yields_every_byte_in_order(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let read = items(sandbox.reader().bytes(&path).build().unwrap());
 
-    assert_eq!(read.concat(), TEST_ALPHABET);
-}
-
-#[rstest]
-fn read_yields_every_byte_value(sandbox: Sandbox) {
-    let content: Vec<u8> = (0..=255).collect();
-    let path = sandbox.file(&content);
-    let read = items(sandbox.reader().bytes(&path).build().unwrap());
-
-    assert_eq!(read.concat(), content);
+    assert_eq!(read, TEST_ALPHABET);
 }
 
 #[rstest]

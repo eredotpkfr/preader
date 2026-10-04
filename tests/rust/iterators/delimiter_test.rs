@@ -141,9 +141,9 @@ fn resumed_read_ignores_align(sandbox: Sandbox) {
 fn segment_crossing_the_end_is_yielded_whole(sandbox: Sandbox) {
     let path = sandbox.file(TEST_SEGMENT_CONTENT);
     let mut segments = sandbox.reader().delimiter(&path).end(8).build().unwrap();
-    let read = texts(&items(&mut segments));
+    let read = items(&mut segments);
 
-    assert_eq!(read, ["seg-0", "seg-1"]);
+    assert_eq!(texts(&read), ["seg-0", "seg-1"]);
     assert_eq!(segments.state().position, 12);
 }
 

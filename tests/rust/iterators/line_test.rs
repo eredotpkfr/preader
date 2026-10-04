@@ -7,14 +7,14 @@ use crate::common::{
         TEST_LINES, TEST_UNICODE_TEXT,
     },
     fixtures::sandbox,
-    funcs::{items, texts},
+    funcs::items,
     sandbox::Sandbox,
 };
 
 fn lines(sandbox: &Sandbox, content: &[u8]) -> Vec<String> {
     let path = sandbox.file(content);
 
-    texts(&items(sandbox.reader().lines(&path).build().unwrap()))
+    items(sandbox.reader().lines(&path).build().unwrap())
 }
 
 #[rstest]
@@ -58,7 +58,7 @@ fn keepends_preserves_the_full_crlf(sandbox: Sandbox) {
     let path = sandbox.file(TEST_CRLF_CONTENT);
     let read = items(sandbox.reader().lines(&path).keepends(true).build().unwrap());
 
-    assert_eq!(texts(&read), ["line-0\r\n", "line-1\r\n"]);
+    assert_eq!(read, ["line-0\r\n", "line-1\r\n"]);
 }
 
 #[rstest]
@@ -66,7 +66,7 @@ fn keepends_leaves_the_last_line_unterminated(sandbox: Sandbox) {
     let path = sandbox.file(TEST_LINE_CONTENT);
     let read = items(sandbox.reader().lines(&path).keepends(true).build().unwrap());
 
-    assert_eq!(texts(&read).last().unwrap(), "line-5");
+    assert_eq!(read.last().unwrap(), "line-5");
 }
 
 #[rstest]
@@ -87,7 +87,7 @@ fn skip_empty_judges_blankness_after_trimming(sandbox: Sandbox) {
     let path = sandbox.file(b"line-0\n\r\n\r\nline-1\n");
     let read = items(sandbox.reader().lines(&path).skip_empty(true).build().unwrap());
 
-    assert_eq!(texts(&read), ["line-0", "line-1"]);
+    assert_eq!(read, ["line-0", "line-1"]);
 }
 
 #[rstest]
@@ -102,7 +102,7 @@ fn read_yields_multi_byte_characters(sandbox: Sandbox) {
     let path = sandbox.file(TEST_UNICODE_TEXT.as_bytes());
     let read = items(sandbox.reader().lines(&path).build().unwrap());
 
-    assert_eq!(texts(&read), [TEST_UNICODE_TEXT]);
+    assert_eq!(read, [TEST_UNICODE_TEXT]);
 }
 
 #[rstest]
@@ -151,7 +151,7 @@ fn resume_after_an_invalid_line_stays_aligned(sandbox: Sandbox) {
 
     let resumed = items(reader.lines(&path).state("job-1").build().unwrap());
 
-    assert_eq!(texts(&resumed), ["line-2"]);
+    assert_eq!(resumed, ["line-2"]);
 }
 
 #[rstest]
@@ -159,7 +159,7 @@ fn skipped_content_is_not_validated(sandbox: Sandbox) {
     let path = sandbox.file(TEST_INVALID_LINES);
     let read = items(sandbox.reader().lines(&path).skip(2).build().unwrap());
 
-    assert_eq!(texts(&read), ["line-2"]);
+    assert_eq!(read, ["line-2"]);
 }
 
 #[rstest]
@@ -205,14 +205,14 @@ fn resumed_read_ignores_align(sandbox: Sandbox) {
 
     let resumed = items(reader.lines(&path).state(state).start(2).align(true).build().unwrap());
 
-    assert_eq!(texts(&resumed), ["e-0", "", "line-2"]);
+    assert_eq!(resumed, ["e-0", "", "line-2"]);
 }
 
 #[rstest]
 fn line_crossing_the_end_is_yielded_whole(sandbox: Sandbox) {
     let path = sandbox.file(TEST_BLANK_LINE_CONTENT);
     let mut lines = sandbox.reader().lines(&path).end(10).build().unwrap();
-    let read = texts(&items(&mut lines));
+    let read = items(&mut lines);
 
     assert_eq!(read, ["line-0", "", "line-2"]);
     assert_eq!(lines.state().position, TEST_BLANK_LINE_CONTENT.len() as u64);

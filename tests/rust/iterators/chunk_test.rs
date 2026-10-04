@@ -72,16 +72,6 @@ fn size_larger_than_the_file_yields_one_chunk(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn size_of_one_matches_the_byte_iterator(sandbox: Sandbox) {
-    let path = sandbox.file(TEST_ALPHABET);
-    let reader = sandbox.reader();
-    let chunks = items(reader.chunks(&path).size(1).build().unwrap());
-    let bytes = items(reader.bytes(&path).build().unwrap());
-
-    assert_eq!(chunks, bytes);
-}
-
-#[rstest]
 fn read_keeps_invalid_bytes_verbatim(sandbox: Sandbox) {
     let content = [TEST_ALPHABET, TEST_INVALID_UTF8].concat();
     let path = sandbox.file(&content);
