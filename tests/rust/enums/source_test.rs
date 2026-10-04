@@ -4,6 +4,7 @@ use rstest::rstest;
 use crate::common::{
     constants::{TEST_LINE, TEST_OTHER_STATE_NAME, TEST_STATE_NAME},
     fixtures::sandbox,
+    funcs::canonical,
     macros::asserts::assert_err,
     sandbox::Sandbox,
 };
@@ -169,7 +170,7 @@ fn existing_state_skips_check_without_verification(sandbox: Sandbox) {
     let state = sandbox.state(&path);
     let mut resumed = sandbox.lenient().bytes(&other).state(state).build().unwrap();
 
-    assert_eq!(resumed.state().file.path, path.canonicalize().unwrap());
+    assert_eq!(resumed.state().file.path, canonical(&path));
 }
 
 #[rstest]

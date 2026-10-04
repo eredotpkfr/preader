@@ -8,7 +8,7 @@ use crate::common::constants::TEST_READ_FROM;
 use crate::common::{
     constants::{TEST_ALPHABET, TEST_FILE_NAME, TEST_LINE_CONTENT, TEST_STATE_NAME},
     fixtures::sandbox,
-    funcs::{drain, items},
+    funcs::{canonical, drain, items},
     iterators::{ITERATORS, IteratorKind, Plan},
     macros::asserts::assert_err_is,
     sandbox::Sandbox,
@@ -40,7 +40,7 @@ fn file_is_canonicalized(sandbox: Sandbox) {
     let detoured = sandbox.path().join(".").join(TEST_FILE_NAME);
     let state = sandbox.reader().bytes(&detoured).build().unwrap().state().clone();
 
-    assert_eq!(state.file.path, path.canonicalize().unwrap());
+    assert_eq!(state.file.path, canonical(&path));
 }
 
 #[rstest]

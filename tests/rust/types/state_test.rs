@@ -17,7 +17,7 @@ use crate::common::{
         TEST_TRACKED_NAME, TEST_WINDOW,
     },
     fixtures::sandbox,
-    funcs::{consume, drain, native, state_data, tamper},
+    funcs::{canonical, consume, drain, native, state_data, tamper},
     guards::{mtime, set_mtime, set_pre_epoch_mtime},
     macros::{
         asserts::{assert_err, assert_err_is},
@@ -35,7 +35,7 @@ fn fields_describe_the_tracked_file(sandbox: Sandbox) {
 
     assert_eq!(state.name, TEST_STATE_NAME);
     assert_eq!(state.position, 0);
-    assert_eq!(state.file.path, path.canonicalize().unwrap());
+    assert_eq!(state.file.path, canonical(&path));
     assert_eq!(state.file.size, TEST_LINE.len() as u64);
     assert_eq!(state.timestamps.created_at, state.timestamps.updated_at);
 }
@@ -306,7 +306,7 @@ fn resync_updates_the_file_metadata(sandbox: Sandbox) {
     let moved = sandbox.write("moved.bin", b"foo\nbar");
     let resynced = state.resync(&moved).unwrap();
 
-    assert_eq!(resynced.file.path, moved.canonicalize().unwrap());
+    assert_eq!(resynced.file.path, canonical(&moved));
     assert_eq!(resynced.file.size, 7);
     assert_eq!(
         resynced.file.fingerprint,
@@ -340,7 +340,7 @@ fn resync_does_not_mutate_the_original(sandbox: Sandbox) {
 
     state.resync(&moved).unwrap();
 
-    assert_eq!(state.file.path, path.canonicalize().unwrap());
+    assert_eq!(state.file.path, canonical(&path));
 }
 
 #[rstest]
@@ -602,7 +602,7 @@ fn resync_accepts_every_path_shape(sandbox: Sandbox) {
     let saved = sandbox.recorded(&content, 5);
     let path = sandbox.path().join(TEST_TRACKED_NAME);
     let text = path.to_str().unwrap().to_owned();
-    let canonical = path.canonicalize().unwrap();
+    let resolved = canonical(&path);
 
     for resynced in [
         saved.resync(text.as_str()).unwrap(),
@@ -612,7 +612,7 @@ fn resync_accepts_every_path_shape(sandbox: Sandbox) {
         saved.resync(&path).unwrap(),
         saved.resync(path.clone()).unwrap(),
     ] {
-        assert_eq!(resynced.file.path, canonical);
+        assert_eq!(resynced.file.path, resolved);
     }
 }
 
@@ -694,10 +694,7 @@ fn resync_canonicalizes_the_path(sandbox: Sandbox, #[case] linked: bool) {
         sandbox.path().join(".").join(TEST_TRACKED_NAME)
     };
 
-    assert_eq!(
-        saved.resync(&detour).unwrap().file.path,
-        target.canonicalize().unwrap()
-    );
+    assert_eq!(saved.resync(&detour).unwrap().file.path, canonical(&target));
 }
 
 #[cfg(unix)]
