@@ -78,7 +78,7 @@ fn skip_counts_bytes_for_a_byte_iterator(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let read = items(sandbox.reader().bytes(&path).skip(3).limit(1).build().unwrap());
 
-    assert_eq!(read, [b"d"]);
+    assert_eq!(read, b"d");
 }
 
 #[rstest]
@@ -102,7 +102,7 @@ fn skip_counts_items_for_a_segmented_iterator(sandbox: Sandbox) {
     let path = sandbox.file(TEST_LINE_CONTENT);
     let lines = items(sandbox.reader().lines(&path).skip(2).limit(1).build().unwrap());
 
-    assert_eq!(lines, [b"line-2"]);
+    assert_eq!(lines, ["line-2"]);
 }
 
 #[rstest]

@@ -22,7 +22,7 @@ fn each_setter_patches_one_option(sandbox: Sandbox) {
     let read =
         items(sandbox.reader().bytes(&path).start(2).end(6).skip(1).limit(2).build().unwrap());
 
-    assert_eq!(read, [b"d", b"e"]);
+    assert_eq!(read, b"de");
 }
 
 #[rstest]
@@ -40,7 +40,7 @@ fn last_call_wins(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let read = items(sandbox.reader().bytes(&path).limit(5).limit(1).build().unwrap());
 
-    assert_eq!(read, [b"a"]);
+    assert_eq!(read, b"a");
 }
 
 #[rstest]
@@ -64,7 +64,7 @@ fn setter_after_options_patches_it(sandbox: Sandbox) {
     };
     let read = items(sandbox.reader().bytes(&path).options(options).limit(1).build().unwrap());
 
-    assert_eq!(read, [b"b"]);
+    assert_eq!(read, b"b");
 }
 
 #[rstest]

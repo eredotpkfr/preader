@@ -4,7 +4,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use preader::{Config, IteratorBuild, IteratorRead, PReader, State, StateManager, StateRegistry};
+use chrono::Timelike;
+use preader::{
+    Config, IteratorBuild, IteratorRead, PReader, State, StateData, StateManager, StateRegistry,
+    Timestamps,
+};
 use serde_json::Value;
 use tempfile::TempDir;
 
@@ -201,27 +205,16 @@ impl Sandbox {
 
     pub fn payload(&self, state: &State) -> Value {
         let content = fs::read_to_string(state.path().unwrap()).unwrap();
-        let payload: Value = serde_json::from_str(&content).unwrap();
+        let written: StateData = serde_json::from_str(&content).unwrap();
+        let mut expected = (**state).clone();
 
-        assert_eq!(payload["name"], state.name.as_str());
-        assert_eq!(payload["position"], state.position);
-        assert_eq!(payload["_checksum"], state.checksum().unwrap());
-        assert_eq!(payload["file"]["path"], state.file.path.to_str().unwrap());
-        assert_eq!(payload["file"]["size"], state.file.size);
-        assert_eq!(payload["file"]["mtime"], state.file.mtime.timestamp());
-        assert_eq!(
-            payload["file"]["fingerprint"],
-            state.file.fingerprint.as_str()
-        );
-        assert_eq!(
-            payload["timestamps"]["created_at"],
-            state.timestamps.created_at.timestamp()
-        );
-        assert_eq!(
-            payload["timestamps"]["updated_at"],
-            state.timestamps.updated_at.timestamp()
-        );
+        expected.timestamps = Timestamps {
+            created_at: expected.timestamps.created_at.with_nanosecond(0).unwrap(),
+            updated_at: expected.timestamps.updated_at.with_nanosecond(0).unwrap(),
+        };
 
-        payload
+        assert_eq!(written, expected);
+
+        serde_json::from_str(&content).unwrap()
     }
 }

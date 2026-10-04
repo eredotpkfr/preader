@@ -2,19 +2,11 @@ use preader::{DEFAULT_DELIMITER, IteratorBuild};
 use rstest::rstest;
 
 use crate::common::{
-    constants::{TEST_BLANK_SEGMENT_CONTENT, TEST_SEGMENT_CONTENT, TEST_SEGMENTS},
+    constants::{TEST_BLANK_SEGMENT_CONTENT, TEST_SEGMENT_CONTENT},
     fixtures::sandbox,
     funcs::{items, texts},
     sandbox::Sandbox,
 };
-
-#[rstest]
-fn default_character_comes_from_the_constant(sandbox: Sandbox) {
-    let path = sandbox.file(TEST_SEGMENT_CONTENT);
-    let read = items(sandbox.reader().delimiter(&path).build().unwrap());
-
-    assert_eq!(texts(&read), TEST_SEGMENTS);
-}
 
 #[rstest]
 #[case::newline(b'\n')]

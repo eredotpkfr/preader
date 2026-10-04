@@ -7,9 +7,8 @@ use preader::{
     path_stem, scoped_join,
 };
 use rstest::{fixture, rstest};
-use tempfile::TempDir;
 
-use crate::common::fixtures::tmp_dir;
+use crate::common::{fixtures::sandbox, sandbox::Sandbox};
 
 #[fixture]
 fn root() -> &'static Path {
@@ -151,10 +150,10 @@ fn path_stem_keeps_an_unsafe_path_verbatim(#[case] path: &str) {
 }
 
 #[rstest]
-fn has_no_symlinks_accepts_a_real_path(tmp_dir: TempDir) {
+fn has_no_symlinks_accepts_a_real_path(sandbox: Sandbox) {
     assert!(has_no_symlinks(
-        tmp_dir.path(),
-        &tmp_dir.path().join("job-1.state.json")
+        sandbox.path(),
+        &sandbox.path().join("job-1.state.json")
     ));
 }
 
@@ -167,22 +166,22 @@ fn has_no_symlinks_accepts_a_missing_root() {
 
 #[cfg(unix)]
 #[rstest]
-fn has_no_symlinks_rejects_a_symlinked_file(tmp_dir: TempDir) {
-    let real = tmp_dir.path().join("real.state.json");
-    let alias = tmp_dir.path().join("alias.state.json");
+fn has_no_symlinks_rejects_a_symlinked_file(sandbox: Sandbox) {
+    let real = sandbox.path().join("real.state.json");
+    let alias = sandbox.path().join("alias.state.json");
 
     fs::write(&real, b"{}").unwrap();
     symlink(&real, &alias).unwrap();
 
-    assert!(has_no_symlinks(tmp_dir.path(), &real));
-    assert!(!has_no_symlinks(tmp_dir.path(), &alias));
+    assert!(has_no_symlinks(sandbox.path(), &real));
+    assert!(!has_no_symlinks(sandbox.path(), &alias));
 }
 
 #[cfg(unix)]
 #[rstest]
-fn has_no_symlinks_rejects_escaping_symlink(tmp_dir: TempDir) {
-    let root = tmp_dir.path().join("root");
-    let outside = tmp_dir.path().join("outside");
+fn has_no_symlinks_rejects_escaping_symlink(sandbox: Sandbox) {
+    let root = sandbox.path().join("root");
+    let outside = sandbox.path().join("outside");
 
     fs::create_dir_all(&root).unwrap();
     fs::create_dir_all(&outside).unwrap();

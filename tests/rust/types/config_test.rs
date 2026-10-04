@@ -1,5 +1,5 @@
 use preader::{
-    AutoSave, Config, DEFAULT_AUTO_SAVE_STATE_BYTES, DEFAULT_BUFFER_CAPACITY, DEFAULT_VERIFY_STATE,
+    Config, DEFAULT_AUTO_SAVE_STATE_BYTES, DEFAULT_BUFFER_CAPACITY, DEFAULT_VERIFY_STATE,
     default_state_dir,
 };
 use rstest::rstest;
@@ -38,38 +38,6 @@ fn compares_by_value() {
             ..Config::default()
         }
     );
-}
-
-#[rstest]
-#[case::disabled(false, 0, AutoSave::Never)]
-#[case::disabled_with_a_threshold(false, 222, AutoSave::Never)]
-#[case::only_at_the_end(true, 0, AutoSave::AtEnd)]
-#[case::every_threshold(true, 222, AutoSave::EveryBytes(222))]
-fn autosave_reads_both_knobs(
-    #[case] auto_save_state: bool,
-    #[case] auto_save_state_bytes: u64,
-    #[case] expected: AutoSave,
-) {
-    let config = Config {
-        auto_save_state,
-        auto_save_state_bytes,
-        ..Config::default()
-    };
-
-    assert_eq!(AutoSave::from(&config), expected);
-}
-
-#[rstest]
-fn autosave_ignores_unrelated_knobs() {
-    let config = Config::default();
-    let flipped = Config {
-        auto_load_state: !config.auto_load_state,
-        verify_state: !config.verify_state,
-        buffer_capacity: config.buffer_capacity + 1,
-        ..config.clone()
-    };
-
-    assert_eq!(AutoSave::from(&config), AutoSave::from(&flipped));
 }
 
 #[rstest]

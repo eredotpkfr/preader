@@ -1,9 +1,13 @@
+use std::time::Duration;
+
 use preader::{Config, DEFAULT_BUFFER_CAPACITY, Error, IteratorBuild, IteratorRead};
 use rstest::rstest;
 
+const BUDGET: Duration = Duration::from_secs(60);
+
 use crate::common::{
     fixtures::sandbox,
-    funcs::{items, texts},
+    funcs::items,
     macros::{cycle::cycle, drain::drain},
     rng::{seeded_bytes, seeded_text},
     sandbox::Sandbox,
@@ -23,7 +27,7 @@ fn bytes_reproduce_the_content(
     let path = sandbox.file(&content);
 
     assert_eq!(
-        items(sandbox.reader().bytes(&path).build().unwrap()).concat(),
+        items(sandbox.reader().bytes(&path).build().unwrap()),
         content
     );
 }
@@ -91,8 +95,8 @@ fn lines_reproduce_the_text(
     let kept = items(reader.lines(&path).keepends(true).build().unwrap());
     let stripped = items(reader.lines(&path).build().unwrap());
 
-    assert_eq!(texts(&kept).concat(), text);
-    assert_eq!(texts(&stripped).concat(), text.replace('\n', ""));
+    assert_eq!(kept.concat(), text);
+    assert_eq!(stripped.concat(), text.replace('\n', ""));
     assert_eq!(stripped.len(), text.matches('\n').count());
 }
 
@@ -103,7 +107,7 @@ fn skip_empty_drops_the_blank_lines(sandbox: Sandbox, #[values(1, 2, 3)] seed: u
     let expected: Vec<&str> = text.lines().filter(|line| !line.is_empty()).collect();
     let read = items(sandbox.reader().lines(&path).skip_empty(true).build().unwrap());
 
-    assert_eq!(texts(&read), expected);
+    assert_eq!(read, expected);
 }
 
 #[rstest]
@@ -124,6 +128,7 @@ fn lines_reject_binary_content(sandbox: Sandbox) {
 }
 
 #[rstest]
+#[timeout(BUDGET)]
 fn percent_reaches_hundred_for_every_iterator(sandbox: Sandbox) {
     let reader = sandbox.reader();
     let text = seeded_text(1, SAMPLE);
@@ -137,6 +142,7 @@ fn percent_reaches_hundred_for_every_iterator(sandbox: Sandbox) {
 }
 
 #[rstest]
+#[timeout(BUDGET)]
 fn resume_rebuilds_the_file_in_cycles(sandbox: Sandbox) {
     let plain = sandbox.reader();
     let cycling = sandbox.reader_with(Config {
@@ -181,6 +187,6 @@ fn options_window_the_byte_range(sandbox: Sandbox) {
     let bytes = items(reader.bytes(&path).start(100).end(500).build().unwrap());
     let chunked = items(reader.chunks(&path).size(CHUNK).start(100).end(500).build().unwrap());
 
-    assert_eq!(bytes.concat(), content[100..500]);
+    assert_eq!(bytes, content[100..500]);
     assert_eq!(chunked.concat(), content[100..500]);
 }

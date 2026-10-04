@@ -8,7 +8,12 @@ macro_rules! read_iterator {
             None => $crate::common::funcs::try_items(iterator.by_ref()),
         };
 
-        items.map(|items| (items, iterator.state().clone()))
+        items.map(|items| {
+            (
+                $crate::common::funcs::flatten(items),
+                iterator.state().clone(),
+            )
+        })
     }};
 }
 

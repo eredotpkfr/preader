@@ -224,7 +224,7 @@ fn resumed_read_continues_where_it_stopped(sandbox: Sandbox) {
 
     let resumed = items(reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap());
 
-    assert_eq!(resumed.concat(), &TEST_ALPHABET[4..]);
+    assert_eq!(resumed, &TEST_ALPHABET[4..]);
 }
 
 #[rstest]
@@ -254,7 +254,7 @@ fn resumed_read_applies_the_limit_again(sandbox: Sandbox) {
 
     let second = items(reader.bytes(&path).state(TEST_STATE_NAME).limit(3).build().unwrap());
 
-    assert_eq!(second, [b"d", b"e", b"f"]);
+    assert_eq!(second, b"def");
 }
 
 #[rstest]
@@ -273,7 +273,7 @@ fn resumed_read_ignores_start_it_is_already_past(sandbox: Sandbox) {
         1,
     );
 
-    assert_eq!(second, [b"f"]);
+    assert_eq!(second, b"f");
 }
 
 #[rstest]
@@ -565,8 +565,7 @@ fn resumed_read_covers_what_failed_save_left_behind(sandbox: Sandbox) {
         checkpoint
     );
 
-    let third: Vec<u8> =
-        items(reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap()).concat();
+    let third = items(reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap());
 
     assert_eq!([first.as_slice(), third.as_slice()].concat(), TEST_ALPHABET);
     assert!(second.iter().all(|byte| third.contains(byte)));

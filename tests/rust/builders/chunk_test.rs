@@ -1,14 +1,14 @@
-use preader::IteratorBuild;
+use preader::{DEFAULT_CHUNK_SIZE, IteratorBuild};
 use rstest::rstest;
 
 use crate::common::{constants::TEST_ALPHABET, fixtures::sandbox, funcs::items, sandbox::Sandbox};
 
 #[rstest]
 fn default_size_comes_from_the_constant(sandbox: Sandbox) {
-    let path = sandbox.file(TEST_ALPHABET);
+    let path = sandbox.file(&TEST_ALPHABET.repeat(100));
     let read = items(sandbox.reader().chunks(&path).build().unwrap());
 
-    assert_eq!(read, [TEST_ALPHABET]);
+    assert_eq!(read[0].len(), DEFAULT_CHUNK_SIZE);
 }
 
 #[rstest]
