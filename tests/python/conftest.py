@@ -190,7 +190,7 @@ def requires_pre_epoch_mtime(tmp_path: Path) -> None:
 @pytest.fixture
 def read_state() -> Callable[[State], dict[str, Any]]:
     def _read_state(state: State) -> dict[str, Any]:
-        payload: dict[str, Any] = json.loads(state.path().read_text())
+        payload: dict[str, Any] = json.loads(state.path().read_text(encoding="utf-8"))
         metadata, stamps = state.file, state.timestamps
 
         assert payload == {

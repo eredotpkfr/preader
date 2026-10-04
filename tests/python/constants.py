@@ -1,4 +1,5 @@
 import string
+import sys
 
 TEST_STATE_NAME = "job-1"
 TEST_DEFAULT_DELIMITER = ","
@@ -26,3 +27,12 @@ TEST_WINDOWS_UNSAFE_STATE_NAME_IDS = (
     "backslash_traversal",
 )
 TEST_ALPHABET = string.ascii_lowercase.encode()
+TEST_DIRECTORY_ERRORS = (IsADirectoryError, PermissionError)
+TEST_LONG_NAME_ERROR = (
+    "syntax is incorrect" if sys.platform == "win32" else "File name too long"
+)
+TEST_UNRESOLVED_PATH_ERROR = (
+    r"cannot find the file|cannot be resolved"
+    if sys.platform == "win32"
+    else r"No such file|Too many levels"
+)
