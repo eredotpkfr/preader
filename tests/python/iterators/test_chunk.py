@@ -44,6 +44,17 @@ def test_options_narrow_the_output(
     assert b"".join(reader.chunks(data_file, options=options, chunk_size=3)) == expected
 
 
+def test_read_keeps_invalid_bytes(
+    reader: PReader, make_file: Callable[..., Path]
+) -> None:
+    invalid = b"foo" + bytes([0xFF, 0xFE]) + b"bar"
+    iterator = reader.chunks(make_file(invalid), chunk_size=4)
+
+    assert b"".join(iterator) == invalid
+    assert iterator.state.position == 8
+    assert iterator.state.percent() == 100.0
+
+
 @pytest.mark.parametrize("buffer_capacity", [0, 2], ids=["zero", "tiny"])
 def test_buffer_capacity_smaller_than_chunk_size(
     data_file: Path, make_reader: Callable[..., PReader], buffer_capacity: int
@@ -215,69 +226,93 @@ def test_extra_next_after_exhaustion_does_not_resave(
     assert reader.states[TEST_STATE_NAME].path().stat().st_mtime == mtime_before
 
 
-def test_autosave_error_propagates_from_unbound_iteration(
+def test_a_failing_threshold_save_stops_the_read(
     config: Config,
     make_reader: Callable[..., PReader],
     data_file: Path,
-    capfd: pytest.CaptureFixture[str],
 ) -> None:
     config.state_dir.write_bytes(b"foo")
 
     reader = make_reader(auto_save_state=True, auto_save_state_bytes=5)
+    iterator = reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=3)
 
-    with pytest.raises(StateError, match="io failed"):
-        for _ in reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=3):
-            pass
+    assert next(iterator) == TEST_ALPHABET[:3]
 
-    assert "preader: save failed" not in capfd.readouterr().err
+    with pytest.raises(FileExistsError):
+        next(iterator)
 
 
-def test_save_error_at_finalize_propagates(
+def test_a_failed_save_exhausts_the_iterator(
+    config: Config,
+    make_reader: Callable[..., PReader],
+    data_file: Path,
+) -> None:
+    config.state_dir.write_bytes(b"foo")
+
+    reader = make_reader(auto_save_state=True, auto_save_state_bytes=1)
+    iterator = reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=3)
+
+    with pytest.raises(FileExistsError):
+        next(iterator)
+
+    with pytest.raises(StopIteration):
+        next(iterator)
+
+
+def test_a_failing_final_save_reaches_every_item_first(
     data_file: Path, make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(auto_save_state=True)
+    iterator = reader.chunks(data_file, chunk_size=13, state="../../etc/passwd")
+    consumed = b"".join(next(iterator) for _ in range(2))
+
+    assert consumed == TEST_ALPHABET
 
     with pytest.raises(StateError, match="path escapes root"):
-        for _ in reader.chunks(data_file, state="../../etc/passwd"):
-            pass
+        next(iterator)
 
 
-def test_save_error_propagates_after_a_truncation(
-    data_file: Path, make_reader: Callable[..., PReader]
+def test_a_failing_autosave_stops_the_read_after_a_truncation(
+    data_file: Path,
+    make_reader: Callable[..., PReader],
+    truncate: Callable[[Path, int], None],
 ) -> None:
     reader = make_reader(auto_save_state=True, buffer_capacity=1)
     iterator = reader.chunks(data_file, chunk_size=3, state="../../etc/passwd")
 
-    next(iterator)
+    assert next(iterator) == TEST_ALPHABET[:3]
 
-    with data_file.open("r+b") as file:
-        file.truncate(1)
+    truncate(data_file, 1)
 
     with pytest.raises(StateError, match="path escapes root"):
         list(iterator)
 
 
-def test_save_error_propagates_when_end_drops_a_chunk(
+def test_a_failing_autosave_stops_the_read_when_end_drops_a_chunk(
     data_file: Path, make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(auto_save_state=True)
     options = IteratorOptions(end=12)
+    iterator = reader.chunks(
+        data_file,
+        chunk_size=8,
+        drop_partial=True,
+        state="../../etc/passwd",
+        options=options,
+    )
+
+    assert next(iterator) == TEST_ALPHABET[:8]
 
     with pytest.raises(StateError, match="path escapes root"):
-        list(
-            reader.chunks(
-                data_file,
-                chunk_size=8,
-                drop_partial=True,
-                state="../../etc/passwd",
-                options=options,
-            )
-        )
+        next(iterator)
 
 
 @pytest.mark.parametrize("threshold", [4, 1000], ids=["at_the_threshold", "at_the_end"])
-def test_save_error_propagates_on_a_dropped_short_chunk(
-    make_file: Callable[..., Path], make_reader: Callable[..., PReader], threshold: int
+def test_a_failing_autosave_stops_the_read_on_a_dropped_short_chunk(
+    make_file: Callable[..., Path],
+    make_reader: Callable[..., PReader],
+    threshold: int,
+    truncate: Callable[[Path, int], None],
 ) -> None:
     reader = make_reader(
         auto_save_state=True, auto_save_state_bytes=threshold, buffer_capacity=1
@@ -287,10 +322,9 @@ def test_save_error_propagates_on_a_dropped_short_chunk(
         path, chunk_size=3, drop_partial=True, state="../../etc/passwd"
     )
 
-    next(iterator)
+    assert next(iterator) == b"foo"
 
-    with path.open("r+b") as file:
-        file.truncate(5)
+    truncate(path, 5)
 
     with pytest.raises(StateError, match="path escapes root"):
         list(iterator)
@@ -647,7 +681,7 @@ def test_raises_when_resumed_file_replaced_by_directory(
     data_file.unlink()
     data_file.mkdir()
 
-    with pytest.raises(StateError, match="io failed"):
+    with pytest.raises(StateError, match="not a file"):
         reader.chunks(data_file, state=state)
 
 
@@ -890,7 +924,9 @@ def test_drop_partial_reads_past_a_buffer_refill(
 
 
 def test_drop_partial_discards_a_truncated_chunk(
-    make_reader: Callable[..., PReader], make_file: Callable[..., Path]
+    make_reader: Callable[..., PReader],
+    make_file: Callable[..., Path],
+    truncate: Callable[[Path, int], None],
 ) -> None:
     reader = make_reader(buffer_capacity=1)
     path = make_file(b"foobarbaz")
@@ -898,8 +934,7 @@ def test_drop_partial_discards_a_truncated_chunk(
 
     assert next(iterator) == b"foo"
 
-    with path.open("r+b") as f:
-        f.truncate(5)
+    truncate(path, 5)
 
     assert list(iterator) == []
     assert iterator.state.position == 5
@@ -932,15 +967,16 @@ def test_iteration_survives_the_file_being_deleted(
 
 
 def test_iteration_stops_at_a_truncation(
-    make_reader: Callable[..., PReader], data_file: Path
+    make_reader: Callable[..., PReader],
+    data_file: Path,
+    truncate: Callable[[Path, int], None],
 ) -> None:
     reader = make_reader(buffer_capacity=1)
     iterator = reader.chunks(data_file, chunk_size=3)
 
     next(iterator)
 
-    with data_file.open("r+b") as file:
-        file.truncate(10)
+    truncate(data_file, 10)
 
     list(iterator)
 

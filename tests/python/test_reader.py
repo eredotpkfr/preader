@@ -10,6 +10,35 @@ from constants import TEST_ALPHABET, TEST_DEFAULT_DELIMITER, TEST_STATE_NAME
 from preader import Config, IteratorOptions, PReader, StateError
 
 
+def test_every_iterator_counts_invalid_bytes(
+    reader: PReader, make_file: Callable[..., Path]
+) -> None:
+    invalid = b"foo\n" + bytes([0xFF, 0xFE]) + b"\nbar\n"
+    path = make_file(invalid)
+
+    assert b"".join(reader.bytes(path)) == invalid
+    assert b"".join(reader.chunks(path, chunk_size=4)) == invalid
+    assert list(reader.delimiter(path, delimiter="\n")) == [
+        b"foo",
+        bytes([0xFF, 0xFE]),
+        b"bar",
+    ]
+
+    lines = reader.lines(path)
+
+    assert next(lines) == "foo"
+
+    with pytest.raises(ValueError, match="utf-8"):
+        next(lines)
+
+    assert next(lines) == "bar"
+
+    with pytest.raises(StopIteration):
+        next(lines)
+
+    assert lines.state.position == 11
+
+
 def test_preader_defaults() -> None:
     config = PReader().config
     default = Config()
@@ -72,7 +101,7 @@ def test_bytes_raises_when_the_file_is_unreadable(
 ) -> None:
     revoke_permissions(tmp_file)
 
-    with pytest.raises(StateError, match="Permission denied"):
+    with pytest.raises(PermissionError):
         reader.bytes(tmp_file)
 
 
@@ -395,7 +424,7 @@ def test_delimiter_attributes(
         skip_empty=skip_empty,
     )
 
-    assert iterator.delimiter == ord(",")
+    assert iterator.delimiter == ","
     assert iterator.keep_delimiter is keep_delimiter
     assert iterator.skip_empty is skip_empty
     assert iterator.skip_remaining == options.skip

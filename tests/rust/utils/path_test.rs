@@ -3,13 +3,12 @@ use std::path::{MAIN_SEPARATOR_STR, Path};
 use std::{fs, os::unix::fs::symlink};
 
 use preader::{
-    DEFAULT_STATE_DIRECTORY, default_state_dir, has_no_symlinks, normalize_path, path_stem,
-    scoped_join, strip_extensions,
+    DEFAULT_STATE_DIR, STATE_FILE_EXTENSION, default_state_dir, has_no_symlinks, normalize_path,
+    path_stem, scoped_join,
 };
 use rstest::{fixture, rstest};
-use tempfile::TempDir;
 
-use crate::common::fixtures::tmp_dir;
+use crate::common::{fixtures::sandbox, macros::asserts::assert_err, sandbox::Sandbox};
 
 #[fixture]
 fn root() -> &'static Path {
@@ -20,7 +19,7 @@ fn root() -> &'static Path {
 #[case::plain("job-1.state.json")]
 #[case::nested("nested/job-1.state.json")]
 #[case::unnormalized("./job-1")]
-fn scoped_join_keeps_a_contained_path_verbatim(root: &Path, #[case] contained: &str) {
+fn scoped_join_keeps_contained_path_verbatim(root: &Path, #[case] contained: &str) {
     assert_eq!(scoped_join(root, contained).unwrap(), root.join(contained));
 }
 
@@ -38,9 +37,7 @@ fn scoped_join_fails_when_the_path_is_unsafe(
     #[case] unsafe_path: &str,
     #[case] message: &str,
 ) {
-    let error = scoped_join(root, unsafe_path).unwrap_err();
-
-    assert!(error.to_string().contains(message));
+    assert_err!(scoped_join(root, unsafe_path), message);
 }
 
 #[cfg(windows)]
@@ -51,17 +48,15 @@ fn scoped_join_fails_when_the_path_is_unsafe(
 #[case::unc_share("\\\\server\\share\\job-1")]
 #[case::verbatim_drive("\\\\?\\C:\\job-1")]
 #[case::backslash_traversal("..\\..\\etc\\passwd")]
-fn scoped_join_fails_when_a_windows_path_is_unsafe(root: &Path, #[case] unsafe_path: &str) {
-    let error = scoped_join(root, unsafe_path).unwrap_err();
-
-    assert!(error.to_string().contains("escapes root"));
+fn scoped_join_fails_when_windows_path_is_unsafe(root: &Path, #[case] unsafe_path: &str) {
+    assert_err!(scoped_join(root, unsafe_path), "escapes root");
 }
 
 #[rstest]
 fn scoped_join_accepts_an_empty_root() {
-    let joined = scoped_join(Path::new(""), DEFAULT_STATE_DIRECTORY).unwrap();
+    let joined = scoped_join(Path::new(""), DEFAULT_STATE_DIR).unwrap();
 
-    assert_eq!(joined, Path::new(DEFAULT_STATE_DIRECTORY));
+    assert_eq!(joined, Path::new(DEFAULT_STATE_DIR));
 }
 
 #[rstest]
@@ -72,30 +67,13 @@ fn scoped_join_does_not_validate_the_root() {
 }
 
 #[rstest]
-fn default_state_dir_ends_with_the_directory_name() {
-    assert_eq!(
-        default_state_dir().file_name().unwrap(),
-        DEFAULT_STATE_DIRECTORY
-    );
+fn default_state_dir_ends_with_directory_name() {
+    assert_eq!(default_state_dir().file_name().unwrap(), DEFAULT_STATE_DIR);
 }
 
 #[rstest]
 fn default_state_dir_is_absolute() {
     assert!(default_state_dir().is_absolute());
-}
-
-#[rstest]
-#[case::suffixed("job-1.state.json", "job-1")]
-#[case::not_suffixed("job-1", "job-1")]
-#[case::empty_name("", "")]
-#[case::only_looks_suffixed("mystate.json", "mystate.json")]
-#[case::different_case("job-1.STATE.JSON", "job-1.STATE.JSON")]
-#[case::bare_suffix("state.json", "state.json")]
-#[case::suffix_without_a_name(".state.json", "")]
-#[case::doubled_suffix("job-1.state.json.state.json", "job-1")]
-#[case::tripled_suffix("job-1.state.json.state.json.state.json", "job-1")]
-fn strip_extensions_removes_every_exact_match(#[case] name: &str, #[case] expected: &str) {
-    assert_eq!(strip_extensions(name, "state.json"), expected);
 }
 
 #[rstest]
@@ -118,7 +96,7 @@ fn normalize_path_reduces_to_the_native_form(#[case] path: &str, #[case] expecte
 
 #[cfg(unix)]
 #[rstest]
-fn normalize_path_treats_a_backslash_as_a_name_character() {
+fn normalize_path_treats_backslash_as_name_character() {
     assert_eq!(normalize_path("sub\\job-1"), "sub\\job-1");
 }
 
@@ -133,11 +111,15 @@ fn normalize_path_treats_a_backslash_as_a_name_character() {
     "sub-1/.state.json/sub-2/job-1"
 )]
 #[case::only_looks_suffixed("mystate.json", "mystate.json")]
-fn path_stem_strips_the_last_extension(#[case] path: &str, #[case] expected: &str) {
-    let stem = path_stem(path, "state.json");
+#[case::empty_name("", "")]
+#[case::different_case("job-1.STATE.JSON", "job-1.STATE.JSON")]
+#[case::bare_suffix("state.json", "state.json")]
+#[case::tripled_suffix("job-1.state.json.state.json.state.json", "job-1")]
+fn path_stem_strips_every_trailing_extension(#[case] path: &str, #[case] expected: &str) {
+    let stem = path_stem(path, STATE_FILE_EXTENSION);
 
     assert_eq!(stem, expected.replace('/', MAIN_SEPARATOR_STR));
-    assert_eq!(path_stem(&stem, "state.json"), stem);
+    assert_eq!(path_stem(&stem, STATE_FILE_EXTENSION), stem);
 }
 
 #[rstest]
@@ -150,7 +132,7 @@ fn path_stem_strips_the_last_extension(#[case] path: &str, #[case] expected: &st
 #[case::stem_is_a_current_dir("..state.json")]
 #[case::stem_is_a_parent_dir("...state.json")]
 fn path_stem_is_empty_without_a_usable_stem(#[case] path: &str) {
-    assert!(path_stem(path, "state.json").is_empty());
+    assert!(path_stem(path, STATE_FILE_EXTENSION).is_empty());
 }
 
 #[rstest]
@@ -158,16 +140,16 @@ fn path_stem_is_empty_without_a_usable_stem(#[case] path: &str) {
 #[case::traversal("../../etc/passwd")]
 #[case::root("/")]
 fn path_stem_keeps_an_unsafe_path_verbatim(#[case] path: &str) {
-    let stem = path_stem(path, "state.json");
+    let stem = path_stem(path, STATE_FILE_EXTENSION);
 
     assert!(scoped_join(Path::new("/tmp/preader"), &stem).is_err());
 }
 
 #[rstest]
-fn has_no_symlinks_accepts_a_real_path(tmp_dir: TempDir) {
+fn has_no_symlinks_accepts_a_real_path(sandbox: Sandbox) {
     assert!(has_no_symlinks(
-        tmp_dir.path(),
-        &tmp_dir.path().join("job-1.state.json")
+        sandbox.path(),
+        &sandbox.path().join("job-1.state.json")
     ));
 }
 
@@ -180,22 +162,22 @@ fn has_no_symlinks_accepts_a_missing_root() {
 
 #[cfg(unix)]
 #[rstest]
-fn has_no_symlinks_rejects_a_symlinked_file(tmp_dir: TempDir) {
-    let real = tmp_dir.path().join("real.state.json");
-    let alias = tmp_dir.path().join("alias.state.json");
+fn has_no_symlinks_rejects_a_symlinked_file(sandbox: Sandbox) {
+    let real = sandbox.path().join("real.state.json");
+    let alias = sandbox.path().join("alias.state.json");
 
     fs::write(&real, b"{}").unwrap();
     symlink(&real, &alias).unwrap();
 
-    assert!(has_no_symlinks(tmp_dir.path(), &real));
-    assert!(!has_no_symlinks(tmp_dir.path(), &alias));
+    assert!(has_no_symlinks(sandbox.path(), &real));
+    assert!(!has_no_symlinks(sandbox.path(), &alias));
 }
 
 #[cfg(unix)]
 #[rstest]
-fn has_no_symlinks_rejects_an_escaping_symlink(tmp_dir: TempDir) {
-    let root = tmp_dir.path().join("root");
-    let outside = tmp_dir.path().join("outside");
+fn has_no_symlinks_rejects_escaping_symlink(sandbox: Sandbox) {
+    let root = sandbox.path().join("root");
+    let outside = sandbox.path().join("outside");
 
     fs::create_dir_all(&root).unwrap();
     fs::create_dir_all(&outside).unwrap();

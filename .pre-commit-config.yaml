@@ -85,9 +85,9 @@ repos:
 
   - repo: local
     hooks:
-      - id: rustfmt-check
-        name: rustfmt-check
-        entry: make rustfmt-check
+      - id: cargo-rustfmt-check
+        name: cargo-rustfmt-check
+        entry: make cargo-rustfmt-check
         language: system
         files: (Cargo\.lock|\.(rs|toml))$
         pass_filenames: false
@@ -99,9 +99,9 @@ repos:
         files: (Cargo\.lock|\.(rs|toml))$
         pass_filenames: false
 
-      - id: clippy
-        name: clippy
-        entry: make clippy
+      - id: cargo-clippy
+        name: cargo-clippy
+        entry: make cargo-clippy
         language: system
         files: (Cargo\.lock|\.(rs|toml))$
         pass_filenames: false

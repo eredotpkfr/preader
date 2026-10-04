@@ -3,21 +3,15 @@ use std::path::{
     Path, PathBuf,
 };
 
-use anyhow::anyhow;
-
-pub const DEFAULT_STATE_DIRECTORY: &str = "preader";
+use crate::{PathError, constants::DEFAULT_STATE_DIR};
 
 pub fn default_state_dir() -> PathBuf {
-    scoped_join(
-        &dirs::cache_dir().unwrap_or_default(),
-        DEFAULT_STATE_DIRECTORY,
-    )
-    .unwrap()
+    scoped_join(&dirs::cache_dir().unwrap_or_default(), DEFAULT_STATE_DIR).unwrap()
 }
 
-pub fn scoped_join(root: &Path, unsafe_path: &str) -> anyhow::Result<PathBuf> {
+pub fn scoped_join(root: &Path, unsafe_path: &str) -> Result<PathBuf, PathError> {
     if unsafe_path.is_empty() {
-        return Err(anyhow!("path must not be empty"));
+        return Err(PathError::Empty);
     }
 
     let candidate = Path::new(unsafe_path);
@@ -26,29 +20,27 @@ pub fn scoped_join(root: &Path, unsafe_path: &str) -> anyhow::Result<PathBuf> {
         .any(|component| matches!(component, ParentDir | Prefix(_) | RootDir));
 
     if escapes {
-        return Err(anyhow!("path escapes root: {unsafe_path}"));
+        return Err(PathError::Escapes(unsafe_path.to_owned()));
     }
 
     if candidate.file_name().is_none() {
-        return Err(anyhow!("path must name an entry: {unsafe_path}"));
+        return Err(PathError::Nameless(unsafe_path.to_owned()));
     }
 
     Ok(root.join(unsafe_path))
 }
 
 pub fn has_no_symlinks(root: &Path, path: &Path) -> bool {
-    let (Ok(root), Ok(relative)) = (root.canonicalize(), path.strip_prefix(root)) else {
+    let (Ok(canonical), Ok(relative)) = (root.canonicalize(), path.strip_prefix(root)) else {
+        return true;
+    };
+    let scoped = canonical.join(relative);
+
+    let Some(existing) = scoped.ancestors().find(|ancestor| ancestor.exists()) else {
         return true;
     };
 
-    root.join(relative)
-        .ancestors()
-        .find(|ancestor| ancestor.exists())
-        .is_none_or(|existing| existing.canonicalize().is_ok_and(|real| real == existing))
-}
-
-pub fn strip_extensions<'a>(name: &'a str, extension: &str) -> &'a str {
-    name.trim_end_matches(&format!(".{extension}"))
+    existing.canonicalize().is_ok_and(|real| real == existing)
 }
 
 pub fn normalize_path(path: &str) -> String {
@@ -67,7 +59,7 @@ pub fn path_stem(path: &str, extension: &str) -> String {
     let Some(last) = candidate.file_name().and_then(|last| last.to_str()) else {
         return normalized;
     };
-    let stem = strip_extensions(last, extension);
+    let stem = last.trim_end_matches(extension);
 
     if Path::new(stem).file_name().and_then(|stem| stem.to_str()) != Some(stem) {
         return String::new();

@@ -56,12 +56,14 @@ def test_end_yields_a_crossing_line_whole(reader: PReader, data_file: Path) -> N
 
 
 def test_skip_stops_at_a_truncation(
-    make_reader: Callable[..., PReader], data_file: Path
+    make_reader: Callable[..., PReader],
+    data_file: Path,
+    truncate: Callable[[Path, int], None],
 ) -> None:
     reader = make_reader(verify_state=False, auto_load_state=True)
     reader.bytes(data_file, state=TEST_STATE_NAME).state.save()
 
-    os.truncate(data_file, 8)
+    truncate(data_file, 8)
 
     options = IteratorOptions(skip=3)
 
@@ -111,18 +113,61 @@ def test_raises_when_content_is_invalid_utf8(
 ) -> None:
     path = make_file(b"foo\n" + bytes([0xFF, 0xFE]) + b"\n")
 
-    with pytest.raises(OSError, match="valid UTF-8"):
+    with pytest.raises(ValueError, match="utf-8"):
         list(reader.lines(path))
 
 
-def test_raises_when_skipped_content_is_invalid_utf8(
+def test_read_counts_the_invalid_line(
+    reader: PReader, make_file: Callable[..., Path]
+) -> None:
+    path = make_file(b"foo\n" + bytes([0xFF, 0xFE]) + b"\nbar\n")
+    iterator = reader.lines(path)
+
+    assert next(iterator) == "foo"
+    assert iterator.state.position == 4
+
+    with pytest.raises(ValueError, match="utf-8"):
+        next(iterator)
+
+    assert iterator.state.position == 7
+    assert next(iterator) == "bar"
+
+    with pytest.raises(StopIteration):
+        next(iterator)
+
+    assert iterator.state.position == 11
+    assert iterator.state.percent() == 100.0
+
+
+def test_resume_after_an_invalid_line_stays_aligned(
+    make_reader: Callable[..., PReader], make_file: Callable[..., Path]
+) -> None:
+    path = make_file(b"foo\n" + bytes([0xFF, 0xFE]) + b"\nbar\nbaz\n")
+    reader = make_reader(
+        auto_save_state=True, auto_save_state_bytes=1, auto_load_state=True
+    )
+    iterator = reader.lines(path, state=TEST_STATE_NAME)
+
+    assert next(iterator) == "foo"
+
+    with pytest.raises(ValueError, match="utf-8"):
+        next(iterator)
+
+    assert list(iterator) == ["bar", "baz"]
+
+    del iterator
+
+    assert reader.states[TEST_STATE_NAME].position == 15
+    assert list(reader.lines(path, state=TEST_STATE_NAME)) == []
+
+
+def test_skipped_content_is_not_validated(
     reader: PReader, make_file: Callable[..., Path]
 ) -> None:
     path = make_file(bytes([0xFF, 0xFE]) + b"\nfoo\n")
     options = IteratorOptions(skip=1)
 
-    with pytest.raises(OSError, match="valid UTF-8"):
-        list(reader.lines(path, options=options))
+    assert list(reader.lines(path, options=options)) == ["foo"]
 
 
 @pytest.mark.parametrize(
@@ -305,63 +350,83 @@ def test_extra_next_after_exhaustion_does_not_resave(
     assert reader.states[TEST_STATE_NAME].path().stat().st_mtime == mtime_before
 
 
-def test_autosave_error_propagates_from_unbound_iteration(
+def test_a_failing_threshold_save_stops_the_read(
     config: Config,
     make_reader: Callable[..., PReader],
     data_file: Path,
-    capfd: pytest.CaptureFixture[str],
 ) -> None:
     config.state_dir.write_bytes(b"foo")
 
-    reader = make_reader(auto_save_state=True, auto_save_state_bytes=5)
+    reader = make_reader(auto_save_state=True, auto_save_state_bytes=100)
+    iterator = reader.lines(data_file, state=TEST_STATE_NAME)
 
-    with pytest.raises(StateError, match="io failed"):
-        for _ in reader.lines(data_file, state=TEST_STATE_NAME):
-            pass
+    assert [next(iterator) for _ in range(len(LINES))] == LINES
 
-    assert "preader: save failed" not in capfd.readouterr().err
+    with pytest.raises(FileExistsError):
+        next(iterator)
 
 
-def test_save_error_at_finalize_propagates(
+def test_a_failed_save_exhausts_the_iterator(
+    config: Config,
+    make_reader: Callable[..., PReader],
+    data_file: Path,
+) -> None:
+    config.state_dir.write_bytes(b"foo")
+
+    reader = make_reader(auto_save_state=True, auto_save_state_bytes=1)
+    iterator = reader.lines(data_file, state=TEST_STATE_NAME)
+
+    with pytest.raises(FileExistsError):
+        next(iterator)
+
+    with pytest.raises(StopIteration):
+        next(iterator)
+
+
+def test_a_failing_final_save_reaches_every_item_first(
     data_file: Path, make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(auto_save_state=True)
+    iterator = reader.lines(data_file, state="../../etc/passwd")
+
+    assert [next(iterator) for _ in range(len(LINES))] == LINES
 
     with pytest.raises(StateError, match="path escapes root"):
-        for _ in reader.lines(data_file, state="../../etc/passwd"):
-            pass
+        next(iterator)
 
 
-def test_save_error_propagates_after_a_truncation(
-    data_file: Path, make_reader: Callable[..., PReader]
+def test_a_failing_autosave_stops_the_read_after_a_truncation(
+    data_file: Path,
+    make_reader: Callable[..., PReader],
+    truncate: Callable[[Path, int], None],
 ) -> None:
     reader = make_reader(auto_save_state=True, buffer_capacity=1)
     iterator = reader.lines(data_file, state="../../etc/passwd")
 
-    next(iterator)
+    assert next(iterator) == LINES[0]
 
-    with data_file.open("r+b") as file:
-        file.truncate(1)
+    truncate(data_file, 1)
 
     with pytest.raises(StateError, match="path escapes root"):
         list(iterator)
 
 
-def test_save_error_propagates_while_skipping(
-    data_file: Path, make_reader: Callable[..., PReader]
+def test_a_failing_autosave_stops_the_read_while_skipping(
+    data_file: Path,
+    make_reader: Callable[..., PReader],
+    truncate: Callable[[Path, int], None],
 ) -> None:
     reader = make_reader(auto_save_state=True, buffer_capacity=1)
     options = IteratorOptions(skip=3)
     iterator = reader.lines(data_file, state="../../etc/passwd", options=options)
 
-    with data_file.open("r+b") as file:
-        file.truncate(1)
+    truncate(data_file, 1)
 
     with pytest.raises(StateError, match="path escapes root"):
         list(iterator)
 
 
-def test_save_error_propagates_on_a_skipped_item(
+def test_a_failing_autosave_stops_the_read_on_a_skipped_item(
     data_file: Path, make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(auto_save_state=True, auto_save_state_bytes=1)
@@ -369,12 +434,12 @@ def test_save_error_propagates_on_a_skipped_item(
     iterator = reader.lines(data_file, state="../../etc/passwd", options=options)
 
     with pytest.raises(StateError, match="path escapes root"):
-        list(iterator)
+        next(iterator)
 
     assert iterator.state.position == len(LINES[0]) + 1
 
 
-def test_save_error_propagates_on_a_filtered_blank(
+def test_a_failing_autosave_stops_the_read_on_a_filtered_blank(
     make_file: Callable[..., Path], make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(auto_save_state=True, auto_save_state_bytes=1)
@@ -383,7 +448,7 @@ def test_save_error_propagates_on_a_filtered_blank(
     iterator = reader.lines(path, state="../../etc/passwd", skip_empty=True)
 
     with pytest.raises(StateError, match="path escapes root"):
-        list(iterator)
+        next(iterator)
 
     assert iterator.state.position == 1
 
@@ -751,7 +816,7 @@ def test_raises_when_resumed_file_replaced_by_directory(
     data_file.unlink()
     data_file.mkdir()
 
-    with pytest.raises(StateError, match="io failed"):
+    with pytest.raises(StateError, match="not a file"):
         reader.lines(data_file, state=state)
 
 
@@ -1109,15 +1174,16 @@ def test_iteration_survives_the_file_being_deleted(
 
 
 def test_iteration_stops_at_a_truncation(
-    make_reader: Callable[..., PReader], data_file: Path
+    make_reader: Callable[..., PReader],
+    data_file: Path,
+    truncate: Callable[[Path, int], None],
 ) -> None:
     reader = make_reader(buffer_capacity=1)
     iterator = reader.lines(data_file)
 
     next(iterator)
 
-    with data_file.open("r+b") as file:
-        file.truncate(10)
+    truncate(data_file, 10)
 
     list(iterator)
 

@@ -50,6 +50,17 @@ def test_options_narrow_the_output(
     assert b"".join(reader.bytes(data_file, options=options)) == expected
 
 
+def test_read_yields_invalid_bytes(
+    reader: PReader, make_file: Callable[..., Path]
+) -> None:
+    invalid = b"foo" + bytes([0xFF, 0xFE]) + b"bar"
+    iterator = reader.bytes(make_file(invalid))
+
+    assert b"".join(iterator) == invalid
+    assert iterator.state.position == 8
+    assert iterator.state.percent() == 100.0
+
+
 @pytest.mark.parametrize(
     ("options", "expected_length"),
     [(IteratorOptions(end=5, limit=100), 5), (IteratorOptions(end=100, limit=2), 2)],
@@ -368,43 +379,63 @@ def test_extra_next_after_exhaustion_does_not_resave(
     assert reader.states[TEST_STATE_NAME].path().stat().st_mtime == mtime_before
 
 
-def test_autosave_error_propagates_from_unbound_iteration(
+def test_a_failing_threshold_save_stops_the_read(
     config: Config,
     make_reader: Callable[..., PReader],
     data_file: Path,
-    capfd: pytest.CaptureFixture[str],
 ) -> None:
     config.state_dir.write_bytes(b"foo")
 
     reader = make_reader(auto_save_state=True, auto_save_state_bytes=5)
+    iterator = reader.bytes(data_file, state=TEST_STATE_NAME)
 
-    with pytest.raises(StateError, match="io failed"):
-        for _ in reader.bytes(data_file, state=TEST_STATE_NAME):
-            pass
+    assert b"".join(next(iterator) for _ in range(4)) == TEST_ALPHABET[:4]
 
-    assert "preader: save failed" not in capfd.readouterr().err
+    with pytest.raises(FileExistsError):
+        next(iterator)
 
 
-def test_save_error_at_finalize_propagates(
+def test_a_failed_save_exhausts_the_iterator(
+    config: Config,
+    make_reader: Callable[..., PReader],
+    data_file: Path,
+) -> None:
+    config.state_dir.write_bytes(b"foo")
+
+    reader = make_reader(auto_save_state=True, auto_save_state_bytes=1)
+    iterator = reader.bytes(data_file, state=TEST_STATE_NAME)
+
+    with pytest.raises(FileExistsError):
+        next(iterator)
+
+    with pytest.raises(StopIteration):
+        next(iterator)
+
+
+def test_a_failing_final_save_reaches_every_item_first(
     data_file: Path, make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(auto_save_state=True)
+    iterator = reader.bytes(data_file, state="../../etc/passwd")
+    consumed = b"".join(next(iterator) for _ in range(len(TEST_ALPHABET)))
+
+    assert consumed == TEST_ALPHABET
 
     with pytest.raises(StateError, match="path escapes root"):
-        for _ in reader.bytes(data_file, state="../../etc/passwd"):
-            pass
+        next(iterator)
 
 
-def test_save_error_propagates_after_a_truncation(
-    data_file: Path, make_reader: Callable[..., PReader]
+def test_a_failing_autosave_stops_the_read_after_a_truncation(
+    data_file: Path,
+    make_reader: Callable[..., PReader],
+    truncate: Callable[[Path, int], None],
 ) -> None:
     reader = make_reader(auto_save_state=True, buffer_capacity=1)
     iterator = reader.bytes(data_file, state="../../etc/passwd")
 
-    next(iterator)
+    assert next(iterator) == TEST_ALPHABET[:1]
 
-    with data_file.open("r+b") as file:
-        file.truncate(1)
+    truncate(data_file, 1)
 
     with pytest.raises(StateError, match="path escapes root"):
         list(iterator)
@@ -602,7 +633,7 @@ def test_raises_when_resumed_file_replaced_by_directory(
     data_file.unlink()
     data_file.mkdir()
 
-    with pytest.raises(StateError, match="io failed"):
+    with pytest.raises(StateError, match="not a file"):
         reader.bytes(data_file, state=state)
 
 
@@ -816,15 +847,16 @@ def test_iteration_survives_the_file_being_deleted(
 
 
 def test_iteration_stops_at_a_truncation(
-    make_reader: Callable[..., PReader], data_file: Path
+    make_reader: Callable[..., PReader],
+    data_file: Path,
+    truncate: Callable[[Path, int], None],
 ) -> None:
     reader = make_reader(buffer_capacity=1)
     iterator = reader.bytes(data_file)
 
     next(iterator)
 
-    with data_file.open("r+b") as file:
-        file.truncate(10)
+    truncate(data_file, 10)
 
     list(iterator)
 

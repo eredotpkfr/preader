@@ -1,17 +1,14 @@
-use pyo3::{exceptions::PyValueError, prelude::*};
+use crate::{Error, Result, enums::skip::Skip, types::window::Window};
 
-use crate::types::window::Window;
-
-#[pyclass(module = "preader", eq, from_py_object)]
-#[derive(Clone, PartialEq)]
+#[cfg_attr(
+    feature = "python",
+    pyo3::pyclass(module = "preader", eq, frozen, from_py_object, get_all)
+)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct IteratorOptions {
-    #[pyo3(get)]
     pub start: u64,
-    #[pyo3(get)]
     pub end: u64,
-    #[pyo3(get)]
     pub skip: u64,
-    #[pyo3(get)]
     pub limit: u64,
 }
 
@@ -27,54 +24,26 @@ impl Default for IteratorOptions {
 }
 
 impl IteratorOptions {
-    pub(crate) fn validate(&self) -> PyResult<()> {
-        if self.start > self.end {
-            return Err(PyValueError::new_err(format!(
-                "start ({}) must be <= end ({})",
-                self.start, self.end
-            )));
-        }
-
-        Ok(())
-    }
-
-    pub fn window(&self, position: u64, size: u64, skip_bytes: u64) -> Window {
+    pub fn window(&self, position: u64, size: u64, skip: Skip) -> Window {
+        let (bytes, items) = skip.counts();
         let end = self.end.min(size);
-        let start = self.start.saturating_add(skip_bytes).min(end);
+        let start = self.start.saturating_add(bytes).min(end);
 
         Window {
             position: position.max(start),
             end,
-            from_start: position <= start && position < end,
-        }
-    }
-}
-
-#[pymethods]
-impl IteratorOptions {
-    #[new]
-    #[pyo3(signature = (
-        *,
-        start = 0,
-        end = u64::MAX,
-        skip = 0,
-        limit = u64::MAX,
-    ))]
-    pub fn new(start: u64, end: u64, skip: u64, limit: u64) -> Self {
-        Self {
-            start,
-            end,
-            skip,
-            limit,
+            skipping: (position <= start && position < end).then_some(items),
         }
     }
 
-    fn __repr__(&self) -> String {
-        crate::macros::pyrepr!("IteratorOptions" {
-            start = self.start,
-            end = self.end,
-            skip = self.skip,
-            limit = self.limit,
-        })
+    pub(crate) fn validate(&self) -> Result<()> {
+        if self.start > self.end {
+            return Err(Error::InvalidRange {
+                start: self.start,
+                end: self.end,
+            });
+        }
+
+        Ok(())
     }
 }
