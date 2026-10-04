@@ -38,6 +38,7 @@ fn fingerprint_ignores_bytes_past_the_window(sandbox: Sandbox) {
     let window = FINGERPRINT_SAMPLE_BYTES as usize;
 
     assert!(metadata.size > FINGERPRINT_SAMPLE_BYTES);
+
     assert_eq!(
         metadata.fingerprint,
         digest(&TEST_LINE.repeat(window)[..window])
@@ -62,6 +63,7 @@ fn rejects_a_directory(sandbox: Sandbox) {
     let error = FileMetadata::try_from(path.as_path()).unwrap_err();
 
     assert!(matches!(error, Error::NotAFile(ref found) if *found == path));
+
     assert_eq!(error.to_string(), format!("not a file: {}", path.display()));
 }
 
@@ -115,5 +117,6 @@ fn reads_a_relative_path(sandbox: Sandbox) {
     let metadata = FileMetadata::try_from(Path::new("Cargo.toml")).unwrap();
 
     assert_eq!(metadata.path, Path::new("Cargo.toml"));
+
     assert!(metadata.size > 0);
 }

@@ -184,6 +184,15 @@ impl Sandbox {
         self.saved(&path, name)
     }
 
+    pub fn checkpoint(&self, path: &Path, name: &str, items: u64) -> State {
+        let mut bytes = self.reader().bytes(path).state(name).limit(items).build().unwrap();
+
+        while bytes.read().unwrap().is_some() {}
+
+        bytes.state().save().unwrap();
+        bytes.state().clone()
+    }
+
     pub fn stored(&self, path: &Path, name: &str) -> State {
         let reader = self.lenient();
         let mut state = reader.bytes(path).state(name).build().unwrap().state().clone();

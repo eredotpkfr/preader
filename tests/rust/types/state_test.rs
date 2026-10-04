@@ -15,8 +15,9 @@ use crate::common::{
         TEST_STATE_NAME, TEST_TRACKED_NAME, TEST_WINDOW,
     },
     fixtures::sandbox,
-    funcs::{consume, state_data, tamper},
+    funcs::{consume, drain, state_data, tamper},
     guards::{Blocked, mtime, set_mtime, set_pre_epoch_mtime},
+    macros::asserts::assert_err,
     sandbox::Sandbox,
 };
 
@@ -45,6 +46,7 @@ fn eq_compares_the_data() {
         one,
         StateManager::default().state(state_data(PathBuf::from(TEST_FILE_PATH)))
     );
+
     assert_ne!(one, StateManager::default().state(changed));
 }
 
@@ -67,12 +69,13 @@ fn checksum_is_a_stable_hex_digest(sandbox: Sandbox) {
     let digest = state.checksum().unwrap();
 
     assert_eq!(digest.len(), 64);
+    assert_eq!(state.checksum().unwrap(), digest);
+
     assert!(
         digest
             .bytes()
             .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
     );
-    assert_eq!(state.checksum().unwrap(), digest);
 }
 
 #[rstest]
@@ -125,7 +128,7 @@ fn percent_reads_the_stored_numbers(
     let path = sandbox.file(b"foo");
     let mut bytes = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap();
 
-    while bytes.read().unwrap().is_some() {}
+    drain(&mut bytes);
 
     let payload = bytes.state().save().unwrap();
 
@@ -154,7 +157,7 @@ fn percent_tracks_the_position(sandbox: Sandbox) {
 
     assert_eq!(bytes.state().percent(), 50.0);
 
-    while bytes.read().unwrap().is_some() {}
+    drain(&mut bytes);
 
     assert_eq!(bytes.state().percent(), 100.0);
 }
@@ -191,7 +194,7 @@ fn verify_reports_checksum_before_file(sandbox: Sandbox) {
 
     fs::remove_file(&path).unwrap();
 
-    assert!(loaded.verify().unwrap_err().to_string().contains("state checksum mismatch"));
+    assert_err!(loaded.verify(), "state checksum mismatch");
 }
 
 #[rstest]
@@ -203,9 +206,7 @@ fn verify_fails_when_the_size_changed(sandbox: Sandbox) {
     sandbox.truncate(&path, 4500);
     set_mtime(&path, stamp);
 
-    let error = state.verify().unwrap_err();
-
-    assert!(error.to_string().contains("file size mismatch"), "{error}");
+    assert_err!(state.verify(), "file size mismatch");
 }
 
 #[rstest]
@@ -215,9 +216,7 @@ fn verify_fails_when_the_mtime_changed(sandbox: Sandbox) {
 
     set_mtime(&path, mtime(&path) + Duration::from_secs(3600));
 
-    let error = state.verify().unwrap_err();
-
-    assert!(error.to_string().contains("file mtime mismatch"), "{error}");
+    assert_err!(state.verify(), "file mtime mismatch");
 }
 
 #[rstest]
@@ -295,7 +294,7 @@ fn verify_fails_when_the_path_is_not_utf8(sandbox: Sandbox) {
     let path = PathBuf::from(OsStr::from_bytes(TEST_NON_UTF8_NAME));
     let state = StateManager::from(&sandbox.config()).state(state_data(path));
 
-    assert!(state.verify().unwrap_err().to_string().contains("invalid UTF-8"));
+    assert_err!(state.verify(), "invalid UTF-8");
 }
 
 #[rstest]
@@ -326,6 +325,7 @@ fn resync_keeps_name_position_and_created_at(sandbox: Sandbox) {
     assert_eq!(resynced.name, state.name);
     assert_eq!(resynced.position, state.position);
     assert_eq!(resynced.timestamps.created_at, state.timestamps.created_at);
+
     assert!(resynced.timestamps.updated_at > state.timestamps.updated_at);
 }
 
@@ -458,7 +458,7 @@ fn resync_trusts_path_without_verification(
     let mut bytes =
         sandbox.lenient().bytes(&path).state(TEST_STATE_NAME).limit(50).build().unwrap();
 
-    while bytes.read().unwrap().is_some() {}
+    drain(&mut bytes);
 
     let saved = bytes.state().clone();
 
@@ -550,6 +550,7 @@ fn resync_reseals_a_tampered_state(sandbox: Sandbox) {
     let resynced = reloaded.resync(&path).unwrap();
 
     assert!(resynced.verify().is_ok());
+
     assert_eq!(resynced.position, 999);
 }
 
@@ -560,7 +561,8 @@ fn resync_keeps_an_unsafe_name_for_the_save(sandbox: Sandbox) {
     let mut resynced = saved.resync(&path).unwrap();
 
     assert_eq!(resynced.name, "../../escape");
-    assert!(resynced.save().unwrap_err().to_string().contains("path escapes root"));
+
+    assert_err!(resynced.save(), "path escapes root");
 }
 
 #[rstest]
@@ -571,6 +573,7 @@ fn resync_keeps_the_state_dir_for_the_save(sandbox: Sandbox) {
 
     assert!(written.starts_with(sandbox.state_dir()));
     assert!(written.is_file());
+
     assert_eq!(
         sandbox.states().load(TEST_STATE_NAME).unwrap().name,
         TEST_STATE_NAME
@@ -643,7 +646,7 @@ fn resync_fails_when_the_path_is_a_directory(sandbox: Sandbox, #[case] linked: b
         directory
     };
 
-    assert!(state.resync(&target).unwrap_err().to_string().contains("not a file"));
+    assert_err!(state.resync(&target), "not a file");
 }
 
 #[rstest]
@@ -705,7 +708,7 @@ fn resync_fails_when_the_path_is_not_utf8(sandbox: Sandbox) {
         return;
     }
 
-    assert!(saved.resync(&odd).unwrap_err().to_string().contains("invalid UTF-8"));
+    assert_err!(saved.resync(&odd), "invalid UTF-8");
 }
 
 #[cfg(unix)]
@@ -740,6 +743,7 @@ fn save_returns_the_created_path(sandbox: Sandbox) {
     let written = state.save().unwrap();
 
     assert_eq!(written, state.path().unwrap());
+
     assert!(written.is_file());
 }
 
@@ -753,6 +757,7 @@ fn save_updates_only_the_updated_at(sandbox: Sandbox) {
     state.save().unwrap();
 
     assert_eq!(state.timestamps.created_at, created_at);
+
     assert!(state.timestamps.updated_at > created_at);
 }
 
@@ -761,7 +766,7 @@ fn save_persists_across_readers(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let mut bytes = sandbox.reader().bytes(&path).state(TEST_STATE_NAME).build().unwrap();
 
-    while bytes.read().unwrap().is_some() {}
+    drain(&mut bytes);
 
     bytes.state().save().unwrap();
 
@@ -866,7 +871,7 @@ fn save_fails_when_the_path_is_not_utf8(sandbox: Sandbox) {
     let path = PathBuf::from(OsStr::from_bytes(TEST_NON_UTF8_NAME));
     let mut state = StateManager::from(&sandbox.config()).state(state_data(path));
 
-    assert!(state.save().unwrap_err().to_string().contains("invalid UTF-8"));
+    assert_err!(state.save(), "invalid UTF-8");
 }
 
 #[rstest]

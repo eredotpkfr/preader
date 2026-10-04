@@ -4,6 +4,7 @@ use rstest::rstest;
 use crate::common::{
     constants::{TEST_LINE, TEST_OTHER_STATE_NAME, TEST_STATE_NAME},
     fixtures::sandbox,
+    macros::asserts::assert_err,
     sandbox::Sandbox,
 };
 
@@ -153,9 +154,11 @@ fn existing_state_is_rejected_for_another_file(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let other = sandbox.write("other.bin", TEST_LINE);
     let state: State = sandbox.state(&path);
-    let error = sandbox.reader().bytes(&other).state(state).build().unwrap_err();
 
-    assert!(error.to_string().contains("file path mismatch"), "{error}");
+    assert_err!(
+        sandbox.reader().bytes(&other).state(state).build(),
+        "file path mismatch",
+    );
 }
 
 #[rstest]

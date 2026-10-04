@@ -8,7 +8,7 @@ use preader::{
 };
 use rstest::{fixture, rstest};
 
-use crate::common::{fixtures::sandbox, sandbox::Sandbox};
+use crate::common::{fixtures::sandbox, macros::asserts::assert_err, sandbox::Sandbox};
 
 #[fixture]
 fn root() -> &'static Path {
@@ -37,9 +37,7 @@ fn scoped_join_fails_when_the_path_is_unsafe(
     #[case] unsafe_path: &str,
     #[case] message: &str,
 ) {
-    let error = scoped_join(root, unsafe_path).unwrap_err();
-
-    assert!(error.to_string().contains(message));
+    assert_err!(scoped_join(root, unsafe_path), message);
 }
 
 #[cfg(windows)]
@@ -51,9 +49,7 @@ fn scoped_join_fails_when_the_path_is_unsafe(
 #[case::verbatim_drive("\\\\?\\C:\\job-1")]
 #[case::backslash_traversal("..\\..\\etc\\passwd")]
 fn scoped_join_fails_when_windows_path_is_unsafe(root: &Path, #[case] unsafe_path: &str) {
-    let error = scoped_join(root, unsafe_path).unwrap_err();
-
-    assert!(error.to_string().contains("escapes root"));
+    assert_err!(scoped_join(root, unsafe_path), "escapes root");
 }
 
 #[rstest]

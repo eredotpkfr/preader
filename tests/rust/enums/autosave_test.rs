@@ -1,7 +1,9 @@
-use preader::{AutoSave, Config, IteratorBuild, IteratorRead};
+use preader::{AutoSave, Config, IteratorBuild};
 use rstest::rstest;
 
-use crate::common::{constants::TEST_STATE_NAME, fixtures::sandbox, sandbox::Sandbox};
+use crate::common::{
+    constants::TEST_STATE_NAME, fixtures::sandbox, funcs::drain, sandbox::Sandbox,
+};
 
 #[rstest]
 #[case::disabled(false, 0, AutoSave::Never)]
@@ -53,7 +55,7 @@ fn policy_decides_whether_a_state_is_written(
     let path = sandbox.line_file();
     let mut bytes = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap();
 
-    while bytes.read().unwrap().is_some() {}
+    drain(&mut bytes);
 
     drop(bytes);
 

@@ -1,4 +1,12 @@
-macro_rules! drain {
+macro_rules! assert_err {
+    ($outcome:expr, $message:expr $(,)?) => {{
+        let error = $outcome.unwrap_err();
+
+        assert!(error.to_string().contains($message), "{error}");
+    }};
+}
+
+macro_rules! assert_percent {
     ($builder:expr, $size:expr) => {{
         let mut iterator = $builder.build().unwrap();
 
@@ -11,4 +19,5 @@ macro_rules! drain {
     }};
 }
 
-pub(crate) use drain;
+pub(crate) use assert_err;
+pub(crate) use assert_percent;

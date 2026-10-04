@@ -105,6 +105,7 @@ fn clear_keeps_a_non_state_file(sandbox: Sandbox, #[case] name: &str) {
     sandbox.states().clear().unwrap();
 
     assert_eq!(sandbox.states().count().unwrap(), 0);
+
     assert!(unrelated.exists());
 }
 
@@ -203,6 +204,7 @@ fn names_ignores_a_symlinked_state(sandbox: Sandbox) {
     symlink(&target, sandbox.state_dir().join("alias.state.json")).unwrap();
 
     assert_eq!(names(&sandbox.states()), [TEST_STATE_NAME]);
+
     assert!(!sandbox.states().exists("alias"));
 }
 
@@ -250,6 +252,7 @@ fn names_ignores_symlink_that_leaves_state_dir(sandbox: Sandbox) {
     symlink(&target, sandbox.state_dir().join("evil.state.json")).unwrap();
 
     assert_eq!(names(&sandbox.states()), [TEST_OTHER_STATE_NAME]);
+
     assert!(!sandbox.states().exists("evil"));
 }
 
@@ -315,6 +318,7 @@ fn bare_suffix_file_yields_an_empty_name(sandbox: Sandbox) {
     fs::write(sandbox.state_dir().join(STATE_FILE_EXTENSION), "{}").unwrap();
 
     assert_eq!(names(&sandbox.states()), ["", TEST_STATE_NAME]);
+
     assert!(matches!(
         sandbox.states().all().unwrap_err(),
         Error::Path(_)

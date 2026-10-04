@@ -4,7 +4,7 @@ use rstest::rstest;
 use crate::common::{
     constants::{TEST_BLANK_SEGMENT_CONTENT, TEST_INVALID_UTF8, TEST_SEGMENT_CONTENT},
     fixtures::sandbox,
-    funcs::{items, texts},
+    funcs::{drain, items, texts},
     sandbox::Sandbox,
 };
 
@@ -68,8 +68,8 @@ fn keep_does_not_change_the_position(sandbox: Sandbox) {
     let mut stripped = reader.delimiter(&path).build().unwrap();
     let mut kept = reader.delimiter(&path).keep(true).build().unwrap();
 
-    while stripped.read().unwrap().is_some() {}
-    while kept.read().unwrap().is_some() {}
+    drain(&mut stripped);
+    drain(&mut kept);
 
     assert_eq!(stripped.state().position, kept.state().position);
 }
@@ -134,7 +134,7 @@ fn resumed_read_ignores_align(sandbox: Sandbox) {
     let reader = sandbox.reader();
     let mut first = reader.bytes(&path).limit(3).build().unwrap();
 
-    while first.read().unwrap().is_some() {}
+    drain(&mut first);
 
     first.state().save().unwrap();
 

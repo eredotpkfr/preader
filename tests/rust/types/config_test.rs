@@ -11,10 +11,11 @@ fn defaults_match_the_constants() {
 
     assert_eq!(config.buffer_capacity, DEFAULT_BUFFER_CAPACITY);
     assert_eq!(config.state_dir, default_state_dir());
-    assert!(!config.auto_save_state);
     assert_eq!(config.auto_save_state_bytes, DEFAULT_AUTO_SAVE_STATE_BYTES);
-    assert!(!config.auto_load_state);
     assert_eq!(config.verify_state, DEFAULT_VERIFY_STATE);
+
+    assert!(!config.auto_save_state);
+    assert!(!config.auto_load_state);
 }
 
 #[rstest]
@@ -31,6 +32,7 @@ fn compares_by_value() {
             ..Config::default()
         }
     );
+
     assert_ne!(
         config,
         Config {
