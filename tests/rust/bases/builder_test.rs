@@ -4,7 +4,9 @@ use preader::{Error, IteratorBuild};
 use rstest::rstest;
 
 use crate::common::{
-    constants::{TEST_ALPHABET, TEST_FILE_NAME, TEST_LINE_CONTENT, TEST_STATE_NAME},
+    constants::{
+        TEST_ALPHABET, TEST_FILE_NAME, TEST_LINE_CONTENT, TEST_READ_FROM, TEST_STATE_NAME,
+    },
     fixtures::sandbox,
     funcs::{drain, items},
     iterators::{ITERATORS, IteratorKind, Plan},
@@ -153,4 +155,21 @@ fn maximum_start_and_end_yield_nothing(sandbox: Sandbox) {
     let read = items(sandbox.reader().bytes(&path).start(u64::MAX).end(u64::MAX).build().unwrap());
 
     assert!(read.is_empty());
+}
+
+#[cfg(unix)]
+#[rstest]
+fn unverifiable_alignment_fails_to_build(sandbox: Sandbox) {
+    let directory = sandbox.dir_at("folder");
+    let state = sandbox.state_at(&directory, TEST_READ_FROM);
+    let built = sandbox
+        .lenient()
+        .lines(&directory)
+        .state(state)
+        .start(TEST_READ_FROM)
+        .skip(1)
+        .align(true)
+        .build();
+
+    assert_err_is!(built, Error::Io(_));
 }

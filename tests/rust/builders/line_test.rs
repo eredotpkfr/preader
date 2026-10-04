@@ -53,12 +53,12 @@ fn last_flag_wins(sandbox: Sandbox) {
         sandbox
             .reader()
             .lines(&path)
-            .keepends(true)
             .keepends(false)
+            .keepends(true)
             .limit(1)
             .build()
             .unwrap(),
     );
 
-    assert_eq!(read, ["line-0"]);
+    assert_eq!(read, ["line-0\n"]);
 }

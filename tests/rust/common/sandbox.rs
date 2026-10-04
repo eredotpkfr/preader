@@ -12,8 +12,12 @@ use preader::{
 use serde_json::Value;
 use tempfile::TempDir;
 
-use crate::common::constants::{
-    TEST_FILE_NAME, TEST_LARGE_COPIES, TEST_LINE, TEST_STATE_NAME, TEST_TRACKED_NAME,
+use crate::common::{
+    constants::{
+        TEST_FILE_NAME, TEST_LARGE_COPIES, TEST_LINE, TEST_RECORDED_SIZE, TEST_STATE_NAME,
+        TEST_TRACKED_NAME,
+    },
+    funcs::state_data,
 };
 
 #[derive(Debug)]
@@ -164,6 +168,15 @@ impl Sandbox {
 
     pub fn named_state(&self, path: &Path, name: &str) -> State {
         self.reader().bytes(path).state(name).build().unwrap().state().clone()
+    }
+
+    pub fn state_at(&self, path: &Path, position: u64) -> State {
+        let mut data = state_data(path.to_path_buf());
+
+        data.file.size = TEST_RECORDED_SIZE;
+        data.position = position;
+
+        self.manager().state(data)
     }
 
     pub fn saved(&self, path: &Path, name: &str) -> State {

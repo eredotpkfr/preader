@@ -4,17 +4,18 @@ use preader::{Config, DEFAULT_AUTO_SAVE_STATE_BYTES, Error, IteratorBuild, Itera
 use rstest::rstest;
 
 use crate::common::{
-    constants::{TEST_ALPHABET, TEST_OTHER_STATE_NAME, TEST_STATE_NAME, TEST_UNSAFE_NAME},
+    constants::{
+        TEST_ALPHABET, TEST_OTHER_STATE_NAME, TEST_READ_FROM, TEST_REWOUND_TO, TEST_STATE_NAME,
+        TEST_UNSAFE_NAME,
+    },
     fixtures::sandbox,
-    funcs::{consume, drain, items, state_data, take},
+    funcs::{consume, drain, items, take},
     guards::Blocked,
     macros::asserts::assert_err_is,
     sandbox::Sandbox,
 };
 
 const CONTENT_SIZE: u64 = TEST_ALPHABET.len() as u64;
-const READ_FROM: u64 = 10;
-const REWOUND_TO: u64 = 2;
 
 #[rstest]
 fn autosave_off_writes_nothing(sandbox: Sandbox) {
@@ -552,24 +553,18 @@ fn resumed_read_covers_what_failed_save_left_behind(sandbox: Sandbox) {
 #[rstest]
 fn mid_item_read_error_keeps_the_position(sandbox: Sandbox) {
     let directory = sandbox.dir_at("folder");
-    let mut data = state_data(directory.clone());
-
-    data.file.size = 64;
-    data.position = READ_FROM;
-
-    let opened = sandbox.manager().state(data.clone());
+    let opened = sandbox.state_at(&directory, TEST_READ_FROM);
     let mut lines = sandbox.lenient().lines(&directory).state(opened).build().unwrap();
 
-    data.position = REWOUND_TO;
-    *lines.state() = sandbox.manager().state(data);
+    *lines.state() = sandbox.state_at(&directory, TEST_REWOUND_TO);
 
     assert_err_is!(lines.read(), Error::Io(_));
 
-    assert_eq!(lines.state().position, READ_FROM);
+    assert_eq!(lines.state().position, TEST_READ_FROM);
 
     assert_err_is!(lines.read(), Error::Io(_));
 
-    assert_eq!(lines.state().position, READ_FROM);
+    assert_eq!(lines.state().position, TEST_READ_FROM);
 }
 
 #[rstest]
