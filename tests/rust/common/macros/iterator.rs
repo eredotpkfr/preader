@@ -1,4 +1,4 @@
-macro_rules! read_flow {
+macro_rules! read_iterator {
     ($builder:expr, $plan:expr) => {{
         let plan = $plan;
         let take = plan.take;
@@ -12,4 +12,4 @@ macro_rules! read_flow {
     }};
 }
 
-pub(crate) use read_flow;
+pub(crate) use read_iterator;

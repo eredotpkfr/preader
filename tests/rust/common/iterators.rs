@@ -5,23 +5,32 @@ use preader::{
     State, StateSource,
 };
 
-use crate::common::macros::flow::read_flow;
+use crate::common::macros::iterator::read_iterator;
 
 #[derive(Clone, Copy, Debug)]
-pub enum Flow {
+pub enum IteratorKind {
     Bytes,
     Chunks,
     Delimiter,
     Lines,
 }
 
-pub const FLOWS: [Flow; 4] = [Flow::Bytes, Flow::Chunks, Flow::Delimiter, Flow::Lines];
-pub const LOSSLESS_FLOWS: [Flow; 3] = [Flow::Bytes, Flow::Chunks, Flow::Delimiter];
+pub const ITERATORS: [IteratorKind; 4] = [
+    IteratorKind::Bytes,
+    IteratorKind::Chunks,
+    IteratorKind::Delimiter,
+    IteratorKind::Lines,
+];
+pub const LOSSLESS_ITERATORS: [IteratorKind; 3] = [
+    IteratorKind::Bytes,
+    IteratorKind::Chunks,
+    IteratorKind::Delimiter,
+];
 
 #[derive(Debug, Default)]
 pub struct Plan {
-    pub state: StateSource,
     pub options: IteratorOptions,
+    pub state: StateSource,
     pub take: Option<usize>,
 }
 
@@ -38,18 +47,18 @@ impl Plan {
     }
 }
 
-impl Flow {
+impl IteratorKind {
     pub fn read(self, reader: &PReader, file: &Path, plan: Plan) -> Result<(Vec<Vec<u8>>, State)> {
         match self {
-            Self::Bytes => read_flow!(reader.bytes(file), plan),
-            Self::Chunks => read_flow!(reader.chunks(file).size(1), plan),
+            Self::Bytes => read_iterator!(reader.bytes(file), plan),
+            Self::Chunks => read_iterator!(reader.chunks(file).size(1), plan),
             Self::Delimiter => {
-                read_flow!(
+                read_iterator!(
                     reader.delimiter(file).character(DEFAULT_DELIMITER).keep(true),
                     plan
                 )
             }
-            Self::Lines => read_flow!(reader.lines(file), plan),
+            Self::Lines => read_iterator!(reader.lines(file), plan),
         }
     }
 }
