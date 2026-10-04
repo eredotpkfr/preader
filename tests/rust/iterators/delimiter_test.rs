@@ -1,120 +1,69 @@
-use preader::{Config, IteratorBuild, IteratorRead};
+use preader::{IteratorBuild, IteratorRead};
 use rstest::rstest;
-use tempfile::TempDir;
 
 use crate::common::{
-    fixtures::tmp_dir,
-    funcs::{reader, write},
+    constants::{
+        TEST_BLANK_SEGMENT_CONTENT, TEST_DELIMITER, TEST_INVALID_UTF8, TEST_SEGMENT_CONTENT,
+        TEST_SEGMENTS,
+    },
+    fixtures::sandbox,
+    funcs::{items, texts},
+    sandbox::Sandbox,
 };
 
-const CONTENT: &[u8] = b"a,b,,c";
+fn segments(sandbox: &Sandbox, content: &[u8]) -> Vec<String> {
+    let path = sandbox.file(content);
 
-fn segments(tmp_dir: &TempDir, content: &[u8], keep: bool, skip_empty: bool) -> Vec<Vec<u8>> {
-    let reader = reader(tmp_dir, Config::default());
-    let path = write(tmp_dir, "data.csv", content);
-    let mut iterator = reader.delimiter(&path).keep(keep).skip_empty(skip_empty).build().unwrap();
-    let mut collected = Vec::new();
-
-    while let Some(segment) = iterator.read().unwrap() {
-        collected.push(segment.to_vec());
-    }
-
-    collected
+    texts(&items(sandbox.reader().delimiter(&path).build().unwrap()))
 }
 
 #[rstest]
-fn read_splits_on_the_default_comma(tmp_dir: TempDir) {
-    let expected = [b"a".to_vec(), b"b".to_vec(), Vec::new(), b"c".to_vec()];
-
-    assert_eq!(segments(&tmp_dir, CONTENT, false, false), expected);
+fn read_splits_on_the_delimiter(sandbox: Sandbox) {
+    assert_eq!(segments(&sandbox, TEST_SEGMENT_CONTENT), TEST_SEGMENTS);
 }
 
 #[rstest]
-fn keep_preserves_the_delimiter(tmp_dir: TempDir) {
-    let expected = [b"a,".to_vec(), b"b,".to_vec(), b",".to_vec(), b"c".to_vec()];
-
-    assert_eq!(segments(&tmp_dir, CONTENT, true, false), expected);
-}
-
-#[rstest]
-fn skip_empty_drops_blank_segments(tmp_dir: TempDir) {
-    let expected = [b"a".to_vec(), b"b".to_vec(), b"c".to_vec()];
-
-    assert_eq!(segments(&tmp_dir, CONTENT, false, true), expected);
-}
-
-#[rstest]
-fn skip_empty_judges_blankness_without_the_delimiter(tmp_dir: TempDir) {
-    let expected = [b"a,".to_vec(), b"b,".to_vec(), b"c".to_vec()];
-
-    assert_eq!(segments(&tmp_dir, CONTENT, true, true), expected);
-}
-
-#[rstest]
-fn read_splits_invalid_bytes(tmp_dir: TempDir) {
-    let reader = reader(&tmp_dir, Config::default());
-    let path = write(&tmp_dir, "data.csv", b"a,\xff\xfe,c");
-    let mut iterator = reader.delimiter(&path).build().unwrap();
-    let mut collected = Vec::new();
-
-    while let Some(segment) = iterator.read().unwrap() {
-        collected.push(segment.to_vec());
-    }
-
-    assert_eq!(collected, [b"a".to_vec(), vec![0xff, 0xfe], b"c".to_vec()]);
-    assert_eq!(iterator.state().position, 6);
-    assert_eq!(iterator.state().percent(), 100.0);
-}
-
-#[rstest]
-fn a_file_without_the_delimiter_yields_one_segment(tmp_dir: TempDir) {
-    assert_eq!(segments(&tmp_dir, b"abc", false, false), [b"abc".to_vec()]);
-}
-
-#[rstest]
-fn a_trailing_delimiter_yields_no_extra_segment(tmp_dir: TempDir) {
+fn read_keeps_a_blank_segment(sandbox: Sandbox) {
     assert_eq!(
-        segments(&tmp_dir, b"a,b,", false, false),
-        [b"a".to_vec(), b"b".to_vec()]
+        segments(&sandbox, TEST_BLANK_SEGMENT_CONTENT),
+        ["seg-0", "", "seg-2"]
     );
 }
 
 #[rstest]
-#[case::null(b'\0', b"a\0b\0c")]
-#[case::newline(b'\n', b"a\nb\nc")]
-#[case::high_byte(b'\xff', b"a\xffb\xffc")]
-fn character_selects_the_separator(
-    tmp_dir: TempDir,
-    #[case] character: u8,
-    #[case] content: &[u8],
-) {
-    let reader = reader(&tmp_dir, Config::default());
-    let path = write(&tmp_dir, "data.bin", content);
-    let mut iterator = reader.delimiter(&path).character(character).build().unwrap();
-    let mut collected = Vec::new();
-
-    while let Some(segment) = iterator.read().unwrap() {
-        collected.push(segment.to_vec());
-    }
-
-    assert_eq!(collected, [b"a".to_vec(), b"b".to_vec(), b"c".to_vec()]);
+fn a_delimiter_only_file_yields_blank_segments(sandbox: Sandbox) {
+    assert_eq!(segments(&sandbox, b",,,"), ["", "", ""]);
 }
 
 #[rstest]
-fn align_skips_a_segment_the_window_starts_inside(tmp_dir: TempDir) {
-    let reader = reader(&tmp_dir, Config::default());
-    let path = write(&tmp_dir, "data.csv", b"aaa,bbb,ccc");
-    let mut aligned = reader.delimiter(&path).start(1).align(true).build().unwrap();
-    let mut partial = reader.delimiter(&path).start(1).build().unwrap();
-
-    assert_eq!(aligned.read().unwrap(), Some(&b"bbb"[..]));
-    assert_eq!(partial.read().unwrap(), Some(&b"aa"[..]));
+fn a_file_without_the_delimiter_yields_one_segment(sandbox: Sandbox) {
+    assert_eq!(
+        segments(&sandbox, b"no-delimiter-here"),
+        ["no-delimiter-here"]
+    );
 }
 
 #[rstest]
-fn keep_does_not_change_the_position(tmp_dir: TempDir) {
-    let reader = reader(&tmp_dir, Config::default());
-    let path = write(&tmp_dir, "data.csv", CONTENT);
+fn a_trailing_delimiter_yields_no_extra_segment(sandbox: Sandbox) {
+    assert_eq!(segments(&sandbox, b"seg-0,seg-1,"), ["seg-0", "seg-1"]);
+}
+
+#[rstest]
+#[case::null(b'\0')]
+#[case::newline(b'\n')]
+#[case::high_byte(0xE9)]
+fn character_selects_the_separator(sandbox: Sandbox, #[case] character: u8) {
+    let content = [b"seg-0", [character].as_slice(), b"seg-1"].concat();
+    let path = sandbox.file(&content);
+    let read = items(sandbox.reader().delimiter(&path).character(character).build().unwrap());
+
+    assert_eq!(texts(&read), ["seg-0", "seg-1"]);
+}
+
+#[rstest]
+fn keep_does_not_change_the_position(sandbox: Sandbox) {
+    let path = sandbox.file(TEST_SEGMENT_CONTENT);
+    let reader = sandbox.reader();
     let mut stripped = reader.delimiter(&path).build().unwrap();
     let mut kept = reader.delimiter(&path).keep(true).build().unwrap();
 
@@ -125,56 +74,88 @@ fn keep_does_not_change_the_position(tmp_dir: TempDir) {
 }
 
 #[rstest]
-fn skip_counts_segments_not_bytes(tmp_dir: TempDir) {
-    let reader = reader(&tmp_dir, Config::default());
-    let path = write(&tmp_dir, "data.csv", b"a,b,c,d");
-    let mut iterator = reader.delimiter(&path).skip(2).build().unwrap();
-    let mut collected = Vec::new();
+fn skip_empty_judges_blankness_without_the_delimiter(sandbox: Sandbox) {
+    let path = sandbox.file(TEST_BLANK_SEGMENT_CONTENT);
+    let read =
+        items(sandbox.reader().delimiter(&path).keep(true).skip_empty(true).build().unwrap());
 
-    while let Some(segment) = iterator.read().unwrap() {
-        collected.push(segment.to_vec());
-    }
-
-    assert_eq!(collected, [b"c".to_vec(), b"d".to_vec()]);
+    assert_eq!(texts(&read), ["seg-0,", "seg-2,"]);
 }
 
 #[rstest]
-fn a_resumed_read_ignores_align(tmp_dir: TempDir) {
-    let reader = reader(&tmp_dir, Config::default());
-    let path = write(&tmp_dir, "data.csv", b"aaa,bbb,ccc");
-    let mut first = reader.bytes(&path).limit(1).build().unwrap();
+fn read_splits_invalid_bytes(sandbox: Sandbox) {
+    let content = [TEST_INVALID_UTF8, b",", TEST_INVALID_UTF8].concat();
+    let path = sandbox.file(&content);
+    let read = items(sandbox.reader().delimiter(&path).build().unwrap());
+
+    assert_eq!(read, [TEST_INVALID_UTF8, TEST_INVALID_UTF8]);
+}
+
+#[rstest]
+fn read_fills_a_segment_across_a_buffer_refill(sandbox: Sandbox) {
+    let path = sandbox.file(TEST_SEGMENT_CONTENT);
+    let reader = sandbox.capped(1);
+    let read = items(reader.delimiter(&path).build().unwrap());
+
+    assert_eq!(texts(&read), TEST_SEGMENTS);
+}
+
+#[rstest]
+fn align_skips_a_segment_the_window_starts_inside(sandbox: Sandbox) {
+    let path = sandbox.file(TEST_SEGMENT_CONTENT);
+    let reader = sandbox.reader();
+    let mut aligned = reader.delimiter(&path).start(2).align(true).build().unwrap();
+    let mut partial = reader.delimiter(&path).start(2).build().unwrap();
+
+    assert_eq!(aligned.read().unwrap(), Some(b"seg-1".as_slice()));
+    assert_eq!(partial.read().unwrap(), Some(b"g-0".as_slice()));
+}
+
+#[rstest]
+fn align_is_a_no_op_on_a_boundary(sandbox: Sandbox) {
+    let path = sandbox.file(TEST_SEGMENT_CONTENT);
+    let mut aligned = sandbox.reader().delimiter(&path).start(6).align(true).build().unwrap();
+
+    assert_eq!(aligned.read().unwrap(), Some(b"seg-1".as_slice()));
+}
+
+#[rstest]
+fn a_resumed_read_ignores_align(sandbox: Sandbox) {
+    let path = sandbox.file(TEST_SEGMENT_CONTENT);
+    let reader = sandbox.reader();
+    let mut first = reader.bytes(&path).limit(3).build().unwrap();
 
     while first.read().unwrap().is_some() {}
 
-    let mut saved = first.state().clone();
+    first.state().save().unwrap();
 
-    saved.save().unwrap();
+    let state = first.state().clone();
 
-    let mut resumed = reader.delimiter(&path).state(saved).align(true).build().unwrap();
-    let mut collected = Vec::new();
+    drop(first);
 
-    while let Some(segment) = resumed.read().unwrap() {
-        collected.push(segment.to_vec());
-    }
+    let mut resumed = reader.delimiter(&path).state(state).start(2).align(true).build().unwrap();
 
-    assert_eq!(
-        collected,
-        [b"aa".to_vec(), b"bbb".to_vec(), b"ccc".to_vec()]
-    );
+    assert_eq!(resumed.read().unwrap(), Some(b"-0".as_slice()));
 }
 
 #[rstest]
-fn a_for_loop_yields_owned_segments(tmp_dir: TempDir) {
-    let reader = reader(&tmp_dir, Config::default());
-    let path = write(&tmp_dir, "data.csv", CONTENT);
-    let mut collected = Vec::new();
+fn a_segment_crossing_the_end_is_yielded_whole(sandbox: Sandbox) {
+    let path = sandbox.file(TEST_SEGMENT_CONTENT);
+    let mut segments = sandbox.reader().delimiter(&path).end(8).build().unwrap();
+    let read = texts(&items(&mut segments));
 
-    for segment in reader.delimiter(&path).build().unwrap() {
+    assert_eq!(read, ["seg-0", "seg-1"]);
+    assert_eq!(segments.state().position, 12);
+}
+
+#[rstest]
+fn the_iterator_yields_owned_segments(sandbox: Sandbox) {
+    let path = sandbox.file(TEST_SEGMENT_CONTENT);
+    let mut collected: Vec<Vec<u8>> = Vec::new();
+
+    for segment in sandbox.reader().delimiter(&path).character(TEST_DELIMITER).build().unwrap() {
         collected.push(segment.unwrap());
     }
 
-    assert_eq!(
-        collected,
-        [b"a".to_vec(), b"b".to_vec(), Vec::new(), b"c".to_vec()]
-    );
+    assert_eq!(texts(&collected), TEST_SEGMENTS);
 }
