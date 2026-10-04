@@ -13,7 +13,7 @@ use crate::common::{
 use crate::common::{
     constants::{TEST_FILE_NAME, TEST_LINE, TEST_STATE_NAME},
     fixtures::sandbox,
-    funcs::{drain, items},
+    funcs::{canonical, drain, items},
     sandbox::Sandbox,
 };
 
@@ -47,7 +47,7 @@ fn file_argument_accepts_every_ownership_shape(sandbox: Sandbox) {
     let text = owned.to_str().unwrap().to_owned();
     let os = OsString::from(&text);
     let reader = sandbox.reader();
-    let canonical = owned.canonicalize().unwrap();
+    let resolved = canonical(&owned);
 
     let shapes: [PathBuf; 6] = [
         reader.bytes(text.as_str()).build().unwrap().state().file.path.clone(),
@@ -58,7 +58,7 @@ fn file_argument_accepts_every_ownership_shape(sandbox: Sandbox) {
         reader.bytes(os).build().unwrap().state().file.path.clone(),
     ];
 
-    assert!(shapes.iter().all(|path| *path == canonical));
+    assert!(shapes.iter().all(|path| *path == resolved));
 
     let mut moved = reader.bytes(owned).build().unwrap();
 
@@ -173,7 +173,7 @@ fn symlink_is_resolved_to_its_target(sandbox: Sandbox) {
 
     assert_eq!(
         sandbox.reader().bytes(&link).build().unwrap().state().file.path,
-        target.canonicalize().unwrap()
+        canonical(&target)
     );
 }
 

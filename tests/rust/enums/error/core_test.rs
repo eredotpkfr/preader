@@ -6,6 +6,7 @@ use rstest::rstest;
 use crate::common::{
     constants::{TEST_INVALID_UTF8, TEST_MISSING_STATE_NAME, TEST_STATE_NAME},
     fixtures::sandbox,
+    funcs::{canonical, native},
     guards::set_pre_epoch_mtime,
     macros::{asserts::assert_err_is, skip::skip},
     sandbox::Sandbox,
@@ -76,7 +77,10 @@ fn path_errors_are_transparent(sandbox: Sandbox) {
         "{error}"
     );
 
-    assert_eq!(error.to_string(), "path escapes root: ../escape");
+    assert_eq!(
+        error.to_string(),
+        format!("path escapes root: {}", native("../escape"))
+    );
 }
 
 #[rstest]
@@ -118,7 +122,7 @@ fn inverted_range_reports_both_bounds(sandbox: Sandbox) {
 
 #[rstest]
 fn directory_is_not_a_file(sandbox: Sandbox) {
-    let directory = sandbox.dir_at("folder").canonicalize().unwrap();
+    let directory = canonical(&sandbox.dir_at("folder"));
     let error = sandbox.reader().bytes(&directory).build().unwrap_err();
 
     assert!(

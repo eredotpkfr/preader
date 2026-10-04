@@ -1,6 +1,6 @@
 use std::{
     fs,
-    path::{MAIN_SEPARATOR_STR, PathBuf},
+    path::{MAIN_SEPARATOR_STR, Path, PathBuf},
 };
 
 use chrono::DateTime;
@@ -61,6 +61,10 @@ pub fn digest(content: &[u8]) -> String {
 
 pub fn native(name: &str) -> String {
     name.replace('/', MAIN_SEPARATOR_STR)
+}
+
+pub fn canonical(path: &Path) -> PathBuf {
+    dunce::canonicalize(path).unwrap()
 }
 
 pub fn names(registry: &StateRegistry) -> Vec<String> {
