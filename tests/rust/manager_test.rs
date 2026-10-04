@@ -19,6 +19,16 @@ use crate::common::{
     sandbox::Sandbox,
 };
 
+#[cfg(windows)]
+const WINDOWS_UNSAFE_NAMES: [&str; 6] = [
+    "C:\\job-1",
+    "C:job-1",
+    "\\job-1",
+    "\\\\server\\share\\job-1",
+    "\\\\?\\C:\\job-1",
+    "..\\..\\etc\\passwd",
+];
+
 const PATH_DIGEST: &str = "07cb9e47c6d8681a47020d0bb04776e06ada8b6d7aabcf4838a127f98e9f4fe2";
 
 fn lenient(sandbox: &Sandbox) -> StateManager {
@@ -222,7 +232,7 @@ fn path_fails_when_the_name_is_unsafe(sandbox: Sandbox, #[case] unsafe_name: (&s
 #[cfg(windows)]
 #[rstest]
 fn path_fails_when_a_windows_name_is_unsafe(sandbox: Sandbox) {
-    for name in crate::common::constants::TEST_WINDOWS_UNSAFE_NAMES {
+    for name in crate::common::constants::WINDOWS_UNSAFE_NAMES {
         assert!(sandbox.manager().path(name).is_err(), "{name}");
         assert!(sandbox.manager().tmp(name).is_err(), "{name}");
     }

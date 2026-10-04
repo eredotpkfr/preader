@@ -5,8 +5,8 @@ use rstest::rstest;
 
 use crate::common::{
     constants::{
-        TEST_DEEP_STATE_NAME, TEST_MISSING_STATE_NAME, TEST_NESTED_STATE_NAME,
-        TEST_OTHER_STATE_NAME, TEST_STATE_NAME, TEST_UNSAFE_NAMES,
+        TEST_EVERY_DEPTH, TEST_MISSING_STATE_NAME, TEST_OTHER_STATE_NAME, TEST_STATE_NAME,
+        TEST_UNSAFE_NAMES,
     },
     fixtures::sandbox,
     funcs::{names, native},
@@ -229,11 +229,7 @@ fn clear_removes_a_corrupt_state(sandbox: Sandbox) {
 
 #[rstest]
 fn clear_removes_states_at_every_depth(sandbox: Sandbox) {
-    for name in [
-        TEST_STATE_NAME,
-        TEST_NESTED_STATE_NAME,
-        TEST_DEEP_STATE_NAME,
-    ] {
+    for name in TEST_EVERY_DEPTH {
         sandbox.save(&native(name));
     }
 

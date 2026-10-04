@@ -9,19 +9,18 @@ use sha2::{Digest, Sha256};
 
 use crate::common::constants::{
     TEST_EMPTY_FINGERPRINT, TEST_FILE_PATH, TEST_LINE, TEST_LINE_FINGERPRINT,
-    TEST_OTHER_STATE_NAME, TEST_STATE_NAME,
+    TEST_OTHER_STATE_NAME, TEST_STAMP, TEST_STATE_NAME,
 };
 
 const DIGEST: &str = "f74d122580787555a6f2d245be2066bbe5af3e83fe5e39092c479e0e1b41225a";
 const POSITION: u64 = 7;
-const MTIME: i64 = 1_700_000_000;
 
 #[fixture]
 fn file() -> FileMetadata {
     FileMetadata {
         path: PathBuf::from(TEST_FILE_PATH),
         size: TEST_LINE.len() as u64,
-        mtime: DateTime::from_timestamp(MTIME, 0).unwrap(),
+        mtime: DateTime::from_timestamp(TEST_STAMP, 0).unwrap(),
         fingerprint: TEST_LINE_FINGERPRINT.to_owned(),
     }
 }
@@ -29,8 +28,8 @@ fn file() -> FileMetadata {
 #[fixture]
 fn timestamps() -> Timestamps {
     Timestamps {
-        created_at: DateTime::from_timestamp(MTIME + 1, 0).unwrap(),
-        updated_at: DateTime::from_timestamp(MTIME + 2, 0).unwrap(),
+        created_at: DateTime::from_timestamp(TEST_STAMP + 1, 0).unwrap(),
+        updated_at: DateTime::from_timestamp(TEST_STAMP + 2, 0).unwrap(),
     }
 }
 
@@ -101,7 +100,7 @@ fn compute_covers_every_timestamp(
 
 #[rstest]
 fn compute_ignores_sub_second_precision(file: FileMetadata, mut timestamps: Timestamps) {
-    timestamps.updated_at = DateTime::from_timestamp(MTIME + 2, 500_000_000).unwrap();
+    timestamps.updated_at = DateTime::from_timestamp(TEST_STAMP + 2, 500_000_000).unwrap();
 
     assert_eq!(body(&file, &timestamps).compute().unwrap(), DIGEST);
 }

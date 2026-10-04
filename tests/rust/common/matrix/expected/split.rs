@@ -1,23 +1,25 @@
 use preader::{DEFAULT_DELIMITER, IteratorOptions};
 
-use crate::common::{constants::TEST_LINE_BOUNDARY, expected::cursor::cursor, matrix::Shape};
+use crate::common::matrix::{Shape, expected::cursor::cursor};
 
-pub struct Split {
-    pub boundary: u8,
-    pub carriage: bool,
-    pub shape: Shape,
+const LINE_BOUNDARY: u8 = b'\n';
+
+struct Split {
+    shape: Shape,
+    carriage: bool,
+    boundary: u8,
 }
 
 impl Split {
-    pub fn lines(shape: Shape) -> Self {
+    fn lines(shape: Shape) -> Self {
         Self {
-            boundary: TEST_LINE_BOUNDARY,
+            boundary: LINE_BOUNDARY,
             carriage: true,
             shape,
         }
     }
 
-    pub fn segments(shape: Shape) -> Self {
+    fn segments(shape: Shape) -> Self {
         Self {
             boundary: DEFAULT_DELIMITER,
             carriage: false,
@@ -46,7 +48,7 @@ impl Split {
     }
 }
 
-pub fn split(content: &[u8], split: &Split, options: IteratorOptions) -> Vec<Vec<u8>> {
+fn split(content: &[u8], split: &Split, options: IteratorOptions) -> Vec<Vec<u8>> {
     let size = content.len() as u64;
     let (mut at, end) = cursor(size, options, 0);
     let mut skipping = split.skipping(content, at, end, options.skip);
@@ -91,4 +93,15 @@ fn misaligned(content: &[u8], position: u64, boundary: u8) -> u64 {
     };
 
     u64::from(content.get(previous as usize).is_some_and(|byte| *byte != boundary))
+}
+
+pub fn lines(content: &[u8], shape: Shape, options: IteratorOptions) -> Vec<String> {
+    split(content, &Split::lines(shape), options)
+        .into_iter()
+        .map(|line| String::from_utf8(line).unwrap())
+        .collect()
+}
+
+pub fn segments(content: &[u8], shape: Shape, options: IteratorOptions) -> Vec<Vec<u8>> {
+    split(content, &Split::segments(shape), options)
 }

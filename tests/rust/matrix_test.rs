@@ -1,33 +1,19 @@
-use std::{str, time::Duration};
-
-use preader::{DEFAULT_DELIMITER, Error, IteratorBuild, IteratorOptions};
+use preader::{DEFAULT_DELIMITER, IteratorBuild};
 use rstest::rstest;
 
-const BUDGET: Duration = Duration::from_secs(60);
-
 use crate::common::{
-    expected::{self, Split},
+    constants::TEST_TIMEOUT,
     fixtures::sandbox,
-    funcs::{flatten, items, try_items},
+    funcs::{items, try_items},
     matrix::{
         BLANK_LINES, BLANK_SEGMENTS, CRLF_LINES, EMPTY, LINES, SEGMENTS, UNTERMINATED_LINES,
-        UNTERMINATED_SEGMENTS, WHOLE_SEGMENT, shapes, sizings, windows,
+        UNTERMINATED_SEGMENTS, WHOLE_SEGMENT, assert_bounds, expected, shapes, sizings, windows,
     },
     sandbox::Sandbox,
 };
 
-fn assert_bounds<T: std::fmt::Debug>(built: Result<T, Error>, options: IteratorOptions) {
-    let error = built.unwrap_err();
-    let reported = Error::InvalidRange {
-        start: options.start,
-        end: options.end,
-    };
-
-    assert_eq!(error.to_string(), reported.to_string(), "{options:?}");
-}
-
 #[rstest]
-#[timeout(BUDGET)]
+#[timeout(TEST_TIMEOUT)]
 fn bytes_match_the_reference(
     sandbox: Sandbox,
     #[values(EMPTY, LINES, UNTERMINATED_LINES, CRLF_LINES, BLANK_LINES)] content: &[u8],
@@ -53,7 +39,7 @@ fn bytes_match_the_reference(
 }
 
 #[rstest]
-#[timeout(BUDGET)]
+#[timeout(TEST_TIMEOUT)]
 fn chunks_match_the_reference(
     sandbox: Sandbox,
     #[values(EMPTY, LINES, UNTERMINATED_LINES, CRLF_LINES, BLANK_LINES)] content: &[u8],
@@ -86,7 +72,7 @@ fn chunks_match_the_reference(
 }
 
 #[rstest]
-#[timeout(BUDGET)]
+#[timeout(TEST_TIMEOUT)]
 fn lines_match_the_reference(
     sandbox: Sandbox,
     #[values(EMPTY, LINES, UNTERMINATED_LINES, CRLF_LINES, BLANK_LINES)] content: &[u8],
@@ -111,17 +97,16 @@ fn lines_match_the_reference(
             }
 
             assert_eq!(
-                flatten(try_items(built.unwrap()).unwrap()),
-                expected::split(content, &Split::lines(shape), options),
-                "content={:?} {options:?} {shape:?}",
-                str::from_utf8(content).unwrap()
+                try_items(built.unwrap()).unwrap(),
+                expected::lines(content, shape, options),
+                "{options:?} {shape:?}"
             );
         }
     }
 }
 
 #[rstest]
-#[timeout(BUDGET)]
+#[timeout(TEST_TIMEOUT)]
 fn segments_match_the_reference(
     sandbox: Sandbox,
     #[values(EMPTY, SEGMENTS, UNTERMINATED_SEGMENTS, BLANK_SEGMENTS, WHOLE_SEGMENT)]
@@ -149,9 +134,8 @@ fn segments_match_the_reference(
 
             assert_eq!(
                 items(built.unwrap()),
-                expected::split(content, &Split::segments(shape), options),
-                "content={:?} {options:?} {shape:?}",
-                str::from_utf8(content).unwrap()
+                expected::segments(content, shape, options),
+                "{options:?} {shape:?}"
             );
         }
     }

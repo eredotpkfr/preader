@@ -2,13 +2,15 @@ use preader::{DEFAULT_DELIMITER, IteratorBuild, IteratorRead};
 use rstest::rstest;
 
 use crate::common::{
-    constants::{
-        TEST_BLANK_SEGMENT_CONTENT, TEST_INVALID_UTF8, TEST_SEGMENT_CONTENT, TEST_SEGMENTS,
-    },
+    constants::{TEST_BLANK_SEGMENT_CONTENT, TEST_INVALID_UTF8, TEST_SEGMENT_CONTENT},
     fixtures::sandbox,
     funcs::{items, texts},
     sandbox::Sandbox,
 };
+
+const SEGMENTS: [&str; 10] = [
+    "seg-0", "seg-1", "seg-2", "seg-3", "seg-4", "seg-5", "seg-6", "seg-7", "seg-8", "seg-9",
+];
 
 fn segments(sandbox: &Sandbox, content: &[u8]) -> Vec<String> {
     let path = sandbox.file(content);
@@ -18,7 +20,7 @@ fn segments(sandbox: &Sandbox, content: &[u8]) -> Vec<String> {
 
 #[rstest]
 fn read_splits_on_the_delimiter(sandbox: Sandbox) {
-    assert_eq!(segments(&sandbox, TEST_SEGMENT_CONTENT), TEST_SEGMENTS);
+    assert_eq!(segments(&sandbox, TEST_SEGMENT_CONTENT), SEGMENTS);
 }
 
 #[rstest]
@@ -82,6 +84,14 @@ fn skip_empty_judges_blankness_without_delimiter(sandbox: Sandbox) {
 }
 
 #[rstest]
+fn a_skipped_blank_segment_does_not_consume_the_limit(sandbox: Sandbox) {
+    let path = sandbox.file(TEST_BLANK_SEGMENT_CONTENT);
+    let read = items(sandbox.reader().delimiter(&path).skip_empty(true).limit(2).build().unwrap());
+
+    assert_eq!(texts(&read), ["seg-0", "seg-2"]);
+}
+
+#[rstest]
 fn read_splits_invalid_bytes(sandbox: Sandbox) {
     let content = [TEST_INVALID_UTF8, b",", TEST_INVALID_UTF8].concat();
     let path = sandbox.file(&content);
@@ -96,7 +106,7 @@ fn read_fills_segment_across_buffer_refill(sandbox: Sandbox) {
     let reader = sandbox.capped(1);
     let read = items(reader.delimiter(&path).build().unwrap());
 
-    assert_eq!(texts(&read), TEST_SEGMENTS);
+    assert_eq!(texts(&read), SEGMENTS);
 }
 
 #[rstest]
@@ -156,5 +166,5 @@ fn iterator_yields_owned_segments(sandbox: Sandbox) {
         collected.push(segment.unwrap());
     }
 
-    assert_eq!(texts(&collected), TEST_SEGMENTS);
+    assert_eq!(texts(&collected), SEGMENTS);
 }

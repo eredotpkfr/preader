@@ -1,6 +1,6 @@
 use preader::IteratorOptions;
 
-use crate::common::expected::cursor::cursor;
+use crate::common::matrix::expected::cursor::cursor;
 
 pub fn bytes(content: &[u8], options: IteratorOptions) -> Vec<u8> {
     let size = content.len() as u64;

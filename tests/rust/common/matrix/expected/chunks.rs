@@ -1,6 +1,6 @@
 use preader::IteratorOptions;
 
-use crate::common::expected::cursor::cursor;
+use crate::common::matrix::expected::cursor::cursor;
 
 pub fn chunks(
     content: &[u8],

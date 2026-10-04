@@ -8,11 +8,9 @@ use preader::{FileMetadata, Result, State, StateData, StateRegistry, Timestamps}
 use sha2::{Digest, Sha256};
 
 use crate::common::{
-    constants::{TEST_LINE, TEST_LINE_FINGERPRINT, TEST_STATE_NAME},
+    constants::{TEST_LINE, TEST_LINE_FINGERPRINT, TEST_STAMP, TEST_STATE_NAME},
     interfaces::Item,
 };
-
-const STAMP: i64 = 1_700_000_000;
 
 pub fn items<I, T>(iterator: I) -> Vec<T>
 where
@@ -66,7 +64,7 @@ pub fn names(registry: &StateRegistry) -> Vec<String> {
 }
 
 pub fn state_data(path: PathBuf) -> StateData {
-    let stamp = DateTime::from_timestamp(STAMP, 0).unwrap();
+    let stamp = DateTime::from_timestamp(TEST_STAMP, 0).unwrap();
 
     StateData {
         name: TEST_STATE_NAME.to_owned(),

@@ -5,6 +5,14 @@ use crate::common::{fixtures::sandbox, sandbox::Sandbox};
 
 const FILE_SIZE: u64 = 100;
 
+fn range(start: u64, end: u64) -> IteratorOptions {
+    IteratorOptions {
+        start,
+        end,
+        ..IteratorOptions::default()
+    }
+}
+
 #[rstest]
 fn defaults_are_unbounded() {
     let options = IteratorOptions::default();
@@ -42,22 +50,23 @@ fn compares_by_value() {
 }
 
 #[rstest]
-#[case::zero_length(0, 0)]
-#[case::whole_range(0, u64::MAX)]
-#[case::equal_bounds(10, 10)]
-fn build_accepts_an_ordered_range(sandbox: Sandbox, #[case] start: u64, #[case] end: u64) {
+#[case::zero_length(range(0, 0))]
+#[case::whole_range(range(0, u64::MAX))]
+#[case::equal_bounds(range(10, 10))]
+fn build_accepts_an_ordered_range(sandbox: Sandbox, #[case] options: IteratorOptions) {
     let path = sandbox.line_file();
 
-    assert!(sandbox.reader().bytes(path).start(start).end(end).build().is_ok());
+    assert!(sandbox.reader().bytes(path).options(options).build().is_ok());
 }
 
 #[rstest]
-#[case::one_apart(1, 0)]
-#[case::far_apart(100, 10)]
-#[case::maximum_start(u64::MAX, 0)]
-fn build_rejects_an_inverted_range(sandbox: Sandbox, #[case] start: u64, #[case] end: u64) {
+#[case::one_apart(range(1, 0))]
+#[case::far_apart(range(100, 10))]
+#[case::maximum_start(range(u64::MAX, 0))]
+fn build_rejects_an_inverted_range(sandbox: Sandbox, #[case] options: IteratorOptions) {
     let path = sandbox.line_file();
-    let error = sandbox.reader().bytes(path).start(start).end(end).build().unwrap_err();
+    let error = sandbox.reader().bytes(path).options(options).build().unwrap_err();
+    let (start, end) = (options.start, options.end);
 
     assert!(matches!(error, Error::InvalidRange { start: s, end: e } if s == start && e == end));
     assert_eq!(

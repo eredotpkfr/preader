@@ -10,19 +10,21 @@ use rstest::rstest;
 
 use crate::common::{
     constants::{
-        TEST_BLANK_LINE_CONTENT, TEST_EMPTY_FINGERPRINT, TEST_FOO_FINGERPRINT,
-        TEST_UNSEEKABLE_POSITION, TEST_WINDOW_FINGERPRINT,
+        TEST_BLANK_LINE_CONTENT, TEST_EMPTY_FINGERPRINT, TEST_UNSEEKABLE_POSITION, TEST_WINDOW,
     },
     fixtures::sandbox,
     sandbox::Sandbox,
 };
 
-const WINDOW: usize = FINGERPRINT_SAMPLE_BYTES as usize;
+const WINDOW_FINGERPRINT: &str = "c93eee2d0db02f10acc7460d9576e122dcf8cd53c4bf8dfcae1b3e74ebcfff5a";
+
+const FOO_FINGERPRINT: &str = "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae";
+
 #[rstest]
-#[case::plain_content(b"foo".to_vec(), TEST_FOO_FINGERPRINT)]
+#[case::plain_content(b"foo".to_vec(), FOO_FINGERPRINT)]
 #[case::empty_file(Vec::new(), TEST_EMPTY_FINGERPRINT)]
-#[case::exactly_the_window(vec![b'a'; WINDOW], TEST_WINDOW_FINGERPRINT)]
-#[case::just_past_the_window(vec![b'a'; WINDOW + 1], TEST_WINDOW_FINGERPRINT)]
+#[case::exactly_the_window(vec![b'a'; TEST_WINDOW], WINDOW_FINGERPRINT)]
+#[case::just_past_the_window(vec![b'a'; TEST_WINDOW + 1], WINDOW_FINGERPRINT)]
 fn fingerprint_digests_the_first_window(
     sandbox: Sandbox,
     #[case] content: Vec<u8>,
@@ -38,7 +40,7 @@ fn fingerprint_digests_the_first_window(
 
 #[rstest]
 fn fingerprint_ignores_content_past_window(sandbox: Sandbox) {
-    let window = vec![b'a'; WINDOW];
+    let window = vec![b'a'; TEST_WINDOW];
     let shorter = sandbox.write("shorter.bin", &[&window, &b"x"[..]].concat());
     let longer = sandbox.write("longer.bin", &[&window, &b"y"[..]].concat());
 
@@ -49,7 +51,7 @@ fn fingerprint_ignores_content_past_window(sandbox: Sandbox) {
 }
 
 #[rstest]
-#[case::whole_file(3, TEST_FOO_FINGERPRINT)]
+#[case::whole_file(3, FOO_FINGERPRINT)]
 #[case::no_bytes(0, TEST_EMPTY_FINGERPRINT)]
 fn fingerprint_honours_the_window(sandbox: Sandbox, #[case] window: u64, #[case] expected: &str) {
     let path = sandbox.file(b"foo");
@@ -67,7 +69,7 @@ fn fingerprint_follows_a_symlink(sandbox: Sandbox) {
 
     assert_eq!(
         fingerprint(&link, FINGERPRINT_SAMPLE_BYTES).unwrap(),
-        TEST_FOO_FINGERPRINT
+        FOO_FINGERPRINT
     );
 }
 

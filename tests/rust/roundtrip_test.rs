@@ -1,11 +1,10 @@
-use std::time::Duration;
-
-use preader::{Config, DEFAULT_BUFFER_CAPACITY, Error, IteratorBuild, IteratorRead};
+use preader::{
+    Config, DEFAULT_BUFFER_CAPACITY, Error, IteratorBuild, IteratorOptions, IteratorRead,
+};
 use rstest::rstest;
 
-const BUDGET: Duration = Duration::from_secs(60);
-
 use crate::common::{
+    constants::TEST_TIMEOUT,
     fixtures::sandbox,
     funcs::items,
     macros::{cycle::cycle, drain::drain},
@@ -128,7 +127,7 @@ fn lines_reject_binary_content(sandbox: Sandbox) {
 }
 
 #[rstest]
-#[timeout(BUDGET)]
+#[timeout(TEST_TIMEOUT)]
 fn percent_reaches_hundred_for_every_iterator(sandbox: Sandbox) {
     let reader = sandbox.reader();
     let text = seeded_text(1, SAMPLE);
@@ -142,7 +141,7 @@ fn percent_reaches_hundred_for_every_iterator(sandbox: Sandbox) {
 }
 
 #[rstest]
-#[timeout(BUDGET)]
+#[timeout(TEST_TIMEOUT)]
 fn resume_rebuilds_the_file_in_cycles(sandbox: Sandbox) {
     let plain = sandbox.reader();
     let cycling = sandbox.reader_with(Config {
@@ -184,9 +183,14 @@ fn options_window_the_byte_range(sandbox: Sandbox) {
     let reader = sandbox.reader();
     let content = seeded_bytes(1, SAMPLE);
     let path = sandbox.file(&content);
-    let bytes = items(reader.bytes(&path).start(100).end(500).build().unwrap());
-    let chunked = items(reader.chunks(&path).size(CHUNK).start(100).end(500).build().unwrap());
+    let options = IteratorOptions {
+        start: 100,
+        end: 500,
+        ..IteratorOptions::default()
+    };
+    let bytes = items(reader.bytes(&path).options(options).build().unwrap());
+    let chunked = items(reader.chunks(&path).size(CHUNK).options(options).build().unwrap());
 
-    assert_eq!(bytes, content[100..500]);
-    assert_eq!(chunked.concat(), content[100..500]);
+    assert_eq!(bytes, content[options.start as usize..options.end as usize]);
+    assert_eq!(chunked.concat(), bytes);
 }
