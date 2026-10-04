@@ -4,15 +4,17 @@ use preader::{Config, DEFAULT_AUTO_SAVE_STATE_BYTES, Error, IteratorBuild, Itera
 use rstest::rstest;
 
 use crate::common::{
-    constants::{
-        TEST_ALPHABET, TEST_OTHER_STATE_NAME, TEST_READ_FROM, TEST_REWOUND_TO, TEST_STATE_NAME,
-        TEST_UNSAFE_NAME,
-    },
+    constants::{TEST_ALPHABET, TEST_OTHER_STATE_NAME, TEST_STATE_NAME, TEST_UNSAFE_NAME},
     fixtures::sandbox,
     funcs::{consume, drain, items, take},
-    guards::Blocked,
-    macros::{asserts::assert_err_is, skip::skip},
+    macros::asserts::assert_err_is,
     sandbox::Sandbox,
+};
+#[cfg(unix)]
+use crate::common::{
+    constants::{TEST_READ_FROM, TEST_REWOUND_TO},
+    guards::Blocked,
+    macros::skip::skip,
 };
 
 const CONTENT_SIZE: u64 = TEST_ALPHABET.len() as u64;

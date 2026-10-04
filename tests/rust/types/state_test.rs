@@ -9,14 +9,16 @@ use preader::{
 };
 use rstest::rstest;
 
+#[cfg(unix)]
+use crate::common::{constants::TEST_NON_UTF8_NAME, guards::Blocked};
 use crate::common::{
     constants::{
-        TEST_FILE_NAME, TEST_FILE_PATH, TEST_LARGE_COPIES, TEST_LINE, TEST_NON_UTF8_NAME,
-        TEST_STATE_NAME, TEST_TRACKED_NAME, TEST_WINDOW,
+        TEST_FILE_NAME, TEST_FILE_PATH, TEST_LARGE_COPIES, TEST_LINE, TEST_STATE_NAME,
+        TEST_TRACKED_NAME, TEST_WINDOW,
     },
     fixtures::sandbox,
     funcs::{consume, drain, state_data, tamper},
-    guards::{Blocked, mtime, set_mtime, set_pre_epoch_mtime},
+    guards::{mtime, set_mtime, set_pre_epoch_mtime},
     macros::{
         asserts::{assert_err, assert_err_is},
         skip::skip,

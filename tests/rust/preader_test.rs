@@ -1,13 +1,19 @@
-use std::{ffi::OsString, fs, path::PathBuf};
+#[cfg(unix)]
+use std::fs;
+use std::{ffi::OsString, path::PathBuf};
 
 use preader::{Config, IteratorBuild, IteratorRead, PReader};
 use rstest::rstest;
 
+#[cfg(unix)]
 use crate::common::{
-    constants::{TEST_FILE_NAME, TEST_LINE, TEST_NON_UTF8_NAME, TEST_STATE_NAME},
+    constants::TEST_NON_UTF8_NAME,
+    macros::{asserts::assert_err, skip::skip},
+};
+use crate::common::{
+    constants::{TEST_FILE_NAME, TEST_LINE, TEST_STATE_NAME},
     fixtures::sandbox,
     funcs::{drain, items},
-    macros::{asserts::assert_err, skip::skip},
     sandbox::Sandbox,
 };
 

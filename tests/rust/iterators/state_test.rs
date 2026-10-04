@@ -1,15 +1,19 @@
 use std::fs;
 
-use preader::{Config, Error, IteratorBuild, PReader, STATE_FILE_EXTENSION};
+#[cfg(unix)]
+use preader::{Config, PReader};
+use preader::{Error, IteratorBuild, STATE_FILE_EXTENSION};
 use rstest::rstest;
 
+#[cfg(unix)]
+use crate::common::macros::skip::skip;
 use crate::common::{
     constants::{
         TEST_EVERY_DEPTH, TEST_LINE, TEST_NESTED_STATE_NAME, TEST_OTHER_STATE_NAME, TEST_STATE_NAME,
     },
     fixtures::sandbox,
     funcs::{names, native},
-    macros::{asserts::assert_err_is, skip::skip},
+    macros::asserts::assert_err_is,
     sandbox::Sandbox,
 };
 
@@ -17,6 +21,7 @@ fn every_depth() -> [String; 3] {
     TEST_EVERY_DEPTH.map(native)
 }
 
+#[cfg(unix)]
 fn outside_state(sandbox: &Sandbox) -> std::path::PathBuf {
     let path = sandbox.line_file();
     let elsewhere = PReader::from(Config {

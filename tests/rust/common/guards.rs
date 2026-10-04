@@ -1,10 +1,10 @@
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
 use std::{
     fs::{self, File, FileTimes},
-    path::{Path, PathBuf},
+    path::Path,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
+#[cfg(unix)]
+use std::{os::unix::fs::PermissionsExt, path::PathBuf};
 
 const PRE_EPOCH_OFFSET: Duration = Duration::from_secs(86_400);
 

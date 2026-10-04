@@ -230,7 +230,7 @@ fn path_fails_when_the_name_is_unsafe(sandbox: Sandbox, #[case] unsafe_name: (&s
 #[cfg(windows)]
 #[rstest]
 fn path_fails_when_a_windows_name_is_unsafe(sandbox: Sandbox) {
-    for name in crate::common::constants::WINDOWS_UNSAFE_NAMES {
+    for name in WINDOWS_UNSAFE_NAMES {
         assert!(sandbox.manager().path(name).is_err(), "{name}");
         assert!(sandbox.manager().tmp(name).is_err(), "{name}");
     }
