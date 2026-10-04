@@ -1,9 +1,10 @@
 pub mod constants;
+pub mod expected;
 pub mod fixtures;
+pub mod flows;
 pub mod funcs;
 pub mod guards;
-pub mod kinds;
 pub mod macros;
-pub mod oracle;
+pub mod matrix;
 pub mod rng;
 pub mod sandbox;

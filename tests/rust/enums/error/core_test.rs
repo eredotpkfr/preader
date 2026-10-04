@@ -92,7 +92,7 @@ fn mismatch_errors_are_transparent(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_missing_state_names_itself(sandbox: Sandbox) {
+fn missing_state_names_itself(sandbox: Sandbox) {
     let error = sandbox.states().load(TEST_MISSING_STATE_NAME).unwrap_err();
 
     assert!(matches!(&error, Error::NotFound(name) if name == TEST_MISSING_STATE_NAME));
@@ -103,7 +103,7 @@ fn a_missing_state_names_itself(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn an_inverted_range_reports_both_bounds(sandbox: Sandbox) {
+fn inverted_range_reports_both_bounds(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let error = sandbox.reader().bytes(&path).start(9).end(4).build().unwrap_err();
 
@@ -112,7 +112,7 @@ fn an_inverted_range_reports_both_bounds(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_directory_is_not_a_file(sandbox: Sandbox) {
+fn directory_is_not_a_file(sandbox: Sandbox) {
     let directory = sandbox.dir_at("folder").canonicalize().unwrap();
     let error = sandbox.reader().bytes(&directory).build().unwrap_err();
 
@@ -127,7 +127,7 @@ fn a_directory_is_not_a_file(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_transparent_variant_borrows_its_message(sandbox: Sandbox) {
+fn transparent_variant_borrows_its_message(sandbox: Sandbox) {
     let missing = sandbox.path().join("missing.bin");
     let error = sandbox.reader().bytes(&missing).build().unwrap_err();
     let Error::Io(inner) = &error else {

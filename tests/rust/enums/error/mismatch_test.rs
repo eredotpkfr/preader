@@ -94,7 +94,7 @@ fn identity_suggests_a_restart() {
 }
 
 #[rstest]
-fn a_mismatch_converts_into_an_error() {
+fn mismatch_converts_into_an_error() {
     let error = Error::from(checksum());
 
     assert!(matches!(error, Error::Mismatch(Mismatch::Checksum { .. })));

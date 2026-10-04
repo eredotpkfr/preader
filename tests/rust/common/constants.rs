@@ -45,7 +45,7 @@ pub const TEST_LINE_CONTENT: &[u8] = b"line-0\nline-1\nline-2\nline-3\nline-4\nl
 pub const TEST_BLANK_LINE_CONTENT: &[u8] = b"line-0\n\nline-2\n";
 pub const TEST_CRLF_CONTENT: &[u8] = b"line-0\r\nline-1\r\n";
 
-pub const TEST_DELIMITER: u8 = b',';
+pub const TEST_LINE_BOUNDARY: u8 = b'\n';
 pub const TEST_SEGMENTS: [&str; 10] = [
     "seg-0", "seg-1", "seg-2", "seg-3", "seg-4", "seg-5", "seg-6", "seg-7", "seg-8", "seg-9",
 ];
@@ -54,4 +54,11 @@ pub const TEST_SEGMENT_CONTENT: &[u8] =
 pub const TEST_BLANK_SEGMENT_CONTENT: &[u8] = b"seg-0,,seg-2,";
 
 pub const TEST_INVALID_UTF8: &[u8] = b"\xff";
+pub const TEST_INVALID_LINES: &[u8] = b"line-0\n\xff\xfe\nline-2\n";
+#[cfg(unix)]
+pub const TEST_NON_UTF8_NAME: &[u8] = b"data-\xff.bin";
+pub const TEST_WINDOW: usize = preader::FINGERPRINT_SAMPLE_BYTES as usize;
+pub const TEST_PAST_WINDOW: usize = TEST_WINDOW + 404;
+pub const TEST_UNSEEKABLE_POSITION: u64 = i64::MAX as u64 + 1;
+pub const TEST_UNSAFE_NAME: &str = "../../escape";
 pub const TEST_UNICODE_TEXT: &str = "café Ünicode 日本語 🦀";

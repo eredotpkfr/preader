@@ -1,5 +1,7 @@
 #[cfg(unix)]
-use std::{ffi::OsStr, os::unix::ffi::OsStrExt, os::unix::fs::symlink};
+use std::os::unix::fs::symlink;
+#[cfg(unix)]
+use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 use std::{fs, path::Path};
 
 use preader::{
@@ -228,7 +230,7 @@ fn path_fails_when_a_windows_name_is_unsafe(sandbox: Sandbox) {
 
 #[cfg(unix)]
 #[rstest]
-fn path_fails_when_the_name_escapes_through_a_symlink(sandbox: Sandbox) {
+fn path_fails_when_name_escapes_through_symlink(sandbox: Sandbox) {
     let outside = sandbox.dir_at("outside");
 
     fs::create_dir_all(sandbox.state_dir()).unwrap();

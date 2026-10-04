@@ -39,7 +39,7 @@ fn from_config_ignores_unrelated_knobs() {
 #[case::never(false, 0, false)]
 #[case::at_the_end(true, 0, true)]
 #[case::every_byte(true, 1, true)]
-fn the_policy_decides_whether_a_state_is_written(
+fn policy_decides_whether_a_state_is_written(
     sandbox: Sandbox,
     #[case] auto_save_state: bool,
     #[case] threshold: u64,

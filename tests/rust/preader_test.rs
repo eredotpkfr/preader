@@ -17,7 +17,7 @@ fn new_matches_the_default_config() {
 }
 
 #[rstest]
-fn a_config_converts_into_a_reader(sandbox: Sandbox) {
+fn config_converts_into_a_reader(sandbox: Sandbox) {
     let config = sandbox.config();
 
     assert_eq!(*PReader::from(config.clone()).config(), config);
@@ -35,7 +35,7 @@ fn states_point_at_the_configured_directory(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_file_argument_accepts_every_ownership_shape(sandbox: Sandbox) {
+fn file_argument_accepts_every_ownership_shape(sandbox: Sandbox) {
     let owned = sandbox.line_file();
     let text = owned.to_str().unwrap().to_owned();
     let os = OsString::from(&text);
@@ -59,7 +59,7 @@ fn a_file_argument_accepts_every_ownership_shape(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_state_argument_accepts_every_name_shape(sandbox: Sandbox) {
+fn state_argument_accepts_every_name_shape(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let name = TEST_STATE_NAME.to_owned();
     let reader = sandbox.reader();
@@ -117,7 +117,7 @@ fn every_iterator_counts_invalid_bytes(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn an_unnormalized_path_resolves_to_the_same_name(sandbox: Sandbox) {
+fn unnormalized_path_resolves_to_same_name(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let detoured = sandbox.path().join(".").join(TEST_FILE_NAME);
     let reader = sandbox.reader();
@@ -129,7 +129,7 @@ fn an_unnormalized_path_resolves_to_the_same_name(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_long_path_still_produces_a_digest_name(sandbox: Sandbox) {
+fn long_path_still_produces_a_digest_name(sandbox: Sandbox) {
     let path = sandbox.write(&format!("{}.bin", "y".repeat(180)), TEST_LINE);
 
     assert_eq!(
@@ -145,7 +145,7 @@ fn a_long_path_still_produces_a_digest_name(sandbox: Sandbox) {
 #[case::accents("café.bin")]
 #[case::ideographs("日本語.bin")]
 #[case::semicolon("a;b.bin")]
-fn an_unusual_path_is_read_verbatim(sandbox: Sandbox, #[case] name: &str) {
+fn unusual_path_is_read_verbatim(sandbox: Sandbox, #[case] name: &str) {
     let path = sandbox.write(name, TEST_LINE);
 
     assert_eq!(
@@ -156,7 +156,7 @@ fn an_unusual_path_is_read_verbatim(sandbox: Sandbox, #[case] name: &str) {
 
 #[cfg(unix)]
 #[rstest]
-fn a_symlink_is_resolved_to_its_target(sandbox: Sandbox) {
+fn symlink_is_resolved_to_its_target(sandbox: Sandbox) {
     use std::os::unix::fs::symlink;
 
     let target = sandbox.line_file();
@@ -171,7 +171,7 @@ fn a_symlink_is_resolved_to_its_target(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_directory_is_rejected(sandbox: Sandbox) {
+fn directory_is_rejected(sandbox: Sandbox) {
     let directory = sandbox.dir_at("a-directory");
     let error = sandbox.reader().bytes(&directory).build().unwrap_err();
 
@@ -180,7 +180,7 @@ fn a_directory_is_rejected(sandbox: Sandbox) {
 
 #[cfg(unix)]
 #[rstest]
-fn a_socket_is_rejected(sandbox: Sandbox) {
+fn socket_is_rejected(sandbox: Sandbox) {
     use std::os::unix::net::UnixListener;
 
     let socket = sandbox.path().join("a-socket");
@@ -192,7 +192,7 @@ fn a_socket_is_rejected(sandbox: Sandbox) {
 
 #[cfg(unix)]
 #[rstest]
-fn a_non_utf8_path_is_rejected(sandbox: Sandbox) {
+fn non_utf8_path_is_rejected(sandbox: Sandbox) {
     use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 
     let path = sandbox.path().join(OsStr::from_bytes(b"data-\xff.bin"));

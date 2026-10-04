@@ -4,54 +4,21 @@ use std::{fs, io::ErrorKind, path::PathBuf, time::Duration};
 
 use chrono::{DateTime, Timelike, Utc};
 use preader::{
-    Config, Error, FINGERPRINT_SAMPLE_BYTES, FileMetadata, IteratorBuild, IteratorRead, PReader,
-    STATE_FILE_EXTENSION, State, StateData, StateManager, Timestamps, fingerprint,
+    Config, Error, FINGERPRINT_SAMPLE_BYTES, IteratorBuild, IteratorRead, PReader,
+    STATE_FILE_EXTENSION, StateManager, fingerprint,
 };
 use rstest::rstest;
 
 use crate::common::{
     constants::{
-        TEST_FILE_NAME, TEST_FILE_PATH, TEST_LARGE_COPIES, TEST_LINE, TEST_LINE_FINGERPRINT,
-        TEST_STATE_NAME, TEST_TRACKED_NAME,
+        TEST_FILE_NAME, TEST_FILE_PATH, TEST_LARGE_COPIES, TEST_LINE, TEST_NON_UTF8_NAME,
+        TEST_PAST_WINDOW, TEST_STATE_NAME, TEST_TRACKED_NAME, TEST_WINDOW,
     },
     fixtures::sandbox,
+    funcs::{consume, state_data, tamper},
     guards::{Blocked, mtime, set_mtime, set_pre_epoch_mtime},
     sandbox::Sandbox,
 };
-
-const WINDOW: usize = FINGERPRINT_SAMPLE_BYTES as usize;
-const PAST_WINDOW: usize = WINDOW + 404;
-#[cfg(unix)]
-const NON_UTF8_NAME: &[u8] = b"data-\xff.bin";
-
-fn data(path: PathBuf) -> StateData {
-    let stamp = DateTime::from_timestamp(1_700_000_000, 0).unwrap();
-
-    StateData {
-        name: TEST_STATE_NAME.to_owned(),
-        file: FileMetadata {
-            path,
-            size: TEST_LINE.len() as u64,
-            mtime: stamp,
-            fingerprint: TEST_LINE_FINGERPRINT.to_owned(),
-        },
-        position: 7,
-        timestamps: Timestamps {
-            created_at: stamp,
-            updated_at: stamp,
-        },
-        checksum: String::new(),
-    }
-}
-
-fn tampered(state: &State) {
-    let payload = state.path().unwrap();
-    let patched = fs::read_to_string(&payload)
-        .unwrap()
-        .replace("\"position\": 0", "\"position\": 999");
-
-    fs::write(&payload, patched).unwrap();
-}
 
 #[rstest]
 fn fields_describe_the_tracked_file(sandbox: Sandbox) {
@@ -67,14 +34,14 @@ fn fields_describe_the_tracked_file(sandbox: Sandbox) {
 
 #[rstest]
 fn eq_compares_the_data() {
-    let one = StateManager::default().state(data(PathBuf::from(TEST_FILE_PATH)));
-    let mut changed = data(PathBuf::from(TEST_FILE_PATH));
+    let one = StateManager::default().state(state_data(PathBuf::from(TEST_FILE_PATH)));
+    let mut changed = state_data(PathBuf::from(TEST_FILE_PATH));
 
     changed.position += 1;
 
     assert_eq!(
         one,
-        StateManager::default().state(data(PathBuf::from(TEST_FILE_PATH)))
+        StateManager::default().state(state_data(PathBuf::from(TEST_FILE_PATH)))
     );
     assert_ne!(one, StateManager::default().state(changed));
 }
@@ -85,8 +52,8 @@ fn eq_ignores_the_manager() {
         state_dir: PathBuf::from("/tmp/preader-elsewhere"),
         ..Config::default()
     };
-    let one = StateManager::from(&elsewhere).state(data(PathBuf::from(TEST_FILE_PATH)));
-    let other = StateManager::default().state(data(PathBuf::from(TEST_FILE_PATH)));
+    let one = StateManager::from(&elsewhere).state(state_data(PathBuf::from(TEST_FILE_PATH)));
+    let other = StateManager::default().state(state_data(PathBuf::from(TEST_FILE_PATH)));
 
     assert_ne!(one.path().unwrap(), other.path().unwrap());
     assert_eq!(one, other);
@@ -174,6 +141,23 @@ fn percent_reads_the_stored_numbers(
 }
 
 #[rstest]
+fn percent_tracks_the_position(sandbox: Sandbox) {
+    let path = sandbox.file(&b"a".repeat(4));
+    let mut bytes = sandbox.reader().bytes(&path).build().unwrap();
+
+    assert_eq!(bytes.state().percent(), 0.0);
+
+    bytes.read().unwrap();
+    bytes.read().unwrap();
+
+    assert_eq!(bytes.state().percent(), 50.0);
+
+    while bytes.read().unwrap().is_some() {}
+
+    assert_eq!(bytes.state().percent(), 100.0);
+}
+
+#[rstest]
 fn verify_passes_when_the_file_is_untouched(sandbox: Sandbox) {
     let path = sandbox.large_file();
 
@@ -184,7 +168,7 @@ fn verify_passes_when_the_file_is_untouched(sandbox: Sandbox) {
 fn verify_fails_on_a_tampered_payload(sandbox: Sandbox) {
     let state = sandbox.stored(&sandbox.large_file(), TEST_STATE_NAME);
 
-    tampered(&state);
+    tamper(&state);
 
     let error = sandbox.lenient().states().load(TEST_STATE_NAME).unwrap().verify().unwrap_err();
 
@@ -195,11 +179,11 @@ fn verify_fails_on_a_tampered_payload(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn verify_reports_the_checksum_before_the_file(sandbox: Sandbox) {
+fn verify_reports_checksum_before_file(sandbox: Sandbox) {
     let path = sandbox.large_file();
     let state = sandbox.stored(&path, TEST_STATE_NAME);
 
-    tampered(&state);
+    tamper(&state);
 
     let loaded = sandbox.lenient().states().load(TEST_STATE_NAME).unwrap();
 
@@ -236,7 +220,7 @@ fn verify_fails_when_the_mtime_changed(sandbox: Sandbox) {
 
 #[rstest]
 #[case::inside_the_window(10, true)]
-#[case::past_the_window(PAST_WINDOW as u64, false)]
+#[case::past_the_window(TEST_PAST_WINDOW as u64, false)]
 fn verify_watches_only_the_fingerprint_window(
     sandbox: Sandbox,
     #[case] offset: u64,
@@ -306,8 +290,8 @@ fn verify_suggests_a_resync(sandbox: Sandbox) {
 #[cfg(unix)]
 #[rstest]
 fn verify_fails_when_the_path_is_not_utf8(sandbox: Sandbox) {
-    let path = PathBuf::from(OsStr::from_bytes(NON_UTF8_NAME));
-    let state = StateManager::from(&sandbox.config()).state(data(path));
+    let path = PathBuf::from(OsStr::from_bytes(TEST_NON_UTF8_NAME));
+    let state = StateManager::from(&sandbox.config()).state(state_data(path));
 
     assert!(state.verify().unwrap_err().to_string().contains("invalid UTF-8"));
 }
@@ -327,7 +311,7 @@ fn resync_updates_the_file_metadata(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn resync_keeps_the_name_position_and_created_at(sandbox: Sandbox) {
+fn resync_keeps_name_position_and_created_at(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let mut bytes = sandbox.reader().bytes(&path).state(TEST_STATE_NAME).build().unwrap();
 
@@ -361,7 +345,7 @@ fn resync_does_not_mutate_the_original(sandbox: Sandbox) {
 #[case::grown_with_a_changed_prefix(TEST_LINE, 25, b"bar\n", 27)]
 #[case::replaced_at_the_same_size(TEST_LINE, 25, b"bar\n", 25)]
 #[case::emptied(TEST_LINE, 25, b"", 0)]
-#[case::truncated_at_the_window(b"a", WINDOW, b"a", WINDOW - 1)]
+#[case::truncated_at_the_window(b"a", TEST_WINDOW, b"a", TEST_WINDOW - 1)]
 fn resync_rejects_a_lost_prefix(
     sandbox: Sandbox,
     #[case] before: &[u8],
@@ -419,7 +403,7 @@ fn resync_clamps_the_position_to_the_new_size(sandbox: Sandbox) {
 fn resync_ignores_changes_past_the_window(sandbox: Sandbox) {
     let mut after = TEST_LINE.repeat(TEST_LARGE_COPIES);
 
-    after[PAST_WINDOW] = b'\xff';
+    after[TEST_PAST_WINDOW] = b'\xff';
 
     let saved = sandbox.recorded(&TEST_LINE.repeat(TEST_LARGE_COPIES), 6000);
     let path = sandbox.write(TEST_TRACKED_NAME, &after);
@@ -440,8 +424,8 @@ fn resync_accepts_anything_for_an_empty_file(sandbox: Sandbox) {
 }
 
 #[rstest]
-#[case::at_the_window(WINDOW, WINDOW, 100, 100, 100.0 * 100.0 / WINDOW as f64)]
-#[case::past_the_window(WINDOW + 1, WINDOW, WINDOW as u64 + 1, WINDOW as u64, 100.0)]
+#[case::at_the_window(TEST_WINDOW, TEST_WINDOW, 100, 100, 100.0 * 100.0 / TEST_WINDOW as f64)]
+#[case::past_the_window(TEST_WINDOW + 1, TEST_WINDOW, TEST_WINDOW as u64 + 1, TEST_WINDOW as u64, 100.0)]
 fn resync_accepts_at_the_window_edge(
     sandbox: Sandbox,
     #[case] before: usize,
@@ -462,7 +446,7 @@ fn resync_accepts_at_the_window_edge(
 #[case::replaced(b"bar\n", 25, 50.0)]
 #[case::shrunk(TEST_LINE, 2, 625.0)]
 #[case::emptied(b"", 0, 5000.0)]
-fn resync_trusts_the_path_without_verification(
+fn resync_trusts_path_without_verification(
     sandbox: Sandbox,
     #[case] unit: &[u8],
     #[case] copies: usize,
@@ -489,7 +473,7 @@ fn resync_trusts_the_path_without_verification(
 #[rstest]
 #[case::missing("missing.bin", false)]
 #[case::a_directory("elsewhere", true)]
-fn resync_still_checks_the_path_without_verification(
+fn resync_still_checks_path_without_verification(
     sandbox: Sandbox,
     #[case] name: &str,
     #[case] directory: bool,
@@ -507,7 +491,7 @@ fn resync_still_checks_the_path_without_verification(
 }
 
 #[rstest]
-fn resync_keeps_a_position_that_equals_the_size(sandbox: Sandbox) {
+fn resync_keeps_position_that_equals_size(sandbox: Sandbox) {
     let content = TEST_LINE.repeat(25);
     let saved = sandbox.recorded(&content, 100);
     let path = sandbox.write(TEST_TRACKED_NAME, &content);
@@ -554,7 +538,7 @@ fn resync_reseals_a_tampered_state(sandbox: Sandbox) {
     let path = sandbox.file(&b"a".repeat(20));
     let loaded = sandbox.stored(&path, TEST_STATE_NAME);
 
-    tampered(&loaded);
+    tamper(&loaded);
 
     let reloaded = sandbox.lenient().states().load(TEST_STATE_NAME).unwrap();
 
@@ -591,7 +575,7 @@ fn resync_keeps_the_state_dir_for_the_save(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn resync_fails_when_the_mtime_precedes_the_epoch(sandbox: Sandbox) {
+fn resync_fails_when_mtime_precedes_epoch(sandbox: Sandbox) {
     let content = TEST_LINE.repeat(25);
     let saved = sandbox.recorded(&content, 5);
     let path = sandbox.path().join(TEST_TRACKED_NAME);
@@ -624,7 +608,7 @@ fn resync_accepts_every_path_shape(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_resynced_state_is_rejected_for_another_file(sandbox: Sandbox) {
+fn resynced_state_is_rejected_for_another_file(sandbox: Sandbox) {
     let first = sandbox.write("a.bin", &b"a".repeat(10));
     let second = sandbox.write("b.bin", &b"b".repeat(10));
     let resynced = sandbox.state(&first).resync(&first).unwrap();
@@ -663,7 +647,7 @@ fn resync_fails_when_the_path_is_a_directory(sandbox: Sandbox, #[case] linked: b
 #[case::missing(false)]
 #[case::a_symlink_loop(true)]
 #[cfg(unix)]
-fn resync_fails_when_the_path_cannot_be_resolved(sandbox: Sandbox, #[case] looped: bool) {
+fn resync_fails_when_path_cannot_be_resolved(sandbox: Sandbox, #[case] looped: bool) {
     use std::os::unix::fs::symlink;
 
     let state = sandbox.state(&sandbox.line_file());
@@ -712,13 +696,35 @@ fn resync_canonicalizes_the_path(sandbox: Sandbox, #[case] linked: bool) {
 fn resync_fails_when_the_path_is_not_utf8(sandbox: Sandbox) {
     let content = TEST_LINE.repeat(25);
     let saved = sandbox.recorded(&content, 5);
-    let odd = sandbox.path().join(OsStr::from_bytes(NON_UTF8_NAME));
+    let odd = sandbox.path().join(OsStr::from_bytes(TEST_NON_UTF8_NAME));
 
     if fs::write(&odd, &content).is_err() {
         return;
     }
 
     assert!(saved.resync(&odd).unwrap_err().to_string().contains("invalid UTF-8"));
+}
+
+#[cfg(unix)]
+#[rstest]
+fn resync_fails_when_the_file_is_unreadable(sandbox: Sandbox) {
+    let content = TEST_LINE.repeat(25);
+    let saved = sandbox.recorded(&content, 5);
+    let path = sandbox.path().join(TEST_TRACKED_NAME);
+    let mut blocked = Blocked::default();
+
+    if !Blocked::enforced(&sandbox.path().join("probe")) {
+        return;
+    }
+
+    blocked.block(&path);
+
+    let error = saved.resync(&path).unwrap_err();
+
+    assert!(
+        matches!(&error, Error::Io(io) if io.kind() == ErrorKind::PermissionDenied),
+        "{error}"
+    );
 }
 
 #[rstest]
@@ -769,9 +775,7 @@ fn save_refreshes_the_checksum(sandbox: Sandbox) {
     let mut bytes = sandbox.reader().bytes(&path).state(TEST_STATE_NAME).build().unwrap();
     let before = bytes.state().checksum().unwrap();
 
-    for _ in 0..5 {
-        bytes.read().unwrap();
-    }
+    consume(&mut bytes, 5);
 
     bytes.state().save().unwrap();
     drop(bytes);
@@ -787,9 +791,7 @@ fn save_does_not_disturb_the_iterator(sandbox: Sandbox) {
     let path = sandbox.large_file();
     let mut bytes = sandbox.reader().bytes(&path).state(TEST_STATE_NAME).build().unwrap();
 
-    for _ in 0..5 {
-        bytes.read().unwrap();
-    }
+    consume(&mut bytes, 5);
 
     bytes.state().save().unwrap();
 
@@ -836,7 +838,7 @@ fn save_fails_when_the_state_dir_is_a_file(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn save_fails_when_the_state_path_is_a_directory(sandbox: Sandbox) {
+fn save_fails_when_state_path_is_directory(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let mut state = sandbox.state(&path);
 
@@ -856,8 +858,8 @@ fn save_fails_when_the_name_is_too_long(sandbox: Sandbox) {
 #[cfg(unix)]
 #[rstest]
 fn save_fails_when_the_path_is_not_utf8(sandbox: Sandbox) {
-    let path = PathBuf::from(OsStr::from_bytes(NON_UTF8_NAME));
-    let mut state = StateManager::from(&sandbox.config()).state(data(path));
+    let path = PathBuf::from(OsStr::from_bytes(TEST_NON_UTF8_NAME));
+    let mut state = StateManager::from(&sandbox.config()).state(state_data(path));
 
     assert!(state.save().unwrap_err().to_string().contains("invalid UTF-8"));
 }
@@ -865,7 +867,7 @@ fn save_fails_when_the_path_is_not_utf8(sandbox: Sandbox) {
 #[rstest]
 #[case::path_rejected("../../etc/passwd")]
 #[case::commit_failed(TEST_STATE_NAME)]
-fn save_leaves_the_state_untouched_when_it_fails(sandbox: Sandbox, #[case] name: &str) {
+fn save_leaves_state_untouched_when_it_fails(sandbox: Sandbox, #[case] name: &str) {
     let path = sandbox.line_file();
     let mut state = sandbox.named_state(&path, name);
     let before = state.timestamps.updated_at;
@@ -923,7 +925,7 @@ fn load_fails_when_the_file_is_deleted(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_reloaded_state_matches_to_the_second(sandbox: Sandbox) {
+fn reloaded_state_matches_to_the_second(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let mut bytes = sandbox.reader().bytes(&path).state(TEST_STATE_NAME).build().unwrap();
 
@@ -952,7 +954,7 @@ fn a_reloaded_state_matches_to_the_second(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn the_payload_carries_every_field(sandbox: Sandbox) {
+fn payload_carries_every_field(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let mut state = sandbox.state(&path);
 
@@ -978,7 +980,7 @@ fn the_payload_carries_every_field(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn the_payload_keeps_the_checksum_last(sandbox: Sandbox) {
+fn payload_keeps_the_checksum_last(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let mut state = sandbox.state(&path);
     let text = fs::read_to_string(state.save().unwrap()).unwrap();
@@ -987,43 +989,4 @@ fn the_payload_keeps_the_checksum_last(sandbox: Sandbox) {
     for key in ["\"name\"", "\"file\"", "\"position\"", "\"timestamps\""] {
         assert!(at("\"_checksum\"") > at(key), "{key}");
     }
-}
-
-#[rstest]
-fn percent_tracks_the_position(sandbox: Sandbox) {
-    let path = sandbox.file(&b"a".repeat(4));
-    let mut bytes = sandbox.reader().bytes(&path).build().unwrap();
-
-    assert_eq!(bytes.state().percent(), 0.0);
-
-    bytes.read().unwrap();
-    bytes.read().unwrap();
-
-    assert_eq!(bytes.state().percent(), 50.0);
-
-    while bytes.read().unwrap().is_some() {}
-
-    assert_eq!(bytes.state().percent(), 100.0);
-}
-
-#[cfg(unix)]
-#[rstest]
-fn resync_fails_when_the_file_is_unreadable(sandbox: Sandbox) {
-    let content = TEST_LINE.repeat(25);
-    let saved = sandbox.recorded(&content, 5);
-    let path = sandbox.path().join(TEST_TRACKED_NAME);
-    let mut blocked = Blocked::default();
-
-    if !Blocked::enforced(&sandbox.path().join("probe")) {
-        return;
-    }
-
-    blocked.block(&path);
-
-    let error = saved.resync(&path).unwrap_err();
-
-    assert!(
-        matches!(&error, Error::Io(io) if io.kind() == ErrorKind::PermissionDenied),
-        "{error}"
-    );
 }

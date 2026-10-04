@@ -13,7 +13,7 @@ fn every_variant_describes_itself(#[case] error: PathError, #[case] expected: &s
 }
 
 #[rstest]
-fn a_path_error_converts_into_an_error() {
+fn path_error_converts_into_an_error() {
     let error = preader::Error::from(PathError::Symlink(TEST_STATE_NAME.to_owned()));
 
     assert!(matches!(error, preader::Error::Path(PathError::Symlink(_))));

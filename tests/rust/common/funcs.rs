@@ -1,7 +1,15 @@
-use std::path::MAIN_SEPARATOR_STR;
+use std::{
+    fs,
+    path::{MAIN_SEPARATOR_STR, PathBuf},
+};
 
-use preader::{Result, StateRegistry};
+use chrono::DateTime;
+use preader::{FileMetadata, Result, State, StateData, StateRegistry, Timestamps};
 use sha2::{Digest, Sha256};
+
+use crate::common::constants::{TEST_LINE, TEST_LINE_FINGERPRINT, TEST_STATE_NAME};
+
+const STAMP: i64 = 1_700_000_000;
 
 pub trait Item {
     fn bytes(self) -> Vec<u8>;
@@ -39,6 +47,13 @@ where
     iterator.map(|item| item.map(Item::bytes)).collect()
 }
 
+pub fn consume<I, T: Item>(iterator: &mut I, count: usize)
+where
+    I: Iterator<Item = Result<T>>,
+{
+    take(iterator, count);
+}
+
 pub fn take<I, T: Item>(iterator: &mut I, count: usize) -> Vec<Vec<u8>>
 where
     I: Iterator<Item = Result<T>>,
@@ -63,4 +78,33 @@ pub fn names(registry: &StateRegistry) -> Vec<String> {
 
     names.sort();
     names
+}
+
+pub fn state_data(path: PathBuf) -> StateData {
+    let stamp = DateTime::from_timestamp(STAMP, 0).unwrap();
+
+    StateData {
+        name: TEST_STATE_NAME.to_owned(),
+        file: FileMetadata {
+            path,
+            size: TEST_LINE.len() as u64,
+            mtime: stamp,
+            fingerprint: TEST_LINE_FINGERPRINT.to_owned(),
+        },
+        position: 7,
+        timestamps: Timestamps {
+            created_at: stamp,
+            updated_at: stamp,
+        },
+        checksum: String::new(),
+    }
+}
+
+pub fn tamper(state: &State) {
+    let payload = state.path().unwrap();
+    let patched = fs::read_to_string(&payload)
+        .unwrap()
+        .replace("\"position\": 0", "\"position\": 999");
+
+    fs::write(&payload, patched).unwrap();
 }

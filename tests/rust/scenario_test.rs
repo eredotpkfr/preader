@@ -1,40 +1,41 @@
 use std::fs;
 
-use preader::{Config, Error, IteratorBuild, IteratorRead, PReader, STATE_FILE_EXTENSION};
+use preader::{
+    Config, DEFAULT_BUFFER_CAPACITY, DEFAULT_DELIMITER, Error, IteratorBuild, IteratorRead,
+    PReader, STATE_FILE_EXTENSION,
+};
 use rstest::rstest;
 
 use crate::common::{
     constants::{
-        TEST_ALPHABET, TEST_BLANK_LINE_CONTENT, TEST_DELIMITER, TEST_LINE_CONTENT,
-        TEST_OTHER_STATE_NAME, TEST_SEGMENT_CONTENT, TEST_STATE_NAME,
+        TEST_ALPHABET, TEST_BLANK_LINE_CONTENT, TEST_LINE_CONTENT, TEST_OTHER_STATE_NAME,
+        TEST_SEGMENT_CONTENT, TEST_STATE_NAME, TEST_UNSAFE_NAME,
     },
     fixtures::sandbox,
+    flows::{FLOWS, LOSSLESS_FLOWS, Plan},
     funcs::{items, texts},
-    kinds::{KINDS, LOSSLESS_KINDS, Setup},
     sandbox::Sandbox,
 };
-
-const UNSAFE_NAME: &str = "../../escape";
 
 #[rstest]
 #[case::tiny(1)]
 #[case::uneven(3)]
-#[case::large(65_536)]
-fn the_buffer_capacity_does_not_change_the_output(sandbox: Sandbox, #[case] capacity: usize) {
+#[case::large(DEFAULT_BUFFER_CAPACITY)]
+fn buffer_capacity_does_not_change_the_output(sandbox: Sandbox, #[case] capacity: usize) {
     let path = sandbox.file(TEST_LINE_CONTENT);
     let capped = sandbox.capped(capacity);
     let plain = sandbox.reader();
 
-    for kind in KINDS {
-        let expected = kind.read(&plain, &path, Setup::default()).unwrap().0;
-        let found = kind.read(&capped, &path, Setup::default()).unwrap().0;
+    for flow in FLOWS {
+        let expected = flow.read(&plain, &path, Plan::default()).unwrap().0;
+        let found = flow.read(&capped, &path, Plan::default()).unwrap().0;
 
-        assert_eq!(found, expected, "{kind:?}");
+        assert_eq!(found, expected, "{flow:?}");
     }
 }
 
 #[rstest]
-fn a_resume_skips_again_when_the_position_equals_the_start(sandbox: Sandbox) {
+fn resume_skips_again_when_position_equals_start(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let reader = sandbox.resuming();
     let mut first = reader.bytes(&path).state(TEST_STATE_NAME).start(2).limit(1).build().unwrap();
@@ -50,7 +51,7 @@ fn a_resume_skips_again_when_the_position_equals_the_start(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_chunk_start_is_not_realigned_to_the_grid(sandbox: Sandbox) {
+fn chunk_start_is_not_realigned_to_the_grid(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let read = items(sandbox.reader().chunks(&path).size(4).start(1).limit(1).build().unwrap());
 
@@ -58,7 +59,7 @@ fn a_chunk_start_is_not_realigned_to_the_grid(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_resume_honours_a_different_chunk_size(sandbox: Sandbox) {
+fn resume_honours_a_different_chunk_size(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let reader = sandbox.reader();
     let mut chunks = reader.chunks(&path).state(TEST_STATE_NAME).size(4).limit(1).build().unwrap();
@@ -77,13 +78,13 @@ fn a_resume_honours_a_different_chunk_size(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_resume_honours_a_different_delimiter(sandbox: Sandbox) {
+fn resume_honours_a_different_delimiter(sandbox: Sandbox) {
     let path = sandbox.file(b"a,b;c,d");
     let reader = sandbox.reader();
     let mut segments = reader
         .delimiter(&path)
         .state(TEST_STATE_NAME)
-        .character(TEST_DELIMITER)
+        .character(DEFAULT_DELIMITER)
         .limit(1)
         .build()
         .unwrap();
@@ -102,7 +103,7 @@ fn a_resume_honours_a_different_delimiter(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_resume_honours_a_different_keepends(sandbox: Sandbox) {
+fn resume_honours_a_different_keepends(sandbox: Sandbox) {
     let path = sandbox.file(TEST_LINE_CONTENT);
     let reader = sandbox.reader();
     let mut lines = reader.lines(&path).state(TEST_STATE_NAME).limit(1).build().unwrap();
@@ -118,6 +119,47 @@ fn a_resume_honours_a_different_keepends(sandbox: Sandbox) {
     let read = items(reader.lines(&path).state(state).keepends(true).limit(1).build().unwrap());
 
     assert_eq!(texts(&read), ["line-1\n"]);
+}
+
+#[rstest]
+fn skip_counts_blank_items_before_skip_empty(sandbox: Sandbox) {
+    let path = sandbox.file(TEST_BLANK_LINE_CONTENT);
+    let reader = sandbox.reader();
+    let kept = items(reader.lines(&path).skip(1).build().unwrap());
+    let filtered = items(reader.lines(&path).skip(1).skip_empty(true).build().unwrap());
+
+    assert_eq!(texts(&kept), ["", "line-2"]);
+    assert_eq!(texts(&filtered), ["line-2"]);
+}
+
+#[rstest]
+fn skip_stops_at_a_truncation(sandbox: Sandbox) {
+    let path = sandbox.file(TEST_SEGMENT_CONTENT);
+    let reader = sandbox.reader_with(Config {
+        verify_state: false,
+        auto_load_state: true,
+        ..sandbox.config()
+    });
+
+    sandbox.saved(&path, TEST_STATE_NAME);
+    sandbox.truncate(&path, 8);
+
+    let mut segments = reader.delimiter(&path).state(TEST_STATE_NAME).skip(3).build().unwrap();
+
+    assert!(segments.read().unwrap().is_none());
+}
+
+#[rstest]
+fn every_byte_value_survives_a_round_trip(sandbox: Sandbox) {
+    let content: Vec<u8> = (0..=255).collect();
+    let path = sandbox.file(&content);
+
+    for flow in LOSSLESS_FLOWS {
+        let (read, state) = flow.read(&sandbox.reader(), &path, Plan::default()).unwrap();
+
+        assert_eq!(read.concat(), content, "{flow:?}");
+        assert_eq!(state.position, content.len() as u64, "{flow:?}");
+    }
 }
 
 #[rstest]
@@ -155,7 +197,7 @@ fn auto_load_ignores_an_unverifiable_state(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn auto_load_resumes_a_stale_state_without_verification(sandbox: Sandbox) {
+fn auto_load_resumes_stale_state_without_verification(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let reader = sandbox.reader_with(Config {
         auto_load_state: true,
@@ -174,7 +216,7 @@ fn auto_load_resumes_a_stale_state_without_verification(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_state_object_keeps_its_own_state_dir(sandbox: Sandbox) {
+fn state_object_keeps_its_own_state_dir(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let mut owner = sandbox.autosaving(0).bytes(&path).state(TEST_STATE_NAME).build().unwrap();
     let borrowed = owner.state().clone();
@@ -199,7 +241,7 @@ fn a_state_object_keeps_its_own_state_dir(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn changing_the_state_name_leaves_the_old_state_in_place(sandbox: Sandbox) {
+fn changing_state_name_leaves_old_state_in_place(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
 
     sandbox.saved(&path, TEST_STATE_NAME);
@@ -211,7 +253,7 @@ fn changing_the_state_name_leaves_the_old_state_in_place(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn changing_the_state_dir_creates_a_fresh_state(sandbox: Sandbox) {
+fn changing_state_dir_creates_fresh_state(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let mut bytes = sandbox.reader().bytes(&path).state(TEST_STATE_NAME).build().unwrap();
 
@@ -234,7 +276,7 @@ fn changing_the_state_dir_creates_a_fresh_state(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn the_autoname_changes_when_the_file_moves(sandbox: Sandbox) {
+fn autoname_changes_when_the_file_moves(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let reader = sandbox.resuming();
     let mut bytes = reader.bytes(&path).build().unwrap();
@@ -252,7 +294,7 @@ fn the_autoname_changes_when_the_file_moves(sandbox: Sandbox) {
 
 #[cfg(unix)]
 #[rstest]
-fn two_symlinks_to_one_target_share_the_autoname(sandbox: Sandbox) {
+fn symlinks_to_one_target_share_the_autoname(sandbox: Sandbox) {
     use std::os::unix::fs::symlink;
 
     let real = sandbox.write("real.bin", TEST_ALPHABET);
@@ -273,7 +315,7 @@ fn two_symlinks_to_one_target_share_the_autoname(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_deleted_tracked_file_fails_the_build(sandbox: Sandbox) {
+fn deleted_tracked_file_fails_the_build(sandbox: Sandbox) {
     let tracked = sandbox.write("tracked.bin", TEST_ALPHABET);
     let untracked = sandbox.write("untracked.bin", TEST_ALPHABET);
     let reader = sandbox.lenient();
@@ -290,7 +332,7 @@ fn a_deleted_tracked_file_fails_the_build(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_file_replaced_by_a_directory_fails_the_read(sandbox: Sandbox) {
+fn file_replaced_by_directory_fails_read(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let reader = sandbox.lenient();
     let state = sandbox.named_state(&path, TEST_STATE_NAME);
@@ -308,14 +350,14 @@ fn a_file_replaced_by_a_directory_fails_the_read(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_save_error_stops_the_read_after_a_truncation(sandbox: Sandbox) {
+fn save_error_stops_read_after_truncation(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let reader = sandbox.reader_with(Config {
         auto_save_state: true,
         buffer_capacity: 1,
         ..sandbox.config()
     });
-    let mut bytes = reader.bytes(&path).state(UNSAFE_NAME).build().unwrap();
+    let mut bytes = reader.bytes(&path).state(TEST_UNSAFE_NAME).build().unwrap();
 
     bytes.read().unwrap();
     sandbox.truncate(&path, 1);
@@ -326,10 +368,10 @@ fn a_save_error_stops_the_read_after_a_truncation(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_save_error_stops_the_read_on_a_skipped_item(sandbox: Sandbox) {
+fn save_error_stops_read_on_skipped_item(sandbox: Sandbox) {
     let path = sandbox.file(TEST_LINE_CONTENT);
     let reader = sandbox.autosaving(1);
-    let mut lines = reader.lines(&path).state(UNSAFE_NAME).skip(2).build().unwrap();
+    let mut lines = reader.lines(&path).state(TEST_UNSAFE_NAME).skip(2).build().unwrap();
     let error = lines.read().unwrap_err();
 
     assert!(error.to_string().contains("path escapes root"), "{error}");
@@ -337,10 +379,10 @@ fn a_save_error_stops_the_read_on_a_skipped_item(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_save_error_stops_the_read_on_a_filtered_blank(sandbox: Sandbox) {
+fn save_error_stops_read_on_filtered_blank(sandbox: Sandbox) {
     let path = sandbox.file(b"\nfoo\n");
     let reader = sandbox.autosaving(1);
-    let mut lines = reader.lines(&path).state(UNSAFE_NAME).skip_empty(true).build().unwrap();
+    let mut lines = reader.lines(&path).state(TEST_UNSAFE_NAME).skip_empty(true).build().unwrap();
     let error = lines.read().unwrap_err();
 
     assert!(error.to_string().contains("path escapes root"), "{error}");
@@ -348,12 +390,12 @@ fn a_save_error_stops_the_read_on_a_filtered_blank(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn a_save_error_stops_the_read_when_the_end_drops_a_chunk(sandbox: Sandbox) {
+fn save_error_stops_read_when_end_drops_chunk(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let reader = sandbox.autosaving(0);
     let mut chunks = reader
         .chunks(&path)
-        .state(UNSAFE_NAME)
+        .state(TEST_UNSAFE_NAME)
         .size(8)
         .drop_partial(true)
         .end(12)
@@ -362,45 +404,4 @@ fn a_save_error_stops_the_read_when_the_end_drops_a_chunk(sandbox: Sandbox) {
     let error = chunks.find_map(Result::err).unwrap();
 
     assert!(error.to_string().contains("path escapes root"), "{error}");
-}
-
-#[rstest]
-fn skip_counts_blank_items_before_skip_empty(sandbox: Sandbox) {
-    let path = sandbox.file(TEST_BLANK_LINE_CONTENT);
-    let reader = sandbox.reader();
-    let kept = items(reader.lines(&path).skip(1).build().unwrap());
-    let filtered = items(reader.lines(&path).skip(1).skip_empty(true).build().unwrap());
-
-    assert_eq!(texts(&kept), ["", "line-2"]);
-    assert_eq!(texts(&filtered), ["line-2"]);
-}
-
-#[rstest]
-fn skip_stops_at_a_truncation(sandbox: Sandbox) {
-    let path = sandbox.file(TEST_SEGMENT_CONTENT);
-    let reader = sandbox.reader_with(Config {
-        verify_state: false,
-        auto_load_state: true,
-        ..sandbox.config()
-    });
-
-    sandbox.saved(&path, TEST_STATE_NAME);
-    sandbox.truncate(&path, 8);
-
-    let mut segments = reader.delimiter(&path).state(TEST_STATE_NAME).skip(3).build().unwrap();
-
-    assert!(segments.read().unwrap().is_none());
-}
-
-#[rstest]
-fn every_byte_value_survives_a_round_trip(sandbox: Sandbox) {
-    let content: Vec<u8> = (0..=255).collect();
-    let path = sandbox.file(&content);
-
-    for kind in LOSSLESS_KINDS {
-        let (read, state) = kind.read(&sandbox.reader(), &path, Setup::default()).unwrap();
-
-        assert_eq!(read.concat(), content, "{kind:?}");
-        assert_eq!(state.position, content.len() as u64, "{kind:?}");
-    }
 }

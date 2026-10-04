@@ -11,15 +11,13 @@ use rstest::rstest;
 use crate::common::{
     constants::{
         TEST_BLANK_LINE_CONTENT, TEST_EMPTY_FINGERPRINT, TEST_FOO_FINGERPRINT,
-        TEST_WINDOW_FINGERPRINT,
+        TEST_UNSEEKABLE_POSITION, TEST_WINDOW_FINGERPRINT,
     },
     fixtures::sandbox,
     sandbox::Sandbox,
 };
 
 const WINDOW: usize = FINGERPRINT_SAMPLE_BYTES as usize;
-const UNSEEKABLE_POSITION: u64 = i64::MAX as u64 + 1;
-
 #[rstest]
 #[case::plain_content(b"foo".to_vec(), TEST_FOO_FINGERPRINT)]
 #[case::empty_file(Vec::new(), TEST_EMPTY_FINGERPRINT)]
@@ -39,7 +37,7 @@ fn fingerprint_digests_the_first_window(
 }
 
 #[rstest]
-fn fingerprint_ignores_content_past_the_window(sandbox: Sandbox) {
+fn fingerprint_ignores_content_past_window(sandbox: Sandbox) {
     let window = vec![b'a'; WINDOW];
     let shorter = sandbox.write("shorter.bin", &[&window, &b"x"[..]].concat());
     let longer = sandbox.write("longer.bin", &[&window, &b"y"[..]].concat());
@@ -82,7 +80,7 @@ fn fingerprint_fails_when_the_file_is_missing(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn fingerprint_fails_when_the_path_is_a_directory(sandbox: Sandbox) {
+fn fingerprint_fails_when_path_is_directory(sandbox: Sandbox) {
     let error = fingerprint(sandbox.path(), FINGERPRINT_SAMPLE_BYTES).unwrap_err();
 
     assert!(matches!(
@@ -97,7 +95,7 @@ fn fingerprint_fails_when_the_path_is_a_directory(sandbox: Sandbox) {
 #[case::inside_an_item(9, true)]
 #[case::at_the_end_of_the_file(15, false)]
 #[case::past_the_end_of_the_file(16, false)]
-fn starts_mid_item_detects_an_unaligned_position(
+fn starts_mid_item_detects_unaligned_position(
     sandbox: Sandbox,
     #[case] position: u64,
     #[case] expected: bool,
@@ -121,9 +119,9 @@ fn starts_mid_item_restores_the_cursor(sandbox: Sandbox, #[case] position: u64) 
 }
 
 #[rstest]
-#[case::restoring_the_cursor(UNSEEKABLE_POSITION)]
-#[case::reading_the_previous_byte(UNSEEKABLE_POSITION + 1)]
-fn starts_mid_item_fails_when_the_position_is_unseekable(sandbox: Sandbox, #[case] position: u64) {
+#[case::restoring_the_cursor(TEST_UNSEEKABLE_POSITION)]
+#[case::reading_the_previous_byte(TEST_UNSEEKABLE_POSITION + 1)]
+fn starts_mid_item_fails_when_position_is_unseekable(sandbox: Sandbox, #[case] position: u64) {
     let file = File::open(sandbox.file(b"foo")).unwrap();
     let error = starts_mid_item(&file, position, b'\n').unwrap_err();
 
@@ -132,7 +130,7 @@ fn starts_mid_item_fails_when_the_position_is_unseekable(sandbox: Sandbox, #[cas
 
 #[cfg(unix)]
 #[rstest]
-fn starts_mid_item_fails_when_the_file_is_a_directory(sandbox: Sandbox) {
+fn starts_mid_item_fails_when_file_is_directory(sandbox: Sandbox) {
     let directory = File::open(sandbox.path()).unwrap();
     let error = starts_mid_item(&directory, 1, b'\n').unwrap_err();
 

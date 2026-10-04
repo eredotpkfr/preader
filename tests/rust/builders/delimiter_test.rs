@@ -1,15 +1,15 @@
-use preader::IteratorBuild;
+use preader::{DEFAULT_DELIMITER, IteratorBuild};
 use rstest::rstest;
 
 use crate::common::{
-    constants::{TEST_BLANK_SEGMENT_CONTENT, TEST_DELIMITER, TEST_SEGMENT_CONTENT, TEST_SEGMENTS},
+    constants::{TEST_BLANK_SEGMENT_CONTENT, TEST_SEGMENT_CONTENT, TEST_SEGMENTS},
     fixtures::sandbox,
     funcs::{items, texts},
     sandbox::Sandbox,
 };
 
 #[rstest]
-fn the_default_character_comes_from_the_constant(sandbox: Sandbox) {
+fn default_character_comes_from_the_constant(sandbox: Sandbox) {
     let path = sandbox.file(TEST_SEGMENT_CONTENT);
     let read = items(sandbox.reader().delimiter(&path).build().unwrap());
 
@@ -72,14 +72,14 @@ fn align_drops_a_partial_segment(sandbox: Sandbox, #[case] align: bool, #[case] 
 }
 
 #[rstest]
-fn the_last_character_wins(sandbox: Sandbox) {
+fn last_character_wins(sandbox: Sandbox) {
     let path = sandbox.file(TEST_SEGMENT_CONTENT);
     let read = items(
         sandbox
             .reader()
             .delimiter(&path)
             .character(b'x')
-            .character(TEST_DELIMITER)
+            .character(DEFAULT_DELIMITER)
             .limit(1)
             .build()
             .unwrap(),
