@@ -6,8 +6,8 @@ use rstest::rstest;
 use crate::common::{
     constants::{TEST_ALPHABET, TEST_FILE_NAME, TEST_LINE_CONTENT, TEST_STATE_NAME},
     fixtures::sandbox,
-    flows::{FLOWS, Flow, Plan},
     funcs::items,
+    iterators::{ITERATORS, IteratorKind, Plan},
     sandbox::Sandbox,
 };
 
@@ -40,11 +40,11 @@ fn file_is_canonicalized(sandbox: Sandbox) {
 fn empty_file_builds_and_yields_nothing(sandbox: Sandbox) {
     let path = sandbox.empty_file();
 
-    for flow in FLOWS {
-        let (read, state) = flow.read(&sandbox.reader(), &path, Plan::default()).unwrap();
+    for iterator in ITERATORS {
+        let (read, state) = iterator.read(&sandbox.reader(), &path, Plan::default()).unwrap();
 
-        assert!(read.is_empty(), "{flow:?}");
-        assert_eq!(state.position, 0, "{flow:?}");
+        assert!(read.is_empty(), "{iterator:?}");
+        assert_eq!(state.position, 0, "{iterator:?}");
     }
 }
 
@@ -53,11 +53,15 @@ fn zero_buffer_capacity_still_reads_every_item(sandbox: Sandbox) {
     let path = sandbox.file(TEST_LINE_CONTENT);
     let reader = sandbox.capped(0);
 
-    for flow in FLOWS {
-        let (read, state) = flow.read(&reader, &path, Plan::default()).unwrap();
+    for iterator in ITERATORS {
+        let (read, state) = iterator.read(&reader, &path, Plan::default()).unwrap();
 
-        assert!(!read.is_empty(), "{flow:?}");
-        assert_eq!(state.position, TEST_LINE_CONTENT.len() as u64, "{flow:?}");
+        assert!(!read.is_empty(), "{iterator:?}");
+        assert_eq!(
+            state.position,
+            TEST_LINE_CONTENT.len() as u64,
+            "{iterator:?}"
+        );
     }
 }
 
@@ -121,7 +125,7 @@ fn resumed_state_starts_at_its_position(sandbox: Sandbox) {
 
     drop(bytes);
 
-    let (read, resumed) = Flow::Bytes
+    let (read, resumed) = IteratorKind::Bytes
         .read(
             &sandbox.reader(),
             &path,

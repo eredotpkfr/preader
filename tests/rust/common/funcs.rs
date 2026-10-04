@@ -7,31 +7,12 @@ use chrono::DateTime;
 use preader::{FileMetadata, Result, State, StateData, StateRegistry, Timestamps};
 use sha2::{Digest, Sha256};
 
-use crate::common::constants::{TEST_LINE, TEST_LINE_FINGERPRINT, TEST_STATE_NAME};
+use crate::common::{
+    constants::{TEST_LINE, TEST_LINE_FINGERPRINT, TEST_STATE_NAME},
+    interfaces::Item,
+};
 
 const STAMP: i64 = 1_700_000_000;
-
-pub trait Item {
-    fn bytes(self) -> Vec<u8>;
-}
-
-impl Item for u8 {
-    fn bytes(self) -> Vec<u8> {
-        vec![self]
-    }
-}
-
-impl Item for Vec<u8> {
-    fn bytes(self) -> Vec<u8> {
-        self
-    }
-}
-
-impl Item for String {
-    fn bytes(self) -> Vec<u8> {
-        self.into_bytes()
-    }
-}
 
 pub fn items<I, T: Item>(iterator: I) -> Vec<Vec<u8>>
 where

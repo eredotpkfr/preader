@@ -12,8 +12,8 @@ use crate::common::{
         TEST_SEGMENT_CONTENT, TEST_STATE_NAME, TEST_UNSAFE_NAME,
     },
     fixtures::sandbox,
-    flows::{FLOWS, LOSSLESS_FLOWS, Plan},
     funcs::{items, texts},
+    iterators::{ITERATORS, LOSSLESS_ITERATORS, Plan},
     sandbox::Sandbox,
 };
 
@@ -26,11 +26,11 @@ fn buffer_capacity_does_not_change_the_output(sandbox: Sandbox, #[case] capacity
     let capped = sandbox.capped(capacity);
     let plain = sandbox.reader();
 
-    for flow in FLOWS {
-        let expected = flow.read(&plain, &path, Plan::default()).unwrap().0;
-        let found = flow.read(&capped, &path, Plan::default()).unwrap().0;
+    for iterator in ITERATORS {
+        let expected = iterator.read(&plain, &path, Plan::default()).unwrap().0;
+        let found = iterator.read(&capped, &path, Plan::default()).unwrap().0;
 
-        assert_eq!(found, expected, "{flow:?}");
+        assert_eq!(found, expected, "{iterator:?}");
     }
 }
 
@@ -154,11 +154,11 @@ fn every_byte_value_survives_a_round_trip(sandbox: Sandbox) {
     let content: Vec<u8> = (0..=255).collect();
     let path = sandbox.file(&content);
 
-    for flow in LOSSLESS_FLOWS {
-        let (read, state) = flow.read(&sandbox.reader(), &path, Plan::default()).unwrap();
+    for iterator in LOSSLESS_ITERATORS {
+        let (read, state) = iterator.read(&sandbox.reader(), &path, Plan::default()).unwrap();
 
-        assert_eq!(read.concat(), content, "{flow:?}");
-        assert_eq!(state.position, content.len() as u64, "{flow:?}");
+        assert_eq!(read.concat(), content, "{iterator:?}");
+        assert_eq!(state.position, content.len() as u64, "{iterator:?}");
     }
 }
 
