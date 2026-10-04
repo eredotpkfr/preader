@@ -1,15 +1,18 @@
-use preader::{DEFAULT_DELIMITER, Error, IteratorBuild, IteratorRead};
+#[cfg(unix)]
+use preader::Error;
+use preader::{DEFAULT_DELIMITER, IteratorBuild, IteratorRead};
 use rstest::rstest;
 
 use crate::common::{
-    constants::{
-        TEST_BLANK_SEGMENT_CONTENT, TEST_INVALID_UTF8, TEST_READ_FROM, TEST_REWOUND_TO,
-        TEST_SEGMENT_CONTENT,
-    },
+    constants::{TEST_BLANK_SEGMENT_CONTENT, TEST_INVALID_UTF8, TEST_SEGMENT_CONTENT},
     fixtures::sandbox,
     funcs::{drain, items, texts},
-    macros::asserts::assert_err_is,
     sandbox::Sandbox,
+};
+#[cfg(unix)]
+use crate::common::{
+    constants::{TEST_READ_FROM, TEST_REWOUND_TO},
+    macros::asserts::assert_err_is,
 };
 
 const SEGMENTS: [&str; 10] = [

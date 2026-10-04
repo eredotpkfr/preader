@@ -1,12 +1,18 @@
-use preader::{Error, IteratorBuild, IteratorRead};
+#[cfg(unix)]
+use preader::Error;
+use preader::{IteratorBuild, IteratorRead};
 use rstest::rstest;
 
 use crate::common::{
-    constants::{TEST_ALPHABET, TEST_INVALID_UTF8, TEST_READ_FROM, TEST_REWOUND_TO},
+    constants::{TEST_ALPHABET, TEST_INVALID_UTF8},
     fixtures::sandbox,
     funcs::items,
-    macros::asserts::assert_err_is,
     sandbox::Sandbox,
+};
+#[cfg(unix)]
+use crate::common::{
+    constants::{TEST_READ_FROM, TEST_REWOUND_TO},
+    macros::asserts::assert_err_is,
 };
 
 #[rstest]

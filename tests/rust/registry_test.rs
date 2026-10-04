@@ -10,13 +10,11 @@ use crate::common::{
     },
     fixtures::sandbox,
     funcs::{names, native},
-    guards::Blocked,
-    macros::{
-        asserts::{assert_err, assert_err_is},
-        skip::skip,
-    },
+    macros::asserts::{assert_err, assert_err_is},
     sandbox::Sandbox,
 };
+#[cfg(unix)]
+use crate::common::{guards::Blocked, macros::skip::skip};
 
 fn corrupt(sandbox: &Sandbox, name: &str) {
     let path = sandbox.states().path(name).unwrap();

@@ -3,10 +3,10 @@ use std::io::ErrorKind;
 use preader::{Error, IteratorBuild};
 use rstest::rstest;
 
+#[cfg(unix)]
+use crate::common::constants::TEST_READ_FROM;
 use crate::common::{
-    constants::{
-        TEST_ALPHABET, TEST_FILE_NAME, TEST_LINE_CONTENT, TEST_READ_FROM, TEST_STATE_NAME,
-    },
+    constants::{TEST_ALPHABET, TEST_FILE_NAME, TEST_LINE_CONTENT, TEST_STATE_NAME},
     fixtures::sandbox,
     funcs::{drain, items},
     iterators::{ITERATORS, IteratorKind, Plan},

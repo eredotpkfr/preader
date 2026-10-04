@@ -7,13 +7,12 @@ use preader::{ChecksumBody, FileMetadata, StateData, Timestamps};
 use rstest::{fixture, rstest};
 use sha2::{Digest, Sha256};
 
-use crate::common::{
-    constants::{
-        TEST_EMPTY_FINGERPRINT, TEST_FILE_PATH, TEST_LINE, TEST_LINE_FINGERPRINT,
-        TEST_OTHER_STATE_NAME, TEST_STAMP, TEST_STATE_NAME,
-    },
-    macros::asserts::assert_err,
+use crate::common::constants::{
+    TEST_EMPTY_FINGERPRINT, TEST_FILE_PATH, TEST_LINE, TEST_LINE_FINGERPRINT,
+    TEST_OTHER_STATE_NAME, TEST_STAMP, TEST_STATE_NAME,
 };
+#[cfg(unix)]
+use crate::common::macros::asserts::assert_err;
 
 const DIGEST: &str = "f74d122580787555a6f2d245be2066bbe5af3e83fe5e39092c479e0e1b41225a";
 const POSITION: u64 = 7;
