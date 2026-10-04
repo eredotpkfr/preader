@@ -8,6 +8,7 @@ use crate::common::{
     fixtures::sandbox,
     funcs::{consume, drain, items, state_data, take},
     guards::Blocked,
+    macros::asserts::assert_err_is,
     sandbox::Sandbox,
 };
 
@@ -281,6 +282,7 @@ fn fully_consumed_file_yields_nothing_on_resume(sandbox: Sandbox) {
     let mut second = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap();
 
     assert!(second.read().unwrap().is_none());
+
     assert_eq!(second.state().position, CONTENT_SIZE);
 }
 
@@ -333,6 +335,7 @@ fn end_below_position_does_not_rewind_state(sandbox: Sandbox) {
     let mut second = reader.bytes(&path).state(TEST_STATE_NAME).end(4).build().unwrap();
 
     assert!(second.read().unwrap().is_none());
+
     assert_eq!(second.state().position, 10);
 }
 
@@ -485,7 +488,8 @@ fn read_error_reaches_caller_before_any_save(sandbox: Sandbox) {
     let mut lines = reader.lines(&path).state(TEST_UNSAFE_NAME).build().unwrap();
 
     assert_eq!(lines.read().unwrap(), Some("foo"));
-    assert!(matches!(lines.read().unwrap_err(), Error::Utf8(_)));
+
+    assert_err_is!(lines.read(), Error::Utf8(_));
 }
 
 #[cfg(unix)]
@@ -539,9 +543,9 @@ fn resumed_read_covers_what_failed_save_left_behind(sandbox: Sandbox) {
 
     let third = items(reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap());
 
-    assert_eq!([first.as_slice(), third.as_slice()].concat(), TEST_ALPHABET);
-
     assert!(second.iter().all(|byte| third.contains(byte)));
+
+    assert_eq!([first.as_slice(), third.as_slice()].concat(), TEST_ALPHABET);
 }
 
 #[cfg(unix)]
@@ -559,9 +563,12 @@ fn mid_item_read_error_keeps_the_position(sandbox: Sandbox) {
     data.position = REWOUND_TO;
     *lines.state() = sandbox.manager().state(data);
 
-    assert!(matches!(lines.read().unwrap_err(), Error::Io(_)));
+    assert_err_is!(lines.read(), Error::Io(_));
+
     assert_eq!(lines.state().position, READ_FROM);
-    assert!(lines.read().is_err());
+
+    assert_err_is!(lines.read(), Error::Io(_));
+
     assert_eq!(lines.state().position, READ_FROM);
 }
 

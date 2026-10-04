@@ -9,6 +9,7 @@ use crate::common::{
     fixtures::sandbox,
     funcs::digest,
     guards::set_pre_epoch_mtime,
+    macros::asserts::assert_err_is,
     sandbox::Sandbox,
 };
 
@@ -51,6 +52,7 @@ fn compares_by_value(sandbox: Sandbox) {
     let metadata = FileMetadata::try_from(path.as_path()).unwrap();
 
     assert_eq!(metadata, FileMetadata::try_from(path.as_path()).unwrap());
+
     assert_ne!(
         metadata,
         FileMetadata::try_from(sandbox.large_file().as_path()).unwrap()
@@ -83,10 +85,7 @@ fn rejects_a_pre_epoch_mtime(sandbox: Sandbox) {
         return;
     }
 
-    assert!(matches!(
-        FileMetadata::try_from(path.as_path()).unwrap_err(),
-        Error::Time(_)
-    ));
+    assert_err_is!(FileMetadata::try_from(path.as_path()), Error::Time(_));
 }
 
 #[rstest]
@@ -116,7 +115,7 @@ fn reads_a_relative_path(sandbox: Sandbox) {
 
     let metadata = FileMetadata::try_from(Path::new("Cargo.toml")).unwrap();
 
-    assert_eq!(metadata.path, Path::new("Cargo.toml"));
-
     assert!(metadata.size > 0);
+
+    assert_eq!(metadata.path, Path::new("Cargo.toml"));
 }

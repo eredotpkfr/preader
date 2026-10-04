@@ -7,16 +7,18 @@ use crate::common::{
     constants::{TEST_INVALID_UTF8, TEST_MISSING_STATE_NAME, TEST_STATE_NAME},
     fixtures::sandbox,
     guards::set_pre_epoch_mtime,
+    macros::asserts::assert_err_is,
     sandbox::Sandbox,
 };
 
 #[rstest]
 fn io_errors_are_transparent(sandbox: Sandbox) {
     let missing = sandbox.path().join("missing.bin");
-    let error = sandbox.reader().bytes(&missing).build().unwrap_err();
 
-    assert!(matches!(&error, Error::Io(io) if io.kind() == ErrorKind::NotFound));
-    assert!(!error.to_string().is_empty());
+    assert_err_is!(
+        sandbox.reader().bytes(&missing).build(),
+        Error::Io(io) if io.kind() == ErrorKind::NotFound
+    );
 }
 
 #[rstest]

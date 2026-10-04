@@ -52,10 +52,6 @@ fn write_state(sandbox: &Sandbox, name: &str, payload: impl AsRef<[u8]>) {
     fs::write(path, payload).unwrap();
 }
 
-fn load_error(sandbox: &Sandbox, name: &str) -> String {
-    sandbox.manager().load(name).unwrap_err().to_string()
-}
-
 fn verifiable(sandbox: &Sandbox, name: &str, position: u64) -> State {
     let file = sandbox.file(TEST_LINE);
     let data = StateData {
@@ -147,9 +143,9 @@ fn autoname_does_not_normalize(sandbox: Sandbox, #[case] left: &str, #[case] rig
 fn autoname_is_lowercase_hex(sandbox: Sandbox, #[case] file: &str) {
     let name = sandbox.manager().autoname(Path::new(file));
 
-    assert_eq!(name.len(), 64);
-
     assert!(name.bytes().all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()));
+
+    assert_eq!(name.len(), 64);
 }
 
 #[cfg(unix)]
@@ -159,6 +155,7 @@ fn autoname_hashes_a_non_utf8_path(sandbox: Sandbox) {
     let name = sandbox.manager().autoname(path);
 
     assert_eq!(name.len(), 64);
+
     assert_ne!(name, sandbox.manager().autoname(Path::new("/tmp/data.bin")));
 }
 
@@ -256,10 +253,10 @@ fn tmp_carries_both_suffixes(sandbox: Sandbox) {
     let tmp = sandbox.manager().tmp(TEST_STATE_NAME).unwrap();
     let name = tmp.file_name().unwrap().to_str().unwrap();
 
-    assert_eq!(tmp.parent().unwrap(), sandbox.state_dir());
-
     assert!(name.starts_with(&format!("{TEST_STATE_NAME}.")));
     assert!(name.ends_with(&format!("{STATE_FILE_EXTENSION}.{TMP_FILE_EXTENSION}")));
+
+    assert_eq!(tmp.parent().unwrap(), sandbox.state_dir());
 }
 
 #[rstest]
@@ -366,14 +363,14 @@ fn load_accepts_an_already_suffixed_name(sandbox: Sandbox) {
 
 #[rstest]
 fn load_fails_when_the_state_is_missing(sandbox: Sandbox) {
-    assert!(load_error(&sandbox, TEST_STATE_NAME).contains("state not found"));
+    assert_err!(sandbox.manager().load(TEST_STATE_NAME), "state not found");
 }
 
 #[rstest]
 fn load_fails_when_the_path_is_a_directory(sandbox: Sandbox) {
     fs::create_dir_all(sandbox.manager().path(TEST_STATE_NAME).unwrap()).unwrap();
 
-    assert!(load_error(&sandbox, TEST_STATE_NAME).contains("state not found"));
+    assert_err!(sandbox.manager().load(TEST_STATE_NAME), "state not found");
 }
 
 #[rstest]
@@ -387,14 +384,14 @@ fn load_fails_when_the_payload_is_malformed(
 ) {
     write_state(&sandbox, TEST_STATE_NAME, payload);
 
-    assert!(load_error(&sandbox, TEST_STATE_NAME).contains(message));
+    assert_err!(sandbox.manager().load(TEST_STATE_NAME), message);
 }
 
 #[rstest]
 fn load_fails_when_the_content_is_not_utf8(sandbox: Sandbox) {
     write_state(&sandbox, TEST_STATE_NAME, b"{\"name\": \"\xff\"}");
 
-    assert!(load_error(&sandbox, TEST_STATE_NAME).contains("valid UTF-8"));
+    assert_err!(sandbox.manager().load(TEST_STATE_NAME), "valid UTF-8");
 }
 
 #[rstest]
@@ -405,14 +402,17 @@ fn load_fails_when_the_content_is_not_utf8(sandbox: Sandbox) {
 fn load_fails_when_the_name_is_unsafe(sandbox: Sandbox, #[case] unsafe_name: (&str, &str)) {
     let (name, message) = unsafe_name;
 
-    assert!(load_error(&sandbox, name).contains(message));
+    assert_err!(sandbox.manager().load(name), message);
 }
 
 #[rstest]
 fn load_verifies_by_default(sandbox: Sandbox) {
     write_state(&sandbox, TEST_STATE_NAME, unverifiable(TEST_STATE_NAME));
 
-    assert!(load_error(&sandbox, TEST_STATE_NAME).contains("state checksum mismatch"));
+    assert_err!(
+        sandbox.manager().load(TEST_STATE_NAME),
+        "state checksum mismatch"
+    );
 }
 
 #[rstest]

@@ -6,6 +6,14 @@ macro_rules! assert_err {
     }};
 }
 
+macro_rules! assert_err_is {
+    ($outcome:expr, $($variant:tt)+) => {{
+        let error = $outcome.unwrap_err();
+
+        assert!(matches!(&error, $($variant)+), "{error}");
+    }};
+}
+
 macro_rules! assert_percent {
     ($builder:expr, $size:expr) => {{
         let mut iterator = $builder.build().unwrap();
@@ -20,4 +28,5 @@ macro_rules! assert_percent {
 }
 
 pub(crate) use assert_err;
+pub(crate) use assert_err_is;
 pub(crate) use assert_percent;

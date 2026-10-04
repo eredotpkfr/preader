@@ -8,23 +8,28 @@ use crate::common::{
     fixtures::sandbox,
     funcs::{drain, items},
     iterators::{ITERATORS, IteratorKind, Plan},
+    macros::asserts::assert_err_is,
     sandbox::Sandbox,
 };
 
 #[rstest]
 fn options_are_validated_before_file_is_opened(sandbox: Sandbox) {
     let missing = sandbox.path().join("missing.bin");
-    let error = sandbox.reader().bytes(&missing).start(9).end(4).build().unwrap_err();
 
-    assert!(matches!(error, Error::InvalidRange { .. }), "{error}");
+    assert_err_is!(
+        sandbox.reader().bytes(&missing).start(9).end(4).build(),
+        Error::InvalidRange { .. }
+    );
 }
 
 #[rstest]
 fn missing_file_fails_to_build(sandbox: Sandbox) {
     let missing = sandbox.path().join("missing.bin");
-    let error = sandbox.reader().bytes(&missing).build().unwrap_err();
 
-    assert!(matches!(&error, Error::Io(io) if io.kind() == ErrorKind::NotFound));
+    assert_err_is!(
+        sandbox.reader().bytes(&missing).build(),
+        Error::Io(io) if io.kind() == ErrorKind::NotFound
+    );
 }
 
 #[rstest]

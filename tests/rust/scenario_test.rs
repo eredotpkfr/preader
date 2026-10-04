@@ -253,9 +253,9 @@ fn changing_state_name_leaves_old_state_in_place(sandbox: Sandbox) {
 
     let mut fresh = sandbox.reader().bytes(&path).state(TEST_OTHER_STATE_NAME).build().unwrap();
 
-    assert_eq!(fresh.state().position, 0);
-
     assert!(sandbox.states().exists(TEST_STATE_NAME));
+
+    assert_eq!(fresh.state().position, 0);
 }
 
 #[rstest]
