@@ -28,7 +28,6 @@ const WINDOWS_UNSAFE_NAMES: [&str; 6] = [
     "\\\\?\\C:\\job-1",
     "..\\..\\etc\\passwd",
 ];
-
 const PATH_DIGEST: &str = "07cb9e47c6d8681a47020d0bb04776e06ada8b6d7aabcf4838a127f98e9f4fe2";
 
 fn lenient(sandbox: &Sandbox) -> StateManager {

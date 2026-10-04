@@ -17,7 +17,6 @@ use crate::common::{
 };
 
 const WINDOW_FINGERPRINT: &str = "c93eee2d0db02f10acc7460d9576e122dcf8cd53c4bf8dfcae1b3e74ebcfff5a";
-
 const FOO_FINGERPRINT: &str = "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae";
 
 #[rstest]

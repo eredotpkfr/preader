@@ -10,6 +10,7 @@ use crate::common::{
 };
 
 const CONTENT_SIZE: u64 = TEST_LINE_CONTENT.len() as u64;
+
 fn window(position: u64) -> Window {
     IteratorOptions::default().window(position, CONTENT_SIZE, Skip::Bytes(0))
 }

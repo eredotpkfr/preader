@@ -463,6 +463,7 @@ fn resync_trusts_path_without_verification(
     let saved = bytes.state().clone();
 
     drop(bytes);
+
     sandbox.write(TEST_TRACKED_NAME, &unit.repeat(copies));
 
     let resynced = saved.resync(&path).unwrap();
@@ -763,6 +764,7 @@ fn save_persists_across_readers(sandbox: Sandbox) {
     while bytes.read().unwrap().is_some() {}
 
     bytes.state().save().unwrap();
+
     drop(bytes);
 
     assert_eq!(
@@ -780,6 +782,7 @@ fn save_refreshes_the_checksum(sandbox: Sandbox) {
     consume(&mut bytes, 5);
 
     bytes.state().save().unwrap();
+
     drop(bytes);
 
     assert_ne!(

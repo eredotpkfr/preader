@@ -135,6 +135,7 @@ fn auto_load_resumes_only_a_matching_file(sandbox: Sandbox) {
 
     bytes.read().unwrap();
     bytes.state().save().unwrap();
+
     drop(bytes);
 
     assert_eq!(
