@@ -11,7 +11,7 @@ use crate::common::{
     fixtures::sandbox,
     funcs::{consume, drain, items, take},
     guards::Blocked,
-    macros::asserts::assert_err_is,
+    macros::{asserts::assert_err_is, skip::skip},
     sandbox::Sandbox,
 };
 
@@ -518,7 +518,7 @@ fn resumed_read_covers_what_failed_save_left_behind(sandbox: Sandbox) {
     blocked.read_only(sandbox.state_dir());
 
     if fs::write(sandbox.state_dir().join("probe"), b"x").is_ok() {
-        return;
+        skip!("a read-only directory is still writable here");
     }
 
     let mut bytes = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap();

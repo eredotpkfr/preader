@@ -9,7 +9,7 @@ use crate::common::{
     },
     fixtures::sandbox,
     funcs::{names, native},
-    macros::asserts::assert_err_is,
+    macros::{asserts::assert_err_is, skip::skip},
     sandbox::Sandbox,
 };
 
@@ -121,7 +121,7 @@ fn names_ignores_a_non_utf8_state(sandbox: Sandbox) {
     let ghost = OsStr::from_bytes(b"ghost-\xff.state.json");
 
     if fs::write(sandbox.state_dir().join(ghost), "{}").is_err() {
-        return;
+        skip!("a non-UTF-8 file name cannot be created here");
     }
 
     assert_eq!(names(&sandbox.states()), [TEST_STATE_NAME]);

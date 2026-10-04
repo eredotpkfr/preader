@@ -122,9 +122,7 @@ fn read_reports_a_mid_chunk_io_error(sandbox: Sandbox) {
 
     *chunks.state() = sandbox.state_at(&directory, TEST_REWOUND_TO);
 
-    let read = chunks.read().map(|chunk| chunk.map(<[u8]>::to_vec));
+    assert_err_is!(chunks.read(), Error::Io(_));
 
     assert_eq!(chunks.state().position, TEST_READ_FROM);
-
-    assert_err_is!(read, Error::Io(_));
 }

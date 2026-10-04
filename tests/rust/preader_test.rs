@@ -7,7 +7,7 @@ use crate::common::{
     constants::{TEST_FILE_NAME, TEST_LINE, TEST_NON_UTF8_NAME, TEST_STATE_NAME},
     fixtures::sandbox,
     funcs::{drain, items},
-    macros::asserts::assert_err,
+    macros::{asserts::assert_err, skip::skip},
     sandbox::Sandbox,
 };
 
@@ -190,7 +190,7 @@ fn non_utf8_path_is_rejected(sandbox: Sandbox) {
     let path = sandbox.path().join(OsStr::from_bytes(TEST_NON_UTF8_NAME));
 
     if fs::write(&path, TEST_LINE).is_err() {
-        return;
+        skip!("a non-UTF-8 file name cannot be created here");
     }
 
     assert_err!(sandbox.reader().bytes(&path).build(), "invalid UTF-8");

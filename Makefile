@@ -1,8 +1,10 @@
 SHELL=/bin/bash
 
-.PHONY: all
+BOLD := $(shell tput bold 2>/dev/null)
+CYAN := $(shell tput setaf 6 2>/dev/null)
+RESET := $(shell tput sgr0 2>/dev/null)
 
-all: \
+TARGETS := \
 	book-build \
 	book-test \
 	cargo-build \
@@ -56,6 +58,13 @@ all: \
 	stubtest-allowlist \
 	uv-audit \
 	uv-create-venv
+
+.DEFAULT_GOAL := help
+.PHONY: help $(TARGETS)
+
+help:
+	@echo "$(BOLD)$(CYAN)Usage:$(RESET) make $(BOLD)<target>$(RESET), where $(BOLD)<target>$(RESET) is one of:"
+	@echo "$(TARGETS)" | sed 's/ /, /g' | fold -s -w 76 | sed 's/^/  /; s/ *$$//'
 
 book-build:
 	@mdbook build book
