@@ -424,7 +424,7 @@ def test_delimiter_attributes(
         skip_empty=skip_empty,
     )
 
-    assert iterator.delimiter == ord(",")
+    assert iterator.delimiter == ","
     assert iterator.keep_delimiter is keep_delimiter
     assert iterator.skip_empty is skip_empty
     assert iterator.skip_remaining == options.skip

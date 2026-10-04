@@ -1,7 +1,7 @@
-use crate::{IteratorOptions, PReaderIteratorBuilder, StateInput};
+use crate::{IteratorOptions, PReaderIteratorBuilder, StateSource};
 
 impl<I> PReaderIteratorBuilder<'_, I> {
-    pub fn state(mut self, state: impl Into<StateInput>) -> Self {
+    pub fn state(mut self, state: impl Into<StateSource>) -> Self {
         self.state = state.into();
         self
     }

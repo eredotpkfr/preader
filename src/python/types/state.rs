@@ -62,9 +62,9 @@ impl State {
     pub(crate) fn __repr__(&self) -> String {
         pyrepr!("State" {
             name = quote(&self.data.name),
-            file = self.file().__repr__(),
+            file = self.data.file.__repr__(),
             position = self.data.position,
-            timestamps = self.timestamps().__repr__(),
+            timestamps = self.data.timestamps.__repr__(),
         })
     }
 }

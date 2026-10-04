@@ -20,9 +20,8 @@ pub use constants::{
     DEFAULT_STATE_DIR, DEFAULT_VERIFY_STATE, FINGERPRINT_SAMPLE_BYTES, STATE_FILE_EXTENSION,
 };
 pub use enums::{
-    autosave::AutoSave,
     error::{core::Error, mismatch::Mismatch, path::PathError},
-    input::StateInput,
+    source::StateSource,
 };
 pub use interfaces::{builder::IteratorBuild, iterator::IteratorRead};
 pub use iterators::{
@@ -45,7 +44,7 @@ pub use types::{
 #[cfg(feature = "testing")]
 pub use {
     constants::TMP_FILE_EXTENSION,
-    enums::skip::Skip,
+    enums::{autosave::AutoSave, skip::Skip},
     manager::StateManager,
     types::{checksum::ChecksumBody, core::FileReader, window::Window},
     utils::{

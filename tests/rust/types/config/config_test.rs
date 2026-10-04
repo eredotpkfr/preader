@@ -16,10 +16,10 @@ fn config() -> Config {
 }
 
 #[rstest]
-#[case::disabled(false, 0, AutoSave::Off)]
-#[case::disabled_with_a_threshold(false, 222, AutoSave::Off)]
-#[case::only_at_the_end(true, 0, AutoSave::Final)]
-#[case::every_threshold(true, 222, AutoSave::Every(222))]
+#[case::disabled(false, 0, AutoSave::Never)]
+#[case::disabled_with_a_threshold(false, 222, AutoSave::Never)]
+#[case::only_at_the_end(true, 0, AutoSave::AtEnd)]
+#[case::every_threshold(true, 222, AutoSave::EveryBytes(222))]
 fn auto_save_collapses_the_config_pair(
     mut config: Config,
     #[case] enabled: bool,

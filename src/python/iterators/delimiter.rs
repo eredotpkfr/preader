@@ -8,8 +8,8 @@ pyiterator!(
     [delimiter, keep_delimiter, skip_empty, skip_remaining]
 
     #[getter]
-    fn delimiter(&self) -> u8 {
-        self.0.inner.character
+    fn delimiter(&self) -> char {
+        char::from(self.0.inner.character)
     }
 
     #[getter]

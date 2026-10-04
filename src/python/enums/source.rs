@@ -7,9 +7,9 @@ use pyo3::{
     types::{PyNone, PyString},
 };
 
-use crate::{State, StateInput};
+use crate::{State, StateSource};
 
-impl<'a, 'py> FromPyObject<'a, 'py> for StateInput {
+impl<'a, 'py> FromPyObject<'a, 'py> for StateSource {
     type Error = PyErr;
 
     #[cfg(feature = "experimental-inspect")]
