@@ -11,7 +11,7 @@ use crate::common::{
     fixtures::sandbox,
     funcs::{names, native},
     guards::Blocked,
-    macros::asserts::assert_err,
+    macros::asserts::{assert_err, assert_err_is},
     sandbox::Sandbox,
 };
 
@@ -50,19 +50,14 @@ fn load_returns_the_saved_state(sandbox: Sandbox) {
 
 #[rstest]
 fn load_reports_a_missing_state(sandbox: Sandbox) {
-    let error = sandbox.states().load(TEST_MISSING_STATE_NAME).unwrap_err();
-
-    assert!(matches!(&error, Error::NotFound(name) if name == TEST_MISSING_STATE_NAME));
+    assert_err_is!(sandbox.states().load(TEST_MISSING_STATE_NAME), Error::NotFound(name) if name == TEST_MISSING_STATE_NAME);
 }
 
 #[rstest]
 fn load_reports_state_shaped_directory_as_missing(sandbox: Sandbox) {
     fs::create_dir_all(sandbox.states().path(TEST_STATE_NAME).unwrap()).unwrap();
 
-    assert!(matches!(
-        sandbox.states().load(TEST_STATE_NAME).unwrap_err(),
-        Error::NotFound(_)
-    ));
+    assert_err_is!(sandbox.states().load(TEST_STATE_NAME), Error::NotFound(_));
 }
 
 #[rstest]
@@ -92,12 +87,12 @@ fn every_lookup_rejects_an_unsafe_name(sandbox: Sandbox, #[case] unsafe_name: (&
     let (name, message) = unsafe_name;
     let registry = sandbox.states();
 
+    assert!(registry.find(name).is_none());
+    assert!(!registry.exists(name));
+
     assert_err!(registry.load(name), message);
     assert_err!(registry.delete(name), message);
     assert_err!(registry.path(name), message);
-
-    assert!(registry.find(name).is_none());
-    assert!(!registry.exists(name));
 }
 
 #[rstest]
@@ -154,10 +149,7 @@ fn count_includes_states_that_all_rejects(sandbox: Sandbox) {
 
     assert_eq!(sandbox.states().count().unwrap(), 2);
 
-    assert!(matches!(
-        sandbox.states().all().unwrap_err(),
-        Error::Serde(_)
-    ));
+    assert_err_is!(sandbox.states().all(), Error::Serde(_));
 }
 
 #[rstest]
@@ -190,20 +182,17 @@ fn delete_removes_the_state_file(sandbox: Sandbox) {
 
 #[rstest]
 fn delete_fails_for_an_unknown_state(sandbox: Sandbox) {
-    assert!(matches!(
-        sandbox.states().delete(TEST_MISSING_STATE_NAME).unwrap_err(),
+    assert_err_is!(
+        sandbox.states().delete(TEST_MISSING_STATE_NAME),
         Error::NotFound(_)
-    ));
+    );
 }
 
 #[rstest]
 fn delete_fails_for_a_state_shaped_directory(sandbox: Sandbox) {
     fs::create_dir_all(sandbox.states().path(TEST_STATE_NAME).unwrap()).unwrap();
 
-    assert!(matches!(
-        sandbox.states().delete(TEST_STATE_NAME).unwrap_err(),
-        Error::Io(_)
-    ));
+    assert_err_is!(sandbox.states().delete(TEST_STATE_NAME), Error::Io(_));
 }
 
 #[rstest]
@@ -255,11 +244,11 @@ fn state_dir_that_is_a_file_fails_every_walk(sandbox: Sandbox) {
 
     let registry = sandbox.states();
 
-    assert!(matches!(registry.names().unwrap_err(), Error::Io(_)));
-    assert!(matches!(registry.count().unwrap_err(), Error::Io(_)));
-    assert!(matches!(registry.all().unwrap_err(), Error::Io(_)));
-    assert!(matches!(registry.clear().unwrap_err(), Error::Io(_)));
-    assert!(matches!(registry.search("job").unwrap_err(), Error::Io(_)));
+    assert_err_is!(registry.names(), Error::Io(_));
+    assert_err_is!(registry.count(), Error::Io(_));
+    assert_err_is!(registry.all(), Error::Io(_));
+    assert_err_is!(registry.clear(), Error::Io(_));
+    assert_err_is!(registry.search("job"), Error::Io(_));
 }
 
 #[rstest]
@@ -296,7 +285,7 @@ fn unreadable_subdirectory_fails_every_walk(sandbox: Sandbox) {
 
     let registry = sandbox.states();
 
-    assert!(matches!(registry.count().unwrap_err(), Error::Io(_)));
-    assert!(matches!(registry.all().unwrap_err(), Error::Io(_)));
-    assert!(matches!(registry.clear().unwrap_err(), Error::Io(_)));
+    assert_err_is!(registry.count(), Error::Io(_));
+    assert_err_is!(registry.all(), Error::Io(_));
+    assert_err_is!(registry.clear(), Error::Io(_));
 }

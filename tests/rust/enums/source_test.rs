@@ -20,6 +20,7 @@ fn auto_derives_the_name_from_the_file(sandbox: Sandbox) {
     let name = sandbox.reader().bytes(&path).build().unwrap().state().name.clone();
 
     assert_eq!(name.len(), 64);
+
     assert_ne!(
         name,
         sandbox.reader().bytes(&other).build().unwrap().state().name

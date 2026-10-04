@@ -9,6 +9,7 @@ use crate::common::{
     },
     fixtures::sandbox,
     funcs::{names, native},
+    macros::asserts::assert_err_is,
     sandbox::Sandbox,
 };
 
@@ -78,6 +79,7 @@ fn names_survives_a_midway_delete(sandbox: Sandbox) {
     let rest: Vec<String> = iterator.map(Result::unwrap).collect();
 
     assert_eq!(rest.len(), 1);
+
     assert_ne!(rest[0], first);
 }
 
@@ -104,9 +106,9 @@ fn clear_keeps_a_non_state_file(sandbox: Sandbox, #[case] name: &str) {
     fs::write(&unrelated, "not a state").unwrap();
     sandbox.states().clear().unwrap();
 
-    assert_eq!(sandbox.states().count().unwrap(), 0);
-
     assert!(unrelated.exists());
+
+    assert_eq!(sandbox.states().count().unwrap(), 0);
 }
 
 #[cfg(unix)]
@@ -203,9 +205,9 @@ fn names_ignores_a_symlinked_state(sandbox: Sandbox) {
 
     symlink(&target, sandbox.state_dir().join("alias.state.json")).unwrap();
 
-    assert_eq!(names(&sandbox.states()), [TEST_STATE_NAME]);
-
     assert!(!sandbox.states().exists("alias"));
+
+    assert_eq!(names(&sandbox.states()), [TEST_STATE_NAME]);
 }
 
 #[cfg(unix)]
@@ -251,9 +253,9 @@ fn names_ignores_symlink_that_leaves_state_dir(sandbox: Sandbox) {
     sandbox.save(TEST_OTHER_STATE_NAME);
     symlink(&target, sandbox.state_dir().join("evil.state.json")).unwrap();
 
-    assert_eq!(names(&sandbox.states()), [TEST_OTHER_STATE_NAME]);
-
     assert!(!sandbox.states().exists("evil"));
+
+    assert_eq!(names(&sandbox.states()), [TEST_OTHER_STATE_NAME]);
 }
 
 #[rstest]
@@ -306,10 +308,7 @@ fn search_matches_states_at_every_depth(sandbox: Sandbox) {
 
 #[rstest]
 fn search_fails_on_an_invalid_pattern(sandbox: Sandbox) {
-    assert!(matches!(
-        sandbox.states().search("[").unwrap_err(),
-        Error::Regex(_)
-    ));
+    assert_err_is!(sandbox.states().search("["), Error::Regex(_));
 }
 
 #[rstest]
@@ -319,10 +318,7 @@ fn bare_suffix_file_yields_an_empty_name(sandbox: Sandbox) {
 
     assert_eq!(names(&sandbox.states()), ["", TEST_STATE_NAME]);
 
-    assert!(matches!(
-        sandbox.states().all().unwrap_err(),
-        Error::Path(_)
-    ));
+    assert_err_is!(sandbox.states().all(), Error::Path(_));
 }
 
 #[rstest]

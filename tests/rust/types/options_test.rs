@@ -155,8 +155,8 @@ fn window_carries_skipped_items(#[case] position: u64, #[case] expected: Option<
 fn window_resolves_an_empty_file() {
     let window = IteratorOptions::default().window(0, 0, Skip::Bytes(0));
 
+    assert!(window.skipping.is_none());
+
     assert_eq!(window.position, 0);
     assert_eq!(window.end, 0);
-
-    assert!(window.skipping.is_none());
 }

@@ -17,7 +17,7 @@ use crate::common::{
     fixtures::sandbox,
     funcs::{consume, drain, state_data, tamper},
     guards::{Blocked, mtime, set_mtime, set_pre_epoch_mtime},
-    macros::asserts::assert_err,
+    macros::asserts::{assert_err, assert_err_is},
     sandbox::Sandbox,
 };
 
@@ -59,8 +59,9 @@ fn eq_ignores_the_manager() {
     let one = StateManager::from(&elsewhere).state(state_data(PathBuf::from(TEST_FILE_PATH)));
     let other = StateManager::default().state(state_data(PathBuf::from(TEST_FILE_PATH)));
 
-    assert_ne!(one.path().unwrap(), other.path().unwrap());
     assert_eq!(one, other);
+
+    assert_ne!(one.path().unwrap(), other.path().unwrap());
 }
 
 #[rstest]
@@ -68,14 +69,14 @@ fn checksum_is_a_stable_hex_digest(sandbox: Sandbox) {
     let state = sandbox.state(&sandbox.line_file());
     let digest = state.checksum().unwrap();
 
-    assert_eq!(digest.len(), 64);
-    assert_eq!(state.checksum().unwrap(), digest);
-
     assert!(
         digest
             .bytes()
             .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
     );
+
+    assert_eq!(digest.len(), 64);
+    assert_eq!(state.checksum().unwrap(), digest);
 }
 
 #[rstest]
@@ -175,11 +176,9 @@ fn verify_fails_on_a_tampered_payload(sandbox: Sandbox) {
 
     tamper(&state);
 
-    let error = sandbox.lenient().states().load(TEST_STATE_NAME).unwrap().verify().unwrap_err();
-
-    assert!(
-        error.to_string().contains("state checksum mismatch"),
-        "{error}"
+    assert_err!(
+        sandbox.lenient().states().load(TEST_STATE_NAME).unwrap().verify(),
+        "state checksum mismatch"
     );
 }
 
@@ -255,7 +254,7 @@ fn verify_fails_when_the_file_is_deleted(sandbox: Sandbox) {
 
     let error = state.verify().unwrap_err();
 
-    assert!(matches!(&error, Error::Io(_)), "{error}");
+    assert!(matches!(error, Error::Io(_)), "{error}");
     assert!(!error.to_string().contains("mismatch"), "{error}");
 }
 
@@ -267,10 +266,9 @@ fn verify_reports_a_directory_as_not_a_file(sandbox: Sandbox) {
     fs::remove_file(&path).unwrap();
     fs::create_dir(&path).unwrap();
 
-    let error = state.verify().unwrap_err();
+    assert_err!(state.verify(), "not a file");
 
-    assert!(matches!(&error, Error::NotAFile(found) if found.ends_with(TEST_FILE_NAME)));
-    assert!(error.to_string().contains("not a file"), "{error}");
+    assert_err_is!(state.verify(), Error::NotAFile(found) if found.ends_with(TEST_FILE_NAME));
 }
 
 #[rstest]
@@ -322,11 +320,11 @@ fn resync_keeps_name_position_and_created_at(sandbox: Sandbox) {
     let moved = sandbox.write("moved.bin", TEST_LINE);
     let resynced = state.resync(&moved).unwrap();
 
+    assert!(resynced.timestamps.updated_at > state.timestamps.updated_at);
+
     assert_eq!(resynced.name, state.name);
     assert_eq!(resynced.position, state.position);
     assert_eq!(resynced.timestamps.created_at, state.timestamps.created_at);
-
-    assert!(resynced.timestamps.updated_at > state.timestamps.updated_at);
 }
 
 #[rstest]
@@ -668,7 +666,7 @@ fn resync_fails_when_path_cannot_be_resolved(sandbox: Sandbox, #[case] looped: b
         sandbox.path().join("does-not-exist.bin")
     };
 
-    assert!(matches!(state.resync(&target).unwrap_err(), Error::Io(_)));
+    assert_err_is!(state.resync(&target), Error::Io(_));
 }
 
 #[rstest]
@@ -742,9 +740,9 @@ fn save_returns_the_created_path(sandbox: Sandbox) {
 
     let written = state.save().unwrap();
 
-    assert_eq!(written, state.path().unwrap());
-
     assert!(written.is_file());
+
+    assert_eq!(written, state.path().unwrap());
 }
 
 #[rstest]
@@ -756,9 +754,9 @@ fn save_updates_only_the_updated_at(sandbox: Sandbox) {
     state.save().unwrap();
     state.save().unwrap();
 
-    assert_eq!(state.timestamps.created_at, created_at);
-
     assert!(state.timestamps.updated_at > created_at);
+
+    assert_eq!(state.timestamps.created_at, created_at);
 }
 
 #[rstest]
@@ -844,7 +842,7 @@ fn save_fails_when_the_state_dir_is_a_file(sandbox: Sandbox) {
 
     fs::write(sandbox.state_dir(), b"foo").unwrap();
 
-    assert!(matches!(state.save().unwrap_err(), Error::Io(_)));
+    assert_err_is!(state.save(), Error::Io(_));
 }
 
 #[rstest]
@@ -854,7 +852,7 @@ fn save_fails_when_state_path_is_directory(sandbox: Sandbox) {
 
     fs::create_dir_all(state.path().unwrap()).unwrap();
 
-    assert!(matches!(state.save().unwrap_err(), Error::Io(_)));
+    assert_err_is!(state.save(), Error::Io(_));
 }
 
 #[rstest]
@@ -862,7 +860,7 @@ fn save_fails_when_the_name_is_too_long(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let mut state = sandbox.named_state(&path, &"x".repeat(300));
 
-    assert!(matches!(state.save().unwrap_err(), Error::Io(_)));
+    assert_err_is!(state.save(), Error::Io(_));
 }
 
 #[cfg(unix)]

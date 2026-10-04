@@ -19,6 +19,7 @@ fn compares_by_value() {
     };
 
     assert_eq!(timestamps, timestamps.clone());
+
     assert_ne!(timestamps, touched);
 }
 

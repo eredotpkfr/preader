@@ -5,6 +5,7 @@ use crate::common::{
     constants::{TEST_BLANK_LINE_CONTENT, TEST_LINE_CONTENT, TEST_UNICODE_TEXT},
     fixtures::sandbox,
     funcs::{drain, items},
+    macros::asserts::assert_err_is,
     sandbox::Sandbox,
 };
 
@@ -129,7 +130,7 @@ fn read_fails_on_invalid_utf8(sandbox: Sandbox) {
     let path = sandbox.file(b"\xff\xfe\n");
     let mut lines = sandbox.reader().lines(&path).build().unwrap();
 
-    assert!(matches!(lines.read().unwrap_err(), Error::Utf8(_)));
+    assert_err_is!(lines.read(), Error::Utf8(_));
 }
 
 #[rstest]
@@ -139,7 +140,9 @@ fn read_counts_the_invalid_line(sandbox: Sandbox) {
 
     assert_eq!(lines.read().unwrap(), Some("line-0"));
     assert_eq!(lines.state().position, 7);
-    assert!(lines.read().is_err());
+
+    assert_err_is!(lines.read(), Error::Utf8(_));
+
     assert_eq!(lines.state().position, 10);
     assert_eq!(lines.read().unwrap(), Some("line-2"));
     assert_eq!(lines.read().unwrap(), None);
