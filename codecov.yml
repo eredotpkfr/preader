@@ -9,15 +9,11 @@ coverage: # https://docs.codecov.com/docs/codecovyml-reference#coverage
         target: auto
         threshold: "1%"
         if_ci_failed: error
-        branches:
-          - main
     patch:
       default:
         target: auto
         threshold: "1%"
         if_ci_failed: error
-        branches:
-          - main
 
 ignore:
   - "src/lib.rs"

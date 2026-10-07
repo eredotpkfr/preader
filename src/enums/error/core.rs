@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use crate::enums::error::{mismatch::Mismatch, path::PathError};
 
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),

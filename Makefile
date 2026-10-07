@@ -71,7 +71,7 @@ book-build:
 book-test:
 	@mdbook test book
 cargo-build:
-	@uv run cargo build --all-features
+	@uv run cargo build --features python,experimental-inspect
 cargo-check:
 	@uv run cargo check --all-features --all-targets
 cargo-clean:
@@ -176,7 +176,7 @@ rustup:
 	@rustup self update
 	@rustup update
 shell: develop
-	@uv run python3
+	@uv run python
 stubs:
 	@uv run maturin generate-stubs -q --out python -F extension-module,experimental-inspect
 stubtest: develop
@@ -186,4 +186,4 @@ stubtest-allowlist: develop
 uv-audit:
 	@uv audit
 uv-create-venv:
-	@uv venv --python $(shell python3 --version | cut -d" " -f2)
+	@uv venv --allow-existing $(if $(PYTHON),--python $(PYTHON))
