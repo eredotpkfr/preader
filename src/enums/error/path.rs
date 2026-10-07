@@ -1,4 +1,5 @@
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum PathError {
     #[error("path must not be empty")]
     Empty,

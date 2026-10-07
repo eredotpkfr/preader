@@ -6,6 +6,7 @@ const RESYNC_HINT: &str = "(call state.resync(file) if this is expected)";
 const RESTART_HINT: &str = "(read it under a new state to start over)";
 
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum Mismatch {
     #[error("state checksum mismatch (saved: {saved}, computed: {computed})")]
     Checksum { saved: String, computed: String },
