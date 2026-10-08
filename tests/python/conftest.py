@@ -32,7 +32,9 @@ def registry(reader: PReader) -> StateRegistry:
 @pytest.fixture
 def make_reader(tmp_path: Path) -> Callable[..., PReader]:
     def _make(**kwargs: Any) -> PReader:  # noqa: ANN401
-        return PReader(config=Config(state_dir=tmp_path / "preader", **kwargs))
+        kwargs.setdefault("state_dir", tmp_path / "preader")
+
+        return PReader(config=Config(**kwargs))
 
     return _make
 

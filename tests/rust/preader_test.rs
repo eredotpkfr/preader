@@ -6,10 +6,7 @@ use preader::{Config, IteratorBuild, IteratorRead, PReader};
 use rstest::rstest;
 
 #[cfg(unix)]
-use crate::common::{
-    constants::TEST_NON_UTF8_NAME,
-    macros::{asserts::assert_err, skip::skip},
-};
+use crate::common::{constants::TEST_NON_UTF8_NAME, macros::asserts::assert_err};
 use crate::common::{
     constants::{TEST_FILE_NAME, TEST_LINE, TEST_STATE_NAME},
     fixtures::sandbox,
@@ -58,7 +55,7 @@ fn file_argument_accepts_every_ownership_shape(sandbox: Sandbox) {
         reader.bytes(os).build().unwrap().state().file.path.clone(),
     ];
 
-    assert!(shapes.iter().all(|path| *path == resolved));
+    assert_eq!(shapes.to_vec(), vec![resolved; 6]);
 
     let mut moved = reader.bytes(owned).build().unwrap();
 
@@ -85,7 +82,7 @@ fn state_argument_accepts_every_name_shape(sandbox: Sandbox) {
             .clone(),
     ];
 
-    assert!(named.iter().all(|found| *found == name));
+    assert_eq!(named.to_vec(), vec![name; 4]);
 }
 
 #[rstest]
@@ -196,7 +193,7 @@ fn non_utf8_path_is_rejected(sandbox: Sandbox) {
     let path = sandbox.path().join(OsStr::from_bytes(TEST_NON_UTF8_NAME));
 
     if fs::write(&path, TEST_LINE).is_err() {
-        skip!("a non-UTF-8 file name cannot be created here");
+        return;
     }
 
     assert_err!(sandbox.reader().bytes(&path).build(), "invalid UTF-8");

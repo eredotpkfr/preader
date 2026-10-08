@@ -372,7 +372,7 @@ def test_a_failing_threshold_save_stops_the_read(
     make_reader: Callable[..., PReader],
     data_file: Path,
 ) -> None:
-    config.state_dir.write_bytes(b"foo")
+    config.state_dir.write_bytes(b"not a directory")
 
     reader = make_reader(auto_save_state=True, auto_save_state_bytes=100)
     iterator = reader.delimiter(
@@ -391,7 +391,7 @@ def test_a_failed_save_exhausts_the_iterator(
     make_reader: Callable[..., PReader],
     data_file: Path,
 ) -> None:
-    config.state_dir.write_bytes(b"foo")
+    config.state_dir.write_bytes(b"not a directory")
 
     reader = make_reader(auto_save_state=True, auto_save_state_bytes=1)
     iterator = reader.delimiter(
@@ -406,17 +406,21 @@ def test_a_failed_save_exhausts_the_iterator(
 
 
 def test_a_failing_final_save_reaches_every_item_first(
-    data_file: Path, make_reader: Callable[..., PReader]
+    data_file: Path,
+    make_reader: Callable[..., PReader],
+    config: Config,
 ) -> None:
+    config.state_dir.write_bytes(b"not a directory")
+
     reader = make_reader(auto_save_state=True)
     iterator = reader.delimiter(
-        data_file, state="../../etc/passwd", delimiter=TEST_DEFAULT_DELIMITER
+        data_file, state=TEST_STATE_NAME, delimiter=TEST_DEFAULT_DELIMITER
     )
     segments = [next(iterator) for _ in range(len(SEGMENTS))]
 
     assert segments == [segment.encode() for segment in SEGMENTS]
 
-    with pytest.raises(StateError, match="path escapes root"):
+    with pytest.raises(FileExistsError):
         next(iterator)
 
 
@@ -424,17 +428,20 @@ def test_a_failing_autosave_stops_the_read_after_a_truncation(
     data_file: Path,
     make_reader: Callable[..., PReader],
     truncate: Callable[[Path, int], None],
+    config: Config,
 ) -> None:
+    config.state_dir.write_bytes(b"not a directory")
+
     reader = make_reader(auto_save_state=True, buffer_capacity=1)
     iterator = reader.delimiter(
-        data_file, state="../../etc/passwd", delimiter=TEST_DEFAULT_DELIMITER
+        data_file, state=TEST_STATE_NAME, delimiter=TEST_DEFAULT_DELIMITER
     )
 
     assert next(iterator) == SEGMENTS[0].encode()
 
     truncate(data_file, 1)
 
-    with pytest.raises(StateError, match="path escapes root"):
+    with pytest.raises(FileExistsError):
         list(iterator)
 
 
@@ -442,54 +449,65 @@ def test_a_failing_autosave_stops_the_read_while_skipping(
     data_file: Path,
     make_reader: Callable[..., PReader],
     truncate: Callable[[Path, int], None],
+    config: Config,
 ) -> None:
+    config.state_dir.write_bytes(b"not a directory")
+
     reader = make_reader(auto_save_state=True, buffer_capacity=1)
     options = IteratorOptions(skip=3)
     iterator = reader.delimiter(
         data_file,
-        state="../../etc/passwd",
+        state=TEST_STATE_NAME,
         delimiter=TEST_DEFAULT_DELIMITER,
         options=options,
     )
 
     truncate(data_file, 1)
 
-    with pytest.raises(StateError, match="path escapes root"):
+    with pytest.raises(FileExistsError):
         list(iterator)
 
 
 def test_a_failing_autosave_stops_the_read_on_a_skipped_item(
-    data_file: Path, make_reader: Callable[..., PReader]
+    data_file: Path,
+    make_reader: Callable[..., PReader],
+    config: Config,
 ) -> None:
+    config.state_dir.write_bytes(b"not a directory")
+
     reader = make_reader(auto_save_state=True, auto_save_state_bytes=1)
     options = IteratorOptions(skip=2)
     iterator = reader.delimiter(
         data_file,
-        state="../../etc/passwd",
+        state=TEST_STATE_NAME,
         delimiter=TEST_DEFAULT_DELIMITER,
         options=options,
     )
 
-    with pytest.raises(StateError, match="path escapes root"):
+    with pytest.raises(FileExistsError):
         next(iterator)
 
     assert iterator.state.position == len(SEGMENTS[0]) + 1
 
 
 def test_a_failing_autosave_stops_the_read_on_a_filtered_blank(
-    make_file: Callable[..., Path], make_reader: Callable[..., PReader]
+    make_file: Callable[..., Path],
+    make_reader: Callable[..., PReader],
+    config: Config,
 ) -> None:
+    config.state_dir.write_bytes(b"not a directory")
+
     reader = make_reader(auto_save_state=True, auto_save_state_bytes=1)
     path = make_file(TEST_DEFAULT_DELIMITER.encode() + b"foo")
 
     iterator = reader.delimiter(
         path,
-        state="../../etc/passwd",
+        state=TEST_STATE_NAME,
         delimiter=TEST_DEFAULT_DELIMITER,
         skip_empty=True,
     )
 
-    with pytest.raises(StateError, match="path escapes root"):
+    with pytest.raises(FileExistsError):
         next(iterator)
 
     assert iterator.state.position == 1
@@ -531,7 +549,7 @@ def test_auto_load_state_resumes_previous_position(
     )
 
 
-def test_auto_load_state_ignores_an_unverifiable_state(
+def test_auto_load_state_raises_when_the_file_changed(
     data_file: Path,
     make_reader: Callable[..., PReader],
     append: Callable[[Path, bytes], None],
@@ -545,10 +563,8 @@ def test_auto_load_state_ignores_an_unverifiable_state(
 
     append(data_file, b"tampered")
 
-    assert (
-        reader.delimiter(data_file, delimiter=TEST_DEFAULT_DELIMITER).state.position
-        == 0
-    )
+    with pytest.raises(StateError, match="file size mismatch"):
+        reader.delimiter(data_file, delimiter=TEST_DEFAULT_DELIMITER)
 
 
 def test_auto_load_state_resumes_stale_state_without_verification(
@@ -607,30 +623,32 @@ def test_raises_when_state_has_an_unsupported_type(
 @pytest.mark.parametrize(
     ("name", "message"), TEST_UNSAFE_STATE_NAMES.items(), ids=TEST_UNSAFE_STATE_NAME_IDS
 )
-def test_unsafe_name_defers_rejection_to_save(
-    reader: PReader, tmp_file: Path, name: str, message: str
+def test_raises_when_the_state_name_is_unsafe(
+    reader: PReader,
+    tmp_file: Path,
+    name: str,
+    message: str,
 ) -> None:
-    iterator = reader.delimiter(tmp_file, delimiter=TEST_DEFAULT_DELIMITER, state=name)
-    assert iterator.state.position == 0
-
     with pytest.raises(StateError, match=message):
-        iterator.state.save()
+        reader.delimiter(tmp_file, delimiter=TEST_DEFAULT_DELIMITER, state=name)
 
 
 @pytest.mark.skipif(
     os.name != "nt", reason="Windows path syntax is only unsafe on Windows"
 )
 @pytest.mark.parametrize(
-    "name", TEST_WINDOWS_UNSAFE_STATE_NAMES, ids=TEST_WINDOWS_UNSAFE_STATE_NAME_IDS
+    ("name", "message"),
+    TEST_WINDOWS_UNSAFE_STATE_NAMES.items(),
+    ids=TEST_WINDOWS_UNSAFE_STATE_NAME_IDS,
 )
-def test_unsafe_windows_name_defers_rejection_to_save(
-    reader: PReader, tmp_file: Path, name: str
+def test_raises_when_a_windows_state_name_is_unsafe(
+    reader: PReader,
+    tmp_file: Path,
+    name: str,
+    message: str,
 ) -> None:
-    iterator = reader.delimiter(tmp_file, delimiter=TEST_DEFAULT_DELIMITER, state=name)
-    assert iterator.state.position == 0
-
-    with pytest.raises(StateError, match="path escapes root"):
-        iterator.state.save()
+    with pytest.raises(StateError, match=message):
+        reader.delimiter(tmp_file, delimiter=TEST_DEFAULT_DELIMITER, state=name)
 
 
 def test_raises_when_state_object_file_argument_mismatches(
@@ -648,7 +666,7 @@ def test_raises_when_state_object_file_argument_mismatches(
         reader.delimiter(untracked, delimiter=TEST_DEFAULT_DELIMITER, state=state)
 
 
-def test_verify_state_disabled_skips_the_mismatch_check(
+def test_raises_when_file_differs_and_verify_disabled(
     make_file: Callable[..., Path], make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(verify_state=False)
@@ -660,10 +678,8 @@ def test_verify_state_disabled_skips_the_mismatch_check(
     ).state
     state.save()
 
-    resumed = reader.delimiter(untracked, delimiter=TEST_DEFAULT_DELIMITER, state=state)
-
-    assert resumed.state.file.path == tracked
-    assert list(resumed) == [seg.encode() for seg in SEGMENTS]
+    with pytest.raises(StateError, match="file path mismatch"):
+        reader.delimiter(untracked, delimiter=TEST_DEFAULT_DELIMITER, state=state)
 
 
 def test_verify_state_disabled_skips_verification(
@@ -712,7 +728,6 @@ def test_raises_when_the_tracked_file_is_deleted(
 ) -> None:
     reader = make_reader(verify_state=False)
     tracked = make_file(DELIMITER_CONTENT, name="tracked.bin")
-    untracked = make_file(DELIMITER_CONTENT, name="untracked.bin")
 
     state = reader.delimiter(
         tracked, state=TEST_STATE_NAME, delimiter=TEST_DEFAULT_DELIMITER
@@ -722,7 +737,7 @@ def test_raises_when_the_tracked_file_is_deleted(
     tracked.unlink()
 
     with pytest.raises(FileNotFoundError):
-        reader.delimiter(untracked, state=state, delimiter=TEST_DEFAULT_DELIMITER)
+        reader.delimiter(tracked, state=state, delimiter=TEST_DEFAULT_DELIMITER)
 
 
 def test_resync_allows_resuming_moved_file(
@@ -775,7 +790,7 @@ def test_resync_allows_resuming_grown_file(
     assert list(resumed) == [b"more"]
 
 
-def test_reusing_state_name_for_different_file_reads_fresh_file(
+def test_auto_load_state_raises_when_the_name_tracks_another_file(
     make_file: Callable[..., Path], make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(auto_load_state=True)
@@ -787,16 +802,8 @@ def test_reusing_state_name_for_different_file_reads_fresh_file(
         file_a, delimiter=TEST_DEFAULT_DELIMITER, state="shared-name"
     ).state.save()
 
-    reused = reader.delimiter(
-        file_b, delimiter=TEST_DEFAULT_DELIMITER, state="shared-name"
-    )
-
-    assert reused.state.file.path == file_b
-    assert next(reused) == b"bar"
-
-    reused.state.save()
-
-    assert reader.states["shared-name"].file.path == file_b
+    with pytest.raises(StateError, match="file path mismatch"):
+        reader.delimiter(file_b, delimiter=TEST_DEFAULT_DELIMITER, state="shared-name")
 
 
 def test_auto_name_changes_when_file_moves(
@@ -975,7 +982,7 @@ def test_state_dir_change_creates_fresh_state(
 
     iterator.state.save()
 
-    other_reader = PReader(config=Config(state_dir=tmp_path / "other-preader"))
+    other_reader = make_reader(state_dir=tmp_path / "other-preader")
 
     assert (
         other_reader.delimiter(
@@ -991,15 +998,14 @@ def test_state_object_keeps_its_own_state_dir(
     owner = make_reader(auto_save_state=True)
     state = owner.bytes(data_file, state=TEST_STATE_NAME).state
 
-    config = Config(
+    reader = make_reader(
         state_dir=tmp_path / "other-preader", auto_save_state=True, verify_state=False
     )
-    reader = PReader(config=config)
 
     list(reader.delimiter(data_file, state=state, delimiter=TEST_DEFAULT_DELIMITER))
 
     assert (owner.config.state_dir / f"{TEST_STATE_NAME}.state.json").is_file()
-    assert not (config.state_dir / f"{TEST_STATE_NAME}.state.json").exists()
+    assert not (reader.config.state_dir / f"{TEST_STATE_NAME}.state.json").exists()
 
 
 def test_resume_ignores_align_start_and_skip(
@@ -1104,7 +1110,7 @@ def test_flag_combinations_narrow_the_output(
     assert list(items) == expected
 
 
-def test_auto_load_state_ignores_a_corrupt_payload(
+def test_auto_load_state_raises_when_the_payload_is_corrupt(
     data_file: Path, make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(auto_load_state=True)
@@ -1115,13 +1121,11 @@ def test_auto_load_state_ignores_a_corrupt_payload(
     state_path = iterator.state.save()
     state_path.write_text("not valid json")
 
-    assert (
-        reader.delimiter(data_file, delimiter=TEST_DEFAULT_DELIMITER).state.position
-        == 0
-    )
+    with pytest.raises(StateError, match="expected ident"):
+        reader.delimiter(data_file, delimiter=TEST_DEFAULT_DELIMITER)
 
 
-def test_auto_load_state_ignores_an_incomplete_payload(
+def test_auto_load_state_raises_when_the_payload_is_incomplete(
     data_file: Path, make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(auto_load_state=True)
@@ -1136,10 +1140,8 @@ def test_auto_load_state_ignores_an_incomplete_payload(
 
     state_path.write_text(json.dumps(payload))
 
-    assert (
-        reader.delimiter(data_file, delimiter=TEST_DEFAULT_DELIMITER).state.position
-        == 0
-    )
+    with pytest.raises(StateError, match="missing field `timestamps`"):
+        reader.delimiter(data_file, delimiter=TEST_DEFAULT_DELIMITER)
 
 
 def test_second_iteration_yields_nothing(reader: PReader, data_file: Path) -> None:
@@ -1167,10 +1169,13 @@ def test_drop_warns_on_stderr_when_saving_fails(
     data_file: Path,
     make_reader: Callable[..., PReader],
     capfd: pytest.CaptureFixture[str],
+    config: Config,
 ) -> None:
+    config.state_dir.write_bytes(b"not a directory")
+
     reader = make_reader(auto_save_state=True)
     iterator = reader.delimiter(
-        data_file, delimiter=TEST_DEFAULT_DELIMITER, state="../../etc/passwd"
+        data_file, delimiter=TEST_DEFAULT_DELIMITER, state=TEST_STATE_NAME
     )
 
     next(iterator)

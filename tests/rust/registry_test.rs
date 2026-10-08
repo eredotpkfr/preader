@@ -2,19 +2,22 @@ use std::fs;
 
 use preader::{Error, STATE_FILE_EXTENSION};
 use rstest::rstest;
+use rstest_reuse::apply;
 
+#[cfg(unix)]
+use crate::common::guards::Blocked;
+#[cfg(windows)]
+use crate::common::templates::windows_unsafe_names;
 use crate::common::{
     constants::{
         TEST_EVERY_DEPTH, TEST_MISSING_STATE_NAME, TEST_OTHER_STATE_NAME, TEST_STATE_NAME,
-        TEST_UNSAFE_NAMES,
     },
     fixtures::sandbox,
     funcs::{names, native},
-    macros::asserts::{assert_err, assert_err_is},
+    macros::asserts::{assert_err_eq, assert_err_is},
     sandbox::Sandbox,
+    templates::unsafe_names,
 };
-#[cfg(unix)]
-use crate::common::{guards::Blocked, macros::skip::skip};
 
 fn corrupt(sandbox: &Sandbox, name: &str) {
     let path = sandbox.states().path(name).unwrap();
@@ -79,21 +82,37 @@ fn load_returns_the_name_from_the_payload(sandbox: Sandbox) {
     );
 }
 
-#[rstest]
-#[case::traversal(TEST_UNSAFE_NAMES[0])]
-#[case::absolute(TEST_UNSAFE_NAMES[1])]
-#[case::empty(TEST_UNSAFE_NAMES[2])]
-#[case::current_dir(TEST_UNSAFE_NAMES[3])]
-fn every_lookup_rejects_an_unsafe_name(sandbox: Sandbox, #[case] unsafe_name: (&str, &str)) {
-    let (name, message) = unsafe_name;
+#[apply(unsafe_names)]
+fn every_lookup_rejects_an_unsafe_name(
+    sandbox: Sandbox,
+    #[case] name: &str,
+    #[case] message: String,
+) {
     let registry = sandbox.states();
 
     assert!(registry.find(name).is_none());
     assert!(!registry.exists(name));
 
-    assert_err!(registry.load(name), message);
-    assert_err!(registry.delete(name), message);
-    assert_err!(registry.path(name), message);
+    assert_err_eq!(registry.load(name), message);
+    assert_err_eq!(registry.delete(name), message);
+    assert_err_eq!(registry.path(name), message);
+}
+
+#[cfg(windows)]
+#[apply(windows_unsafe_names)]
+fn every_lookup_rejects_an_unsafe_windows_name(
+    sandbox: Sandbox,
+    #[case] name: &str,
+    #[case] message: &str,
+) {
+    let registry = sandbox.states();
+
+    assert!(registry.find(name).is_none());
+    assert!(!registry.exists(name));
+
+    assert_err_eq!(registry.load(name), message);
+    assert_err_eq!(registry.delete(name), message);
+    assert_err_eq!(registry.path(name), message);
 }
 
 #[rstest]
@@ -269,7 +288,7 @@ fn unreadable_subdirectory_fails_every_walk(sandbox: Sandbox) {
     let mut blocked = Blocked::default();
 
     if !Blocked::enforced(&sandbox.path().join("probe")) {
-        skip!("directory permissions are not enforced here");
+        return;
     }
 
     sandbox.save(TEST_STATE_NAME);

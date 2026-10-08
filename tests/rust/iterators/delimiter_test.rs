@@ -2,12 +2,14 @@
 use preader::Error;
 use preader::{DEFAULT_DELIMITER, IteratorBuild, IteratorRead};
 use rstest::rstest;
+use rstest_reuse::apply;
 
 use crate::common::{
     constants::{TEST_BLANK_SEGMENT_CONTENT, TEST_INVALID_UTF8, TEST_SEGMENT_CONTENT},
     fixtures::sandbox,
     funcs::{drain, items, texts},
     sandbox::Sandbox,
+    templates::delimiter_characters,
 };
 #[cfg(unix)]
 use crate::common::{
@@ -56,10 +58,7 @@ fn trailing_delimiter_yields_no_extra_segment(sandbox: Sandbox) {
     assert_eq!(segments(&sandbox, b"seg-0,seg-1,"), ["seg-0", "seg-1"]);
 }
 
-#[rstest]
-#[case::null(b'\0')]
-#[case::newline(b'\n')]
-#[case::high_byte(0xE9)]
+#[apply(delimiter_characters)]
 fn character_selects_the_separator(sandbox: Sandbox, #[case] character: u8) {
     let content = [b"seg-0", [character].as_slice(), b"seg-1"].concat();
     let path = sandbox.file(&content);

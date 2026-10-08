@@ -12,12 +12,6 @@ pub const TEST_EVERY_DEPTH: [&str; 3] = [
     TEST_NESTED_STATE_NAME,
     TEST_DEEP_STATE_NAME,
 ];
-pub const TEST_UNSAFE_NAMES: [(&str, &str); 4] = [
-    ("../../etc/passwd", "path escapes root"),
-    ("/tmp", "path escapes root"),
-    ("", "path must not be empty"),
-    (".", "path must not be empty"),
-];
 pub const TEST_FILE_NAME: &str = "data.bin";
 pub const TEST_TRACKED_NAME: &str = "tracked.bin";
 pub const TEST_FILE_PATH: &str = "/tmp/data.bin";
@@ -45,5 +39,4 @@ pub const TEST_READ_FROM: u64 = 10;
 #[cfg(unix)]
 pub const TEST_REWOUND_TO: u64 = 2;
 pub const TEST_UNSEEKABLE_POSITION: u64 = i64::MAX as u64 + 1;
-pub const TEST_UNSAFE_NAME: &str = "../../escape";
 pub const TEST_UNICODE_TEXT: &str = "café Ünicode 日本語 🦀";

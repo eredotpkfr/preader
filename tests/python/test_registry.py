@@ -79,6 +79,18 @@ def test_contains_returns_false_when_name_is_unsafe(
     assert name not in registry
 
 
+@pytest.mark.skipif(
+    os.name != "nt", reason="Windows path syntax is only unsafe on Windows"
+)
+@pytest.mark.parametrize(
+    "name", TEST_WINDOWS_UNSAFE_STATE_NAMES, ids=TEST_WINDOWS_UNSAFE_STATE_NAME_IDS
+)
+def test_contains_returns_false_when_a_windows_name_is_unsafe(
+    registry: StateRegistry, name: str
+) -> None:
+    assert name not in registry
+
+
 def test_names(reader: PReader, registry: StateRegistry, tmp_file: Path) -> None:
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
     reader.bytes(tmp_file, state=OTHER_STATE_NAME).state.save()
@@ -162,6 +174,21 @@ def test_lookup_raises_when_missing(
     ("name", "message"), TEST_UNSAFE_STATE_NAMES.items(), ids=TEST_UNSAFE_STATE_NAME_IDS
 )
 def test_getitem_raises_when_name_is_unsafe(
+    registry: StateRegistry, name: str, message: str
+) -> None:
+    with pytest.raises(StateError, match=message):
+        registry[name]
+
+
+@pytest.mark.skipif(
+    os.name != "nt", reason="Windows path syntax is only unsafe on Windows"
+)
+@pytest.mark.parametrize(
+    ("name", "message"),
+    TEST_WINDOWS_UNSAFE_STATE_NAMES.items(),
+    ids=TEST_WINDOWS_UNSAFE_STATE_NAME_IDS,
+)
+def test_getitem_raises_when_a_windows_name_is_unsafe(
     registry: StateRegistry, name: str, message: str
 ) -> None:
     with pytest.raises(StateError, match=message):
@@ -325,13 +352,15 @@ def test_names_ignores_a_broken_symlink(
 
 @pytest.mark.usefixtures("requires_symlinks")
 def test_names_does_not_descend_into_a_symlinked_directory(
-    reader: PReader, registry: StateRegistry, config: Config, tmp_file: Path
+    make_reader: Callable[..., PReader],
+    registry: StateRegistry,
+    config: Config,
+    tmp_file: Path,
 ) -> None:
     outside = config.state_dir.parent / "outside"
     outside.mkdir(parents=True)
 
-    reader = PReader(config=Config(state_dir=outside))
-    reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
+    make_reader(state_dir=outside).bytes(tmp_file, state=TEST_STATE_NAME).state.save()
 
     config.state_dir.mkdir(parents=True, exist_ok=True)
     (config.state_dir / "link").symlink_to(outside, target_is_directory=True)
@@ -390,6 +419,7 @@ def test_getitem_raises_when_the_state_is_a_symlink(
 @pytest.mark.usefixtures("requires_symlinks")
 def test_names_ignores_a_symlink_that_leaves_the_state_dir(
     reader: PReader,
+    make_reader: Callable[..., PReader],
     registry: StateRegistry,
     config: Config,
     tmp_path: Path,
@@ -399,7 +429,7 @@ def test_names_ignores_a_symlink_that_leaves_the_state_dir(
     outside.mkdir(parents=True)
 
     target = (
-        PReader(config=Config(state_dir=outside))
+        make_reader(state_dir=outside)
         .bytes(tmp_file, state=TEST_STATE_NAME)
         .state.save()
     )
@@ -488,6 +518,18 @@ def test_find_returns_none_when_name_is_unsafe(
     assert registry.find(name) is None
 
 
+@pytest.mark.skipif(
+    os.name != "nt", reason="Windows path syntax is only unsafe on Windows"
+)
+@pytest.mark.parametrize(
+    "name", TEST_WINDOWS_UNSAFE_STATE_NAMES, ids=TEST_WINDOWS_UNSAFE_STATE_NAME_IDS
+)
+def test_find_returns_none_when_a_windows_name_is_unsafe(
+    registry: StateRegistry, name: str
+) -> None:
+    assert registry.find(name) is None
+
+
 def test_find_returns_none_when_state_is_corrupted(
     registry: StateRegistry, reader: PReader, tmp_file: Path
 ) -> None:
@@ -528,6 +570,21 @@ def test_delitem_raises_when_name_is_unsafe(
         del registry[name]
 
 
+@pytest.mark.skipif(
+    os.name != "nt", reason="Windows path syntax is only unsafe on Windows"
+)
+@pytest.mark.parametrize(
+    ("name", "message"),
+    TEST_WINDOWS_UNSAFE_STATE_NAMES.items(),
+    ids=TEST_WINDOWS_UNSAFE_STATE_NAME_IDS,
+)
+def test_delitem_raises_when_a_windows_name_is_unsafe(
+    registry: StateRegistry, name: str, message: str
+) -> None:
+    with pytest.raises(StateError, match=message):
+        del registry[name]
+
+
 def test_path_accepts_an_already_suffixed_name(registry: StateRegistry) -> None:
     assert registry.path(f"{TEST_STATE_NAME}.state.json") == registry.path(
         TEST_STATE_NAME
@@ -548,13 +605,25 @@ def test_path_raises_when_name_is_unsafe(
     os.name != "nt", reason="Windows path syntax is only unsafe on Windows"
 )
 @pytest.mark.parametrize(
-    "name", TEST_WINDOWS_UNSAFE_STATE_NAMES, ids=TEST_WINDOWS_UNSAFE_STATE_NAME_IDS
+    ("name", "message"),
+    TEST_WINDOWS_UNSAFE_STATE_NAMES.items(),
+    ids=TEST_WINDOWS_UNSAFE_STATE_NAME_IDS,
 )
 def test_path_raises_when_a_windows_name_is_unsafe(
-    registry: StateRegistry, name: str
+    registry: StateRegistry, name: str, message: str
 ) -> None:
-    with pytest.raises(StateError, match="path escapes root"):
+    with pytest.raises(StateError, match=message):
         registry.path(name)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows path syntax is unsafe on Windows")
+@pytest.mark.parametrize(
+    "name", TEST_WINDOWS_UNSAFE_STATE_NAMES, ids=TEST_WINDOWS_UNSAFE_STATE_NAME_IDS
+)
+def test_path_accepts_a_windows_name_on_unix(
+    registry: StateRegistry, config: Config, name: str
+) -> None:
+    assert registry.path(name) == config.state_dir / f"{name}.state.json"
 
 
 def test_all_returns_every_saved_state(
@@ -771,9 +840,11 @@ def test_names_creates_the_state_dir(registry: StateRegistry, config: Config) ->
     ids=["names", "len", "all", "clear", "search"],
 )
 def test_registry_raises_when_the_state_dir_is_a_file(
-    config: Config, make_reader: Callable[..., PReader], call: Callable[..., Any]
+    config: Config,
+    make_reader: Callable[..., PReader],
+    call: Callable[..., Any],
 ) -> None:
-    config.state_dir.write_text("not a directory")
+    config.state_dir.write_bytes(b"not a directory")
 
     with pytest.raises(FileExistsError):
         call(make_reader().states)
@@ -794,7 +865,7 @@ def test_blocked_state_dir_yields_empty_lookups(
     call: Callable[..., Any],
     expected: object,
 ) -> None:
-    config.state_dir.write_text("not a directory")
+    config.state_dir.write_bytes(b"not a directory")
 
     assert call(make_reader().states) == expected
 

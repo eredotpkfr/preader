@@ -4,7 +4,7 @@ use std::{fs, io::ErrorKind, path::PathBuf, time::Duration};
 
 use chrono::{DateTime, Timelike, Utc};
 use preader::{
-    Config, Error, FINGERPRINT_SAMPLE_BYTES, IteratorBuild, IteratorRead, PReader,
+    Config, Error, FINGERPRINT_SAMPLE_BYTES, IteratorBuild, IteratorRead, Mismatch, PReader,
     STATE_FILE_EXTENSION, StateManager, fingerprint,
 };
 use rstest::rstest;
@@ -19,10 +19,7 @@ use crate::common::{
     fixtures::sandbox,
     funcs::{canonical, consume, drain, native, state_data, tamper},
     guards::{mtime, set_mtime, set_pre_epoch_mtime},
-    macros::{
-        asserts::{assert_err, assert_err_is},
-        skip::skip,
-    },
+    macros::asserts::{assert_err, assert_err_is},
     sandbox::Sandbox,
 };
 
@@ -224,30 +221,27 @@ fn verify_fails_when_the_mtime_changed(sandbox: Sandbox) {
 }
 
 #[rstest]
-#[case::inside_the_window(10, true)]
-#[case::past_the_window(PAST_WINDOW as u64, false)]
-fn verify_watches_only_the_fingerprint_window(
-    sandbox: Sandbox,
-    #[case] offset: u64,
-    #[case] fails: bool,
-) {
+fn verify_fails_when_the_fingerprint_window_changes(sandbox: Sandbox) {
     let path = sandbox.large_file();
     let state = sandbox.stored(&path, TEST_STATE_NAME);
     let stamp = mtime(&path);
 
-    sandbox.overwrite(&path, offset, b"\xff");
+    sandbox.overwrite(&path, 10, b"\xff");
     set_mtime(&path, stamp);
 
-    let outcome = state.verify();
+    assert_err!(state.verify(), "file fingerprint mismatch");
+}
 
-    assert_eq!(outcome.is_err(), fails);
+#[rstest]
+fn verify_ignores_a_change_past_the_fingerprint_window(sandbox: Sandbox) {
+    let path = sandbox.large_file();
+    let state = sandbox.stored(&path, TEST_STATE_NAME);
+    let stamp = mtime(&path);
 
-    if let Err(error) = outcome {
-        assert!(
-            error.to_string().contains("file fingerprint mismatch"),
-            "{error}"
-        );
-    }
+    sandbox.overwrite(&path, PAST_WINDOW as u64, b"\xff");
+    set_mtime(&path, stamp);
+
+    assert!(state.verify().is_ok());
 }
 
 #[rstest]
@@ -283,12 +277,7 @@ fn verify_suggests_a_resync(sandbox: Sandbox) {
 
     sandbox.append(&path, b"more");
 
-    let error = state.verify().unwrap_err();
-
-    assert!(
-        error.to_string().contains("call state.resync(file)"),
-        "{error}"
-    );
+    assert_err!(state.verify(), "call state.resync(file)");
 }
 
 #[cfg(unix)]
@@ -360,15 +349,11 @@ fn resync_rejects_a_lost_prefix(
 ) {
     let saved = sandbox.recorded(&before.repeat(copies), 5);
     let path = sandbox.write(TEST_TRACKED_NAME, &after.repeat(remaining));
-    let error = saved.resync(&path).unwrap_err();
 
-    assert!(
-        error.to_string().contains("file content differs from the tracked file"),
-        "{error}"
-    );
-    assert!(
-        error.to_string().contains("read it under a new state to start over"),
-        "{error}"
+    assert_err!(
+        saved.resync(&path),
+        "file content differs from the tracked file",
+        "read it under a new state to start over"
     );
 }
 
@@ -493,7 +478,7 @@ fn resync_still_checks_path_without_verification(
         sandbox.path().join(name)
     };
 
-    assert!(saved.resync(&target).is_err());
+    assert_err_is!(saved.resync(&target), Error::Io(_) | Error::NotAFile(_));
 }
 
 #[rstest]
@@ -529,14 +514,12 @@ fn resync_moves_the_identity_forward(sandbox: Sandbox) {
 
     assert_eq!(once.file.size, 120);
 
-    let error = once.resync(&original).unwrap_err();
-
-    assert!(
-        error.to_string().contains("file content differs from the tracked file"),
-        "{error}"
+    assert_err!(
+        once.resync(&original),
+        "file content differs from the tracked file",
+        "grown.bin",
+        TEST_TRACKED_NAME
     );
-    assert!(error.to_string().contains("grown.bin"), "{error}");
-    assert!(error.to_string().contains(TEST_TRACKED_NAME), "{error}");
 }
 
 #[rstest]
@@ -548,11 +531,14 @@ fn resync_reseals_a_tampered_state(sandbox: Sandbox) {
 
     let reloaded = sandbox.lenient().states().load(TEST_STATE_NAME).unwrap();
 
-    assert!(reloaded.verify().is_err());
+    assert_err_is!(
+        reloaded.verify(),
+        Error::Mismatch(Mismatch::Checksum { .. })
+    );
 
     let resynced = reloaded.resync(&path).unwrap();
 
-    assert!(resynced.verify().is_ok());
+    resynced.verify().unwrap();
 
     assert_eq!(resynced.position, 999);
 }
@@ -560,7 +546,11 @@ fn resync_reseals_a_tampered_state(sandbox: Sandbox) {
 #[rstest]
 fn resync_keeps_an_unsafe_name_for_the_save(sandbox: Sandbox) {
     let path = sandbox.write(TEST_TRACKED_NAME, &TEST_LINE.repeat(25));
-    let saved = sandbox.named_state(&path, "../../escape");
+    let mut data = state_data(canonical(&path));
+
+    data.name = "../../escape".to_owned();
+
+    let saved = sandbox.manager().state(data);
     let mut resynced = saved.resync(&path).unwrap();
 
     assert_eq!(resynced.name, native("../../escape"));
@@ -590,10 +580,10 @@ fn resync_fails_when_mtime_precedes_epoch(sandbox: Sandbox) {
     let path = sandbox.path().join(TEST_TRACKED_NAME);
 
     if !set_pre_epoch_mtime(&path) {
-        skip!("a pre-epoch mtime cannot be set here");
+        return;
     }
 
-    assert!(matches!(saved.resync(&path), Err(Error::Time(_))));
+    assert_err_is!(saved.resync(&path), Error::Time(_));
 }
 
 #[rstest]
@@ -621,12 +611,11 @@ fn resynced_state_is_rejected_for_another_file(sandbox: Sandbox) {
     let first = sandbox.write("a.bin", &b"a".repeat(10));
     let second = sandbox.write("b.bin", &b"b".repeat(10));
     let resynced = sandbox.state(&first).resync(&first).unwrap();
-    let error = sandbox.reader().bytes(&second).state(resynced).build().unwrap_err();
 
-    assert!(error.to_string().contains("file path mismatch"), "{error}");
-    assert!(
-        error.to_string().contains("call state.resync(file)"),
-        "{error}"
+    assert_err!(
+        sandbox.reader().bytes(&second).state(resynced).build(),
+        "file path mismatch",
+        "call state.resync(file)"
     );
 }
 
@@ -705,7 +694,7 @@ fn resync_fails_when_the_path_is_not_utf8(sandbox: Sandbox) {
     let odd = sandbox.path().join(OsStr::from_bytes(TEST_NON_UTF8_NAME));
 
     if fs::write(&odd, &content).is_err() {
-        skip!("a non-UTF-8 file name cannot be created here");
+        return;
     }
 
     assert_err!(saved.resync(&odd), "invalid UTF-8");
@@ -720,16 +709,14 @@ fn resync_fails_when_the_file_is_unreadable(sandbox: Sandbox) {
     let mut blocked = Blocked::default();
 
     if !Blocked::enforced(&sandbox.path().join("probe")) {
-        skip!("file permissions are not enforced here");
+        return;
     }
 
     blocked.block(&path);
 
-    let error = saved.resync(&path).unwrap_err();
-
-    assert!(
-        matches!(&error, Error::Io(io) if io.kind() == ErrorKind::PermissionDenied),
-        "{error}"
+    assert_err_is!(
+        saved.resync(&path),
+        Error::Io(io) if io.kind() == ErrorKind::PermissionDenied
     );
 }
 
@@ -842,7 +829,7 @@ fn save_fails_when_the_state_dir_is_a_file(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let mut state = sandbox.state(&path);
 
-    fs::write(sandbox.state_dir(), b"foo").unwrap();
+    sandbox.block_states();
 
     assert_err_is!(state.save(), Error::Io(_));
 }
@@ -878,16 +865,16 @@ fn save_fails_when_the_path_is_not_utf8(sandbox: Sandbox) {
 #[case::path_rejected("../../etc/passwd")]
 #[case::commit_failed(TEST_STATE_NAME)]
 fn save_leaves_state_untouched_when_it_fails(sandbox: Sandbox, #[case] name: &str) {
-    let path = sandbox.line_file();
-    let mut state = sandbox.named_state(&path, name);
+    let mut data = state_data(sandbox.line_file());
+
+    data.name = name.to_owned();
+
+    let mut state = sandbox.manager().state(data);
     let before = state.timestamps.updated_at;
 
-    fs::create_dir_all(
-        sandbox.state_dir().join(format!("{TEST_STATE_NAME}{STATE_FILE_EXTENSION}")),
-    )
-    .unwrap();
+    sandbox.block_states();
 
-    state.save().unwrap_err();
+    assert_err_is!(state.save(), Error::Io(_) | Error::Path(_));
 
     assert_eq!(state.timestamps.updated_at, before);
 }
@@ -900,10 +887,7 @@ fn save_leaves_no_temporary_file(sandbox: Sandbox, #[case] blocked: bool) {
     let mut state = sandbox.state(&path);
 
     if blocked {
-        fs::create_dir_all(
-            sandbox.state_dir().join(format!("{TEST_STATE_NAME}{STATE_FILE_EXTENSION}")),
-        )
-        .unwrap();
+        fs::create_dir_all(state.path().unwrap()).unwrap();
     }
 
     assert_eq!(state.save().is_err(), blocked);
@@ -926,11 +910,9 @@ fn load_fails_when_the_file_is_deleted(sandbox: Sandbox) {
     fs::remove_file(&path).unwrap();
     state.save().unwrap();
 
-    let error = sandbox.states().load(TEST_STATE_NAME).unwrap_err();
-
-    assert!(
-        matches!(&error, Error::Io(io) if io.kind() == ErrorKind::NotFound),
-        "{error}"
+    assert_err_is!(
+        sandbox.states().load(TEST_STATE_NAME),
+        Error::Io(io) if io.kind() == ErrorKind::NotFound
     );
 }
 

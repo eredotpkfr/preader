@@ -1,12 +1,16 @@
-use preader::{Config, IteratorBuild, IteratorRead, State, StateSource};
+use preader::{Error, IteratorBuild, IteratorRead, Mismatch, State, StateSource};
 use rstest::rstest;
+use rstest_reuse::apply;
 
+#[cfg(windows)]
+use crate::common::templates::windows_unsafe_names;
 use crate::common::{
     constants::{TEST_LINE, TEST_OTHER_STATE_NAME, TEST_STATE_NAME},
     fixtures::sandbox,
-    funcs::canonical,
-    macros::asserts::assert_err,
+    funcs::native,
+    macros::asserts::{assert_err, assert_err_eq, assert_err_is},
     sandbox::Sandbox,
+    templates::unsafe_names,
 };
 
 #[rstest]
@@ -98,11 +102,9 @@ fn advanced_state_needs_save_before_it_is_reused(sandbox: Sandbox) {
 
     drop(bytes);
 
-    let error = sandbox.reader().bytes(&path).state(state).build().unwrap_err();
-
-    assert!(
-        error.to_string().contains("state checksum mismatch"),
-        "{error}"
+    assert_err!(
+        sandbox.reader().bytes(&path).state(state).build(),
+        "state checksum mismatch"
     );
 }
 
@@ -130,10 +132,7 @@ fn name_is_normalized_before_it_is_used(sandbox: Sandbox) {
 fn auto_load_resumes_only_a_matching_file(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let other = sandbox.write("other.bin", TEST_LINE);
-    let reader = sandbox.reader_with(Config {
-        auto_load_state: true,
-        ..sandbox.config()
-    });
+    let reader = sandbox.resuming();
     let mut bytes = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap();
 
     bytes.read().unwrap();
@@ -145,10 +144,42 @@ fn auto_load_resumes_only_a_matching_file(sandbox: Sandbox) {
         reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap().state().position,
         1
     );
-    assert_eq!(
-        reader.bytes(&other).state(TEST_STATE_NAME).build().unwrap().state().position,
-        0
+
+    assert_err_is!(
+        reader.bytes(&other).state(TEST_STATE_NAME).build(),
+        Error::Mismatch(Mismatch::Path { .. })
     );
+}
+
+#[rstest]
+fn auto_load_starts_fresh_without_a_saved_state(sandbox: Sandbox) {
+    let path = sandbox.line_file();
+    let mut bytes = sandbox.resuming().bytes(&path).state(TEST_STATE_NAME).build().unwrap();
+
+    assert_eq!(bytes.state().position, 0);
+}
+
+#[apply(unsafe_names)]
+fn build_fails_when_the_name_is_unsafe(
+    sandbox: Sandbox,
+    #[case] name: &str,
+    #[case] message: String,
+) {
+    let path = sandbox.line_file();
+
+    assert_err_eq!(sandbox.reader().bytes(&path).state(name).build(), message);
+}
+
+#[cfg(windows)]
+#[apply(windows_unsafe_names)]
+fn build_fails_when_a_windows_name_is_unsafe(
+    sandbox: Sandbox,
+    #[case] name: &str,
+    #[case] message: &str,
+) {
+    let path = sandbox.line_file();
+
+    assert_err_eq!(sandbox.reader().bytes(&path).state(name).build(), message);
 }
 
 #[rstest]
@@ -164,13 +195,15 @@ fn existing_state_is_rejected_for_another_file(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn existing_state_skips_check_without_verification(sandbox: Sandbox) {
+fn existing_state_is_rejected_for_another_file_without_verification(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let other = sandbox.write("other.bin", TEST_LINE);
     let state = sandbox.state(&path);
-    let mut resumed = sandbox.lenient().bytes(&other).state(state).build().unwrap();
 
-    assert_eq!(resumed.state().file.path, canonical(&path));
+    assert_err_is!(
+        sandbox.lenient().bytes(&other).state(state).build(),
+        Error::Mismatch(Mismatch::Path { .. })
+    );
 }
 
 #[rstest]

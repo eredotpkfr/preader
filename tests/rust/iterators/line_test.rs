@@ -157,7 +157,9 @@ fn resume_after_an_invalid_line_stays_aligned(sandbox: Sandbox) {
     let mut lines = reader.lines(&path).state("job-1").build().unwrap();
 
     lines.read().unwrap();
-    lines.read().unwrap_err();
+
+    assert_err_is!(lines.read(), Error::Utf8(_));
+
     lines.state().save().unwrap();
 
     drop(lines);

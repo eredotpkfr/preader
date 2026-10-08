@@ -4,7 +4,7 @@ use preader::{Config, DEFAULT_AUTO_SAVE_STATE_BYTES, Error, IteratorBuild, Itera
 use rstest::rstest;
 
 use crate::common::{
-    constants::{TEST_ALPHABET, TEST_OTHER_STATE_NAME, TEST_STATE_NAME, TEST_UNSAFE_NAME},
+    constants::{TEST_ALPHABET, TEST_OTHER_STATE_NAME, TEST_STATE_NAME},
     fixtures::sandbox,
     funcs::{consume, drain, items, take},
     macros::asserts::assert_err_is,
@@ -14,7 +14,6 @@ use crate::common::{
 use crate::common::{
     constants::{TEST_READ_FROM, TEST_REWOUND_TO},
     guards::Blocked,
-    macros::skip::skip,
 };
 
 const CONTENT_SIZE: u64 = TEST_ALPHABET.len() as u64;
@@ -435,7 +434,7 @@ fn failed_save_exhausts_the_iterator(sandbox: Sandbox) {
     let reader = sandbox.autosaving(1);
     let mut bytes = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap();
 
-    bytes.read().unwrap_err();
+    assert_err_is!(bytes.read(), Error::Io(_));
 
     for _ in 0..3 {
         assert_eq!(bytes.read().unwrap(), None);
@@ -446,8 +445,10 @@ fn failed_save_exhausts_the_iterator(sandbox: Sandbox) {
 fn failing_final_save_reaches_every_item_first(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let reader = sandbox.autosaving(0);
-    let mut bytes = reader.bytes(&path).state(TEST_UNSAFE_NAME).build().unwrap();
+    let mut bytes = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap();
     let mut yielded = Vec::new();
+
+    sandbox.block_states();
 
     let error = loop {
         match bytes.read() {
@@ -457,7 +458,7 @@ fn failing_final_save_reaches_every_item_first(sandbox: Sandbox) {
         }
     };
 
-    assert!(error.to_string().contains("path escapes root"), "{error}");
+    assert!(matches!(error, Error::Io(_)), "{error}");
 
     assert_eq!(yielded, TEST_ALPHABET);
 }
@@ -468,7 +469,9 @@ fn error_ignoring_loop_still_terminates(sandbox: Sandbox) {
     let reader = sandbox.autosaving(1);
     let mut polls = 0;
 
-    for item in reader.bytes(&path).state(TEST_UNSAFE_NAME).build().unwrap() {
+    sandbox.block_states();
+
+    for item in reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap() {
         polls += 1;
 
         assert!(
@@ -477,7 +480,7 @@ fn error_ignoring_loop_still_terminates(sandbox: Sandbox) {
         );
 
         if let Err(error) = item {
-            assert!(error.to_string().contains("path escapes root"), "{error}");
+            assert!(matches!(error, Error::Io(_)), "{error}");
         }
     }
 
@@ -488,7 +491,9 @@ fn error_ignoring_loop_still_terminates(sandbox: Sandbox) {
 fn read_error_reaches_caller_before_any_save(sandbox: Sandbox) {
     let path = sandbox.file(b"foo\n\xff\xfe\n");
     let reader = sandbox.autosaving(0);
-    let mut lines = reader.lines(&path).state(TEST_UNSAFE_NAME).build().unwrap();
+    let mut lines = reader.lines(&path).state(TEST_STATE_NAME).build().unwrap();
+
+    sandbox.block_states();
 
     assert_eq!(lines.read().unwrap(), Some("foo"));
 
@@ -506,12 +511,8 @@ fn resumed_read_covers_what_failed_save_left_behind(sandbox: Sandbox) {
         ..sandbox.config()
     });
     let mut blocked = Blocked::default();
-    let mut first = Vec::new();
     let mut bytes = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap();
-
-    for _ in 0..10 {
-        first.push(bytes.read().unwrap().unwrap());
-    }
+    let first = take(&mut bytes, 10);
 
     drop(bytes);
 
@@ -520,7 +521,7 @@ fn resumed_read_covers_what_failed_save_left_behind(sandbox: Sandbox) {
     blocked.read_only(sandbox.state_dir());
 
     if fs::write(sandbox.state_dir().join("probe"), b"x").is_ok() {
-        skip!("a read-only directory is still writable here");
+        return;
     }
 
     let mut bytes = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap();

@@ -1,17 +1,16 @@
 use preader::{DEFAULT_DELIMITER, IteratorBuild};
 use rstest::rstest;
+use rstest_reuse::apply;
 
 use crate::common::{
     constants::{TEST_BLANK_SEGMENT_CONTENT, TEST_SEGMENT_CONTENT},
     fixtures::sandbox,
     funcs::{items, texts},
     sandbox::Sandbox,
+    templates::delimiter_characters,
 };
 
-#[rstest]
-#[case::newline(b'\n')]
-#[case::null(b'\0')]
-#[case::letter(b'x')]
+#[apply(delimiter_characters)]
 fn character_sets_the_boundary(sandbox: Sandbox, #[case] character: u8) {
     let content = [b"foo", [character].as_slice(), b"bar"].concat();
     let path = sandbox.file(&content);

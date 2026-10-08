@@ -2,20 +2,24 @@ use std::fs;
 
 use preader::{
     Config, DEFAULT_BUFFER_CAPACITY, DEFAULT_DELIMITER, Error, IteratorBuild, IteratorRead,
-    PReader, STATE_FILE_EXTENSION,
+    Mismatch, PReader, STATE_FILE_EXTENSION,
 };
 use rstest::rstest;
+use rstest_reuse::apply;
 
+#[cfg(unix)]
+use crate::common::guards::Blocked;
 use crate::common::{
     constants::{
         TEST_ALPHABET, TEST_BLANK_LINE_CONTENT, TEST_LINE_CONTENT, TEST_OTHER_STATE_NAME,
-        TEST_SEGMENT_CONTENT, TEST_STATE_NAME, TEST_UNSAFE_NAME,
+        TEST_SEGMENT_CONTENT, TEST_STATE_NAME,
     },
     fixtures::sandbox,
     funcs::{drain, items, texts},
     iterators::{ITERATORS, LOSSLESS_ITERATORS, Plan},
-    macros::asserts::assert_err,
+    macros::asserts::{assert_err, assert_err_is},
     sandbox::Sandbox,
+    templates::malformed_payloads,
 };
 
 #[rstest]
@@ -164,11 +168,12 @@ fn every_byte_value_survives_a_round_trip(sandbox: Sandbox) {
     }
 }
 
-#[rstest]
-#[case::corrupt("not valid json")]
-#[case::incomplete("{}")]
-#[case::empty("")]
-fn auto_load_ignores_an_unreadable_payload(sandbox: Sandbox, #[case] payload: &str) {
+#[apply(malformed_payloads)]
+fn auto_load_fails_when_the_payload_is_corrupt(
+    sandbox: Sandbox,
+    #[case] payload: &str,
+    #[case] message: &str,
+) {
     let path = sandbox.file(TEST_ALPHABET);
     let reader = sandbox.resuming();
     let mut bytes = reader.bytes(&path).build().unwrap();
@@ -181,11 +186,36 @@ fn auto_load_ignores_an_unreadable_payload(sandbox: Sandbox, #[case] payload: &s
 
     fs::write(&state_path, payload).unwrap();
 
-    assert_eq!(reader.bytes(&path).build().unwrap().state().position, 0);
+    assert_err!(reader.bytes(&path).build(), message);
+
+    assert_err_is!(reader.bytes(&path).build(), Error::Serde(_));
+}
+
+#[cfg(unix)]
+#[rstest]
+fn auto_load_fails_when_the_state_is_unreadable(sandbox: Sandbox) {
+    let path = sandbox.file(TEST_ALPHABET);
+    let reader = sandbox.resuming();
+    let mut bytes = reader.bytes(&path).build().unwrap();
+    let mut blocked = Blocked::default();
+
+    bytes.read().unwrap();
+
+    let state_path = bytes.state().save().unwrap();
+
+    drop(bytes);
+
+    if !Blocked::enforced(&sandbox.path().join("probe")) {
+        return;
+    }
+
+    blocked.block(&state_path);
+
+    assert_err_is!(reader.bytes(&path).build(), Error::Io(_));
 }
 
 #[rstest]
-fn auto_load_ignores_an_unverifiable_state(sandbox: Sandbox) {
+fn auto_load_fails_when_the_file_changed(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let reader = sandbox.resuming();
     let mut bytes = reader.bytes(&path).build().unwrap();
@@ -197,7 +227,10 @@ fn auto_load_ignores_an_unverifiable_state(sandbox: Sandbox) {
 
     sandbox.append(&path, b"more");
 
-    assert_eq!(reader.bytes(&path).build().unwrap().state().position, 0);
+    assert_err_is!(
+        reader.bytes(&path).build(),
+        Error::Mismatch(Mismatch::Size { .. })
+    );
 }
 
 #[rstest]
@@ -325,17 +358,14 @@ fn symlinks_to_one_target_share_the_autoname(sandbox: Sandbox) {
 #[rstest]
 fn deleted_tracked_file_fails_the_build(sandbox: Sandbox) {
     let tracked = sandbox.write("tracked.bin", TEST_ALPHABET);
-    let untracked = sandbox.write("untracked.bin", TEST_ALPHABET);
     let reader = sandbox.lenient();
     let state = sandbox.named_state(&tracked, TEST_STATE_NAME);
 
     fs::remove_file(&tracked).unwrap();
 
-    let error = reader.bytes(&untracked).state(state).build().unwrap_err();
-
-    assert!(
-        matches!(&error, Error::Io(io) if io.kind() == std::io::ErrorKind::NotFound),
-        "{error}"
+    assert_err_is!(
+        reader.bytes(&tracked).state(state).build(),
+        Error::Io(io) if io.kind() == std::io::ErrorKind::NotFound
     );
 }
 
@@ -354,7 +384,7 @@ fn file_replaced_by_directory_fails_read(sandbox: Sandbox) {
         .build()
         .and_then(|mut bytes| bytes.try_for_each(|byte| byte.map(drop)));
 
-    assert!(matches!(outcome, Err(Error::Io(_))), "{outcome:?}");
+    assert_err_is!(outcome, Error::Io(_));
 }
 
 #[rstest]
@@ -365,23 +395,24 @@ fn save_error_stops_read_after_truncation(sandbox: Sandbox) {
         buffer_capacity: 1,
         ..sandbox.config()
     });
-    let mut bytes = reader.bytes(&path).state(TEST_UNSAFE_NAME).build().unwrap();
+    let mut bytes = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap();
 
+    sandbox.block_states();
     bytes.read().unwrap();
     sandbox.truncate(&path, 1);
 
-    let error = bytes.find_map(Result::err).unwrap();
-
-    assert!(error.to_string().contains("path escapes root"), "{error}");
+    assert_err_is!(bytes.find(Result::is_err).unwrap(), Error::Io(_));
 }
 
 #[rstest]
 fn save_error_stops_read_on_skipped_item(sandbox: Sandbox) {
     let path = sandbox.file(TEST_LINE_CONTENT);
     let reader = sandbox.autosaving(1);
-    let mut lines = reader.lines(&path).state(TEST_UNSAFE_NAME).skip(2).build().unwrap();
+    let mut lines = reader.lines(&path).state(TEST_STATE_NAME).skip(2).build().unwrap();
 
-    assert_err!(lines.read(), "path escapes root");
+    sandbox.block_states();
+
+    assert_err_is!(lines.read(), Error::Io(_));
 
     assert_eq!(lines.state().position, 7);
 }
@@ -390,9 +421,11 @@ fn save_error_stops_read_on_skipped_item(sandbox: Sandbox) {
 fn save_error_stops_read_on_filtered_blank(sandbox: Sandbox) {
     let path = sandbox.file(b"\nfoo\n");
     let reader = sandbox.autosaving(1);
-    let mut lines = reader.lines(&path).state(TEST_UNSAFE_NAME).skip_empty(true).build().unwrap();
+    let mut lines = reader.lines(&path).state(TEST_STATE_NAME).skip_empty(true).build().unwrap();
 
-    assert_err!(lines.read(), "path escapes root");
+    sandbox.block_states();
+
+    assert_err_is!(lines.read(), Error::Io(_));
 
     assert_eq!(lines.state().position, 1);
 }
@@ -403,13 +436,14 @@ fn save_error_stops_read_when_end_drops_chunk(sandbox: Sandbox) {
     let reader = sandbox.autosaving(0);
     let mut chunks = reader
         .chunks(&path)
-        .state(TEST_UNSAFE_NAME)
+        .state(TEST_STATE_NAME)
         .size(8)
         .drop_partial(true)
         .end(12)
         .build()
         .unwrap();
-    let error = chunks.find_map(Result::err).unwrap();
 
-    assert!(error.to_string().contains("path escapes root"), "{error}");
+    sandbox.block_states();
+
+    assert_err_is!(chunks.find(Result::is_err).unwrap(), Error::Io(_));
 }
