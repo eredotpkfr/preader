@@ -8,27 +8,23 @@ use preader::{
     Config, FileMetadata, STATE_FILE_EXTENSION, State, StateData, StateManager, TMP_FILE_EXTENSION,
     Timestamps, default_state_dir,
 };
+#[cfg(unix)]
+use preader::{Error, PathError};
 use rstest::rstest;
+use rstest_reuse::apply;
 use sha2::{Digest, Sha256};
 
+#[cfg(unix)]
+use crate::common::macros::asserts::assert_err_is;
 use crate::common::{
-    constants::{
-        TEST_FILE_PATH, TEST_LINE, TEST_LINE_FINGERPRINT, TEST_STATE_NAME, TEST_UNSAFE_NAMES,
-    },
+    constants::{TEST_FILE_PATH, TEST_LINE, TEST_LINE_FINGERPRINT, TEST_STATE_NAME},
     fixtures::sandbox,
-    macros::asserts::assert_err,
+    funcs::native,
+    macros::asserts::{assert_err, assert_err_eq},
     sandbox::Sandbox,
+    templates::{malformed_payloads, unsafe_names, windows_unsafe_names},
 };
 
-#[cfg(windows)]
-const WINDOWS_UNSAFE_NAMES: [&str; 6] = [
-    "C:\\job-1",
-    "C:job-1",
-    "\\job-1",
-    "\\\\server\\share\\job-1",
-    "\\\\?\\C:\\job-1",
-    "..\\..\\etc\\passwd",
-];
 const PATH_DIGEST: &str = "07cb9e47c6d8681a47020d0bb04776e06ada8b6d7aabcf4838a127f98e9f4fe2";
 
 fn lenient(sandbox: &Sandbox) -> StateManager {
@@ -216,24 +212,36 @@ fn path_does_not_need_the_state_dir(sandbox: Sandbox) {
     assert_eq!(path.parent().unwrap(), state_dir);
 }
 
-#[rstest]
-#[case::traversal(TEST_UNSAFE_NAMES[0])]
-#[case::absolute(TEST_UNSAFE_NAMES[1])]
-#[case::empty(TEST_UNSAFE_NAMES[2])]
-#[case::current_dir(TEST_UNSAFE_NAMES[3])]
-fn path_fails_when_the_name_is_unsafe(sandbox: Sandbox, #[case] unsafe_name: (&str, &str)) {
-    let (name, message) = unsafe_name;
-
-    assert_err!(sandbox.manager().path(name), message);
+#[apply(unsafe_names)]
+fn path_fails_when_the_name_is_unsafe(
+    sandbox: Sandbox,
+    #[case] name: &str,
+    #[case] message: String,
+) {
+    assert_err_eq!(sandbox.manager().path(name), message);
 }
 
 #[cfg(windows)]
-#[rstest]
-fn path_fails_when_a_windows_name_is_unsafe(sandbox: Sandbox) {
-    for name in WINDOWS_UNSAFE_NAMES {
-        assert!(sandbox.manager().path(name).is_err(), "{name}");
-        assert!(sandbox.manager().tmp(name).is_err(), "{name}");
-    }
+#[apply(windows_unsafe_names)]
+fn path_fails_when_a_windows_name_is_unsafe(
+    sandbox: Sandbox,
+    #[case] name: &str,
+    #[case] message: &str,
+) {
+    assert_err_eq!(sandbox.manager().path(name), message);
+}
+
+#[cfg(unix)]
+#[apply(windows_unsafe_names)]
+fn path_accepts_a_windows_name_on_unix(
+    sandbox: Sandbox,
+    #[case] name: &str,
+    #[case] _message: &str,
+) {
+    assert_eq!(
+        sandbox.manager().path(name).unwrap(),
+        sandbox.state_dir().join(format!("{name}{STATE_FILE_EXTENSION}"))
+    );
 }
 
 #[cfg(unix)]
@@ -244,8 +252,14 @@ fn path_fails_when_name_escapes_through_symlink(sandbox: Sandbox) {
     fs::create_dir_all(sandbox.state_dir()).unwrap();
     symlink(&outside, sandbox.state_dir().join("link")).unwrap();
 
-    assert!(sandbox.manager().path("link/job-1").is_err());
-    assert!(sandbox.manager().tmp("link/job-1").is_err());
+    assert_err_is!(
+        sandbox.manager().path("link/job-1"),
+        Error::Path(PathError::Symlink(_))
+    );
+    assert_err_is!(
+        sandbox.manager().tmp("link/job-1"),
+        Error::Path(PathError::Symlink(_))
+    );
 }
 
 #[rstest]
@@ -319,15 +333,23 @@ fn tmp_does_not_need_the_state_dir(sandbox: Sandbox) {
     assert_eq!(tmp.parent().unwrap(), state_dir);
 }
 
-#[rstest]
-#[case::traversal(TEST_UNSAFE_NAMES[0])]
-#[case::absolute(TEST_UNSAFE_NAMES[1])]
-#[case::empty(TEST_UNSAFE_NAMES[2])]
-#[case::current_dir(TEST_UNSAFE_NAMES[3])]
-fn tmp_fails_when_the_name_is_unsafe(sandbox: Sandbox, #[case] unsafe_name: (&str, &str)) {
-    let (name, message) = unsafe_name;
+#[apply(unsafe_names)]
+fn tmp_fails_when_the_name_is_unsafe(
+    sandbox: Sandbox,
+    #[case] name: &str,
+    #[case] message: String,
+) {
+    assert_err_eq!(sandbox.manager().tmp(name), message);
+}
 
-    assert_err!(sandbox.manager().tmp(name), message);
+#[cfg(windows)]
+#[apply(windows_unsafe_names)]
+fn tmp_fails_when_a_windows_name_is_unsafe(
+    sandbox: Sandbox,
+    #[case] name: &str,
+    #[case] message: &str,
+) {
+    assert_err_eq!(sandbox.manager().tmp(name), message);
 }
 
 #[rstest]
@@ -373,10 +395,7 @@ fn load_fails_when_the_path_is_a_directory(sandbox: Sandbox) {
     assert_err!(sandbox.manager().load(TEST_STATE_NAME), "state not found");
 }
 
-#[rstest]
-#[case::unparsable("not valid json", "expected ident")]
-#[case::missing_fields("{}", "missing field `name`")]
-#[case::empty("", "EOF while parsing")]
+#[apply(malformed_payloads)]
 fn load_fails_when_the_payload_is_malformed(
     sandbox: Sandbox,
     #[case] payload: &str,
@@ -394,15 +413,23 @@ fn load_fails_when_the_content_is_not_utf8(sandbox: Sandbox) {
     assert_err!(sandbox.manager().load(TEST_STATE_NAME), "valid UTF-8");
 }
 
-#[rstest]
-#[case::traversal(TEST_UNSAFE_NAMES[0])]
-#[case::absolute(TEST_UNSAFE_NAMES[1])]
-#[case::empty(TEST_UNSAFE_NAMES[2])]
-#[case::current_dir(TEST_UNSAFE_NAMES[3])]
-fn load_fails_when_the_name_is_unsafe(sandbox: Sandbox, #[case] unsafe_name: (&str, &str)) {
-    let (name, message) = unsafe_name;
+#[apply(unsafe_names)]
+fn load_fails_when_the_name_is_unsafe(
+    sandbox: Sandbox,
+    #[case] name: &str,
+    #[case] message: String,
+) {
+    assert_err_eq!(sandbox.manager().load(name), message);
+}
 
-    assert_err!(sandbox.manager().load(name), message);
+#[cfg(windows)]
+#[apply(windows_unsafe_names)]
+fn load_fails_when_a_windows_name_is_unsafe(
+    sandbox: Sandbox,
+    #[case] name: &str,
+    #[case] message: &str,
+) {
+    assert_err_eq!(sandbox.manager().load(name), message);
 }
 
 #[rstest]

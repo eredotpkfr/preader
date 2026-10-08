@@ -34,28 +34,32 @@ def test_state_fields(config: Config, reader: PReader, tmp_file: Path) -> None:
 @pytest.mark.parametrize(
     ("name", "message"), TEST_UNSAFE_STATE_NAMES.items(), ids=TEST_UNSAFE_STATE_NAME_IDS
 )
-def test_path_raises_when_name_is_unsafe(
-    reader: PReader, tmp_file: Path, name: str, message: str
+def test_state_raises_when_the_name_is_unsafe(
+    reader: PReader,
+    tmp_file: Path,
+    name: str,
+    message: str,
 ) -> None:
-    state = reader.bytes(tmp_file, state=name).state
-
     with pytest.raises(StateError, match=message):
-        state.path()
+        reader.bytes(tmp_file, state=name)
 
 
 @pytest.mark.skipif(
     os.name != "nt", reason="Windows path syntax is only unsafe on Windows"
 )
 @pytest.mark.parametrize(
-    "name", TEST_WINDOWS_UNSAFE_STATE_NAMES, ids=TEST_WINDOWS_UNSAFE_STATE_NAME_IDS
+    ("name", "message"),
+    TEST_WINDOWS_UNSAFE_STATE_NAMES.items(),
+    ids=TEST_WINDOWS_UNSAFE_STATE_NAME_IDS,
 )
-def test_path_raises_when_a_windows_name_is_unsafe(
-    reader: PReader, tmp_file: Path, name: str
+def test_state_raises_when_a_windows_name_is_unsafe(
+    reader: PReader,
+    tmp_file: Path,
+    name: str,
+    message: str,
 ) -> None:
-    state = reader.bytes(tmp_file, state=name).state
-
-    with pytest.raises(StateError, match="path escapes root"):
-        state.path()
+    with pytest.raises(StateError, match=message):
+        reader.bytes(tmp_file, state=name)
 
 
 def test_checksum_is_stable(reader: PReader, tmp_file: Path) -> None:
@@ -123,10 +127,12 @@ def test_save_persists_across_new_reader(
     assert loaded.position == len(tmp_file.read_bytes())
 
 
-def test_save_raises_when_state_dir_blocked(
-    config: Config, make_reader: Callable[..., PReader], tmp_file: Path
+def test_save_raises_when_the_state_dir_is_a_file(
+    config: Config,
+    make_reader: Callable[..., PReader],
+    tmp_file: Path,
 ) -> None:
-    config.state_dir.write_bytes(b"foo")
+    config.state_dir.write_bytes(b"not a directory")
 
     state = make_reader().bytes(tmp_file).state
 
@@ -264,14 +270,15 @@ def test_verify_raises_when_file_deleted(
 
 
 def test_resync_updates_file_metadata(
-    reader: PReader, tmp_file: Path, tmp_path: Path, fingerprint: Callable[..., str]
+    reader: PReader,
+    tmp_file: Path,
+    make_file: Callable[..., Path],
+    fingerprint: Callable[..., str],
 ) -> None:
     state = reader.bytes(tmp_file, state=TEST_STATE_NAME).state
     state.save()
 
-    moved = tmp_path / "moved.bin"
-    moved.write_bytes(tmp_file.read_bytes())
-
+    moved = make_file(tmp_file.read_bytes(), name="moved.bin")
     resynced = state.resync(moved)
 
     assert resynced.file.path == moved
@@ -281,14 +288,15 @@ def test_resync_updates_file_metadata(
 
 
 def test_resync_preserves_name_position_and_created_at(
-    reader: PReader, tmp_file: Path, tmp_path: Path, consume: Callable[..., Any]
+    reader: PReader,
+    tmp_file: Path,
+    make_file: Callable[..., Path],
+    consume: Callable[..., Any],
 ) -> None:
     state = consume(reader.bytes(tmp_file, state=TEST_STATE_NAME), 1).state
     state.save()
 
-    moved = tmp_path / "moved.bin"
-    moved.write_bytes(tmp_file.read_bytes())
-
+    moved = make_file(tmp_file.read_bytes(), name="moved.bin")
     resynced = state.resync(moved)
 
     assert resynced.name == state.name
@@ -298,34 +306,20 @@ def test_resync_preserves_name_position_and_created_at(
 
 
 def test_resync_does_not_mutate_original(
-    reader: PReader, tmp_file: Path, tmp_path: Path
+    reader: PReader, tmp_file: Path, make_file: Callable[..., Path]
 ) -> None:
     state = reader.bytes(tmp_file, state=TEST_STATE_NAME).state
     state.save()
 
-    moved = tmp_path / "moved.bin"
-    moved.write_bytes(tmp_file.read_bytes())
+    moved = make_file(tmp_file.read_bytes(), name="moved.bin")
 
     state.resync(moved)
 
     assert state.file.path == tmp_file
 
 
-@pytest.mark.parametrize(
-    ("name", "error", "message"),
-    [
-        ("../../etc/passwd", StateError, "path escapes root"),
-        (TEST_STATE_NAME, TEST_DIRECTORY_ERRORS, None),
-    ],
-    ids=["path_rejected", "commit_failed"],
-)
 def test_save_leaves_the_state_untouched_when_it_fails(
-    config: Config,
-    make_reader: Callable[..., PReader],
-    tmp_file: Path,
-    name: str,
-    error: type[Exception],
-    message: str,
+    config: Config, make_reader: Callable[..., PReader], tmp_file: Path
 ) -> None:
     state_dir = config.state_dir
 
@@ -333,11 +327,11 @@ def test_save_leaves_the_state_untouched_when_it_fails(
 
     (state_dir / f"{TEST_STATE_NAME}.state.json").mkdir()
 
-    state = make_reader().bytes(tmp_file, state=name).state
+    state = make_reader().bytes(tmp_file, state=TEST_STATE_NAME).state
     before = state.timestamps.updated_at
     checksum = state.checksum()
 
-    with pytest.raises(error, match=message):
+    with pytest.raises(TEST_DIRECTORY_ERRORS):
         state.save()
 
     assert state.timestamps.updated_at == before
@@ -570,19 +564,6 @@ def test_resync_accepts_at_the_fingerprint_window(
     assert resynced.position == position
     assert resynced.percent() == percent
     assert resynced.position <= resynced.file.size
-
-
-def test_resync_keeps_an_unsafe_name_for_the_save(
-    reader: PReader, make_file: Callable[..., Path]
-) -> None:
-    path = make_file(b"foo\n" * 25, name="tracked.bin")
-    state = reader.bytes(path, state="../../etc/passwd").state
-    resynced = state.resync(path)
-
-    assert resynced.name == str(Path("../../etc/passwd"))
-
-    with pytest.raises(StateError, match="path escapes root"):
-        resynced.save()
 
 
 @pytest.mark.usefixtures("requires_pre_epoch_mtime")
@@ -1011,13 +992,14 @@ def test_save_refreshes_the_checksum(
 
 
 def test_save_is_relative_without_a_state_dir(
+    make_reader: Callable[..., PReader],
     tmp_file: Path,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     read_state: Callable[..., Any],
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    reader = PReader(config=Config(state_dir=""))
+    reader = make_reader(state_dir="")
 
     state = reader.bytes(tmp_file, state=TEST_STATE_NAME).state
     path = state.save()

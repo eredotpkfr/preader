@@ -6,6 +6,7 @@ use rstest::rstest;
 use crate::common::{
     constants::{TEST_LINE_CONTENT, TEST_UNSEEKABLE_POSITION},
     fixtures::sandbox,
+    macros::asserts::assert_err_is,
     sandbox::Sandbox,
 };
 
@@ -50,9 +51,10 @@ fn open_applies_the_buffer_capacity(
 
 #[rstest]
 fn open_fails_when_the_file_is_missing(sandbox: Sandbox) {
-    let error = window(0).open(&sandbox.path().join("missing.bin"), 64).unwrap_err();
-
-    assert!(matches!(error, Error::Io(error) if error.kind() == ErrorKind::NotFound));
+    assert_err_is!(
+        window(0).open(&sandbox.path().join("missing.bin"), 64),
+        Error::Io(error) if error.kind() == ErrorKind::NotFound
+    );
 }
 
 #[rstest]
@@ -63,9 +65,11 @@ fn open_fails_when_the_position_is_unseekable(sandbox: Sandbox) {
         end: 0,
         skipping: None,
     };
-    let error = window.open(&path, 64).unwrap_err();
 
-    assert!(matches!(error, Error::Io(error) if error.raw_os_error().is_some()));
+    assert_err_is!(
+        window.open(&path, 64),
+        Error::Io(error) if error.raw_os_error().is_some()
+    );
 }
 
 #[rstest]

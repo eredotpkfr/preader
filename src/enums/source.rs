@@ -3,7 +3,7 @@ use std::path::Path;
 use derive_more::From;
 
 use crate::{
-    Mismatch, Result, State, constants::STATE_FILE_EXTENSION, manager::StateManager,
+    Error, Result, State, constants::STATE_FILE_EXTENSION, manager::StateManager,
     utils::path::path_stem,
 };
 
@@ -29,27 +29,24 @@ impl StateSource {
             Self::Named(name) => path_stem(&name, STATE_FILE_EXTENSION),
             Self::Auto => manager.autoname(file),
             Self::Existing(state) => {
-                if manager.verify_state {
-                    if state.file.path != file {
-                        return Err(Mismatch::Path {
-                            saved: state.file.path.clone(),
-                            current: file.to_path_buf(),
-                        }
-                        .into());
-                    }
+                let state = state.for_file(file)?;
 
+                if manager.verify_state {
                     state.verify()?;
                 }
 
-                return Ok(*state);
+                return Ok(state);
             }
         };
 
-        if manager.auto_load_state
-            && let Ok(state) = manager.load(&name)
-            && state.file.path == file
-        {
-            return Ok(state);
+        manager.path(&name)?;
+
+        if manager.auto_load_state {
+            match manager.load(&name) {
+                Ok(state) => return state.for_file(file),
+                Err(Error::NotFound(_)) => {}
+                Err(error) => return Err(error),
+            }
         }
 
         State::new(manager.clone(), file, name)

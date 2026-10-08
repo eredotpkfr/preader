@@ -3,12 +3,20 @@ use std::path::{MAIN_SEPARATOR_STR, Path};
 use std::{fs, os::unix::fs::symlink};
 
 use preader::{
-    DEFAULT_STATE_DIR, STATE_FILE_EXTENSION, default_state_dir, has_no_symlinks, normalize_path,
-    path_stem, scoped_join,
+    DEFAULT_STATE_DIR, PathError, STATE_FILE_EXTENSION, default_state_dir, has_no_symlinks,
+    normalize_path, path_stem, scoped_join,
 };
 use rstest::{fixture, rstest};
+#[cfg(windows)]
+use rstest_reuse::apply;
 
-use crate::common::{fixtures::sandbox, macros::asserts::assert_err, sandbox::Sandbox};
+#[cfg(windows)]
+use crate::common::templates::windows_unsafe_names;
+use crate::common::{
+    fixtures::sandbox,
+    macros::asserts::{assert_err_eq, assert_err_is},
+    sandbox::Sandbox,
+};
 
 #[fixture]
 fn root() -> &'static Path {
@@ -24,32 +32,33 @@ fn scoped_join_keeps_contained_path_verbatim(root: &Path, #[case] contained: &st
 }
 
 #[rstest]
-#[case::empty("", "must not be empty")]
-#[case::absolute("/etc/passwd", "escapes root")]
-#[case::root_itself("/", "escapes root")]
-#[case::parent_traversal("../../etc/passwd", "escapes root")]
-#[case::parent_that_stays_inside("nested/../job-1", "escapes root")]
-#[case::bare_parent("..", "escapes root")]
-#[case::bare_current_dir(".", "must name an entry")]
-#[case::only_current_dirs("./.", "must name an entry")]
+#[case::empty("", "path must not be empty")]
+#[case::absolute("/etc/passwd", "path escapes root: /etc/passwd")]
+#[case::root_itself("/", "path escapes root: /")]
+#[case::parent_traversal("../../etc/passwd", "path escapes root: ../../etc/passwd")]
+#[case::parent_that_stays_inside("nested/../job-1", "path escapes root: nested/../job-1")]
+#[case::bare_parent("..", "path escapes root: ..")]
+#[case::bare_current_dir(".", "path must name an entry: .")]
+#[case::only_current_dirs("./.", "path must name an entry: ./.")]
 fn scoped_join_fails_when_the_path_is_unsafe(
     root: &Path,
     #[case] unsafe_path: &str,
     #[case] message: &str,
 ) {
-    assert_err!(scoped_join(root, unsafe_path), message);
+    assert_err_eq!(scoped_join(root, unsafe_path), message);
 }
 
 #[cfg(windows)]
-#[rstest]
-#[case::drive_absolute("C:\\job-1")]
-#[case::drive_relative("C:job-1")]
-#[case::root_relative("\\job-1")]
-#[case::unc_share("\\\\server\\share\\job-1")]
-#[case::verbatim_drive("\\\\?\\C:\\job-1")]
-#[case::backslash_traversal("..\\..\\etc\\passwd")]
-fn scoped_join_fails_when_windows_path_is_unsafe(root: &Path, #[case] unsafe_path: &str) {
-    assert_err!(scoped_join(root, unsafe_path), "escapes root");
+#[apply(windows_unsafe_names)]
+fn scoped_join_fails_when_windows_path_is_unsafe(
+    root: &Path,
+    #[case] name: &str,
+    #[case] _message: &str,
+) {
+    assert_err_eq!(
+        scoped_join(root, name),
+        format!("path escapes root: {name}")
+    );
 }
 
 #[rstest]
@@ -142,7 +151,10 @@ fn path_stem_is_empty_without_a_usable_stem(#[case] path: &str) {
 fn path_stem_keeps_an_unsafe_path_verbatim(#[case] path: &str) {
     let stem = path_stem(path, STATE_FILE_EXTENSION);
 
-    assert!(scoped_join(Path::new("/tmp/preader"), &stem).is_err());
+    assert_err_is!(
+        scoped_join(Path::new("/tmp/preader"), &stem),
+        PathError::Escapes(_)
+    );
 }
 
 #[rstest]

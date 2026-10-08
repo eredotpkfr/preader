@@ -227,7 +227,6 @@ def test_raises_when_the_tracked_file_is_deleted(
 ) -> None:
     reader = make_reader(verify_state=False)
     tracked = make_file(b"foo", name="tracked.bin")
-    untracked = make_file(b"foo", name="untracked.bin")
 
     state = reader.bytes(tracked, state=TEST_STATE_NAME).state
 
@@ -235,7 +234,7 @@ def test_raises_when_the_tracked_file_is_deleted(
     tracked.unlink()
 
     with pytest.raises(FileNotFoundError):
-        reader.bytes(untracked, state=state)
+        reader.bytes(tracked, state=state)
 
 
 def test_raises_when_state_object_file_argument_mismatches(
@@ -251,7 +250,7 @@ def test_raises_when_state_object_file_argument_mismatches(
         reader.bytes(untracked, state=state)
 
 
-def test_verify_state_disabled_skips_the_mismatch_check(
+def test_raises_when_file_differs_and_verify_disabled(
     make_file: Callable[..., Path], make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(verify_state=False)
@@ -261,10 +260,8 @@ def test_verify_state_disabled_skips_the_mismatch_check(
     state = reader.bytes(tracked, state=TEST_STATE_NAME).state
     state.save()
 
-    resumed = reader.bytes(untracked, state=state)
-
-    assert resumed.state.file.path == tracked
-    assert b"".join(resumed) == b"foo"
+    with pytest.raises(StateError, match="file path mismatch"):
+        reader.bytes(untracked, state=state)
 
 
 def test_resync_allows_resuming_moved_file(
@@ -325,30 +322,32 @@ def test_raises_when_state_has_an_unsupported_type(
 @pytest.mark.parametrize(
     ("name", "message"), TEST_UNSAFE_STATE_NAMES.items(), ids=TEST_UNSAFE_STATE_NAME_IDS
 )
-def test_unsafe_name_defers_rejection_to_save(
-    reader: PReader, tmp_file: Path, name: str, message: str
+def test_raises_when_the_state_name_is_unsafe(
+    reader: PReader,
+    tmp_file: Path,
+    name: str,
+    message: str,
 ) -> None:
-    iterator = reader.bytes(tmp_file, state=name)
-    assert iterator.state.position == 0
-
     with pytest.raises(StateError, match=message):
-        iterator.state.save()
+        reader.bytes(tmp_file, state=name)
 
 
 @pytest.mark.skipif(
     os.name != "nt", reason="Windows path syntax is only unsafe on Windows"
 )
 @pytest.mark.parametrize(
-    "name", TEST_WINDOWS_UNSAFE_STATE_NAMES, ids=TEST_WINDOWS_UNSAFE_STATE_NAME_IDS
+    ("name", "message"),
+    TEST_WINDOWS_UNSAFE_STATE_NAMES.items(),
+    ids=TEST_WINDOWS_UNSAFE_STATE_NAME_IDS,
 )
-def test_unsafe_windows_name_defers_rejection_to_save(
-    reader: PReader, tmp_file: Path, name: str
+def test_raises_when_a_windows_state_name_is_unsafe(
+    reader: PReader,
+    tmp_file: Path,
+    name: str,
+    message: str,
 ) -> None:
-    iterator = reader.bytes(tmp_file, state=name)
-    assert iterator.state.position == 0
-
-    with pytest.raises(StateError, match="path escapes root"):
-        iterator.state.save()
+    with pytest.raises(StateError, match=message):
+        reader.bytes(tmp_file, state=name)
 
 
 def test_drop_does_not_save_when_auto_save_disabled(
@@ -384,7 +383,7 @@ def test_a_failing_threshold_save_stops_the_read(
     make_reader: Callable[..., PReader],
     data_file: Path,
 ) -> None:
-    config.state_dir.write_bytes(b"foo")
+    config.state_dir.write_bytes(b"not a directory")
 
     reader = make_reader(auto_save_state=True, auto_save_state_bytes=5)
     iterator = reader.bytes(data_file, state=TEST_STATE_NAME)
@@ -400,7 +399,7 @@ def test_a_failed_save_exhausts_the_iterator(
     make_reader: Callable[..., PReader],
     data_file: Path,
 ) -> None:
-    config.state_dir.write_bytes(b"foo")
+    config.state_dir.write_bytes(b"not a directory")
 
     reader = make_reader(auto_save_state=True, auto_save_state_bytes=1)
     iterator = reader.bytes(data_file, state=TEST_STATE_NAME)
@@ -413,15 +412,19 @@ def test_a_failed_save_exhausts_the_iterator(
 
 
 def test_a_failing_final_save_reaches_every_item_first(
-    data_file: Path, make_reader: Callable[..., PReader]
+    data_file: Path,
+    make_reader: Callable[..., PReader],
+    config: Config,
 ) -> None:
+    config.state_dir.write_bytes(b"not a directory")
+
     reader = make_reader(auto_save_state=True)
-    iterator = reader.bytes(data_file, state="../../etc/passwd")
+    iterator = reader.bytes(data_file, state=TEST_STATE_NAME)
     consumed = b"".join(next(iterator) for _ in range(len(TEST_ALPHABET)))
 
     assert consumed == TEST_ALPHABET
 
-    with pytest.raises(StateError, match="path escapes root"):
+    with pytest.raises(FileExistsError):
         next(iterator)
 
 
@@ -429,15 +432,18 @@ def test_a_failing_autosave_stops_the_read_after_a_truncation(
     data_file: Path,
     make_reader: Callable[..., PReader],
     truncate: Callable[[Path, int], None],
+    config: Config,
 ) -> None:
+    config.state_dir.write_bytes(b"not a directory")
+
     reader = make_reader(auto_save_state=True, buffer_capacity=1)
-    iterator = reader.bytes(data_file, state="../../etc/passwd")
+    iterator = reader.bytes(data_file, state=TEST_STATE_NAME)
 
     assert next(iterator) == TEST_ALPHABET[:1]
 
     truncate(data_file, 1)
 
-    with pytest.raises(StateError, match="path escapes root"):
+    with pytest.raises(FileExistsError):
         list(iterator)
 
 
@@ -467,7 +473,7 @@ def test_auto_load_state_resumes_previous_position(
     assert reader.bytes(data_file).state.position == 1
 
 
-def test_auto_load_state_ignores_an_unverifiable_state(
+def test_auto_load_state_raises_when_the_file_changed(
     data_file: Path,
     make_reader: Callable[..., PReader],
     append: Callable[[Path, bytes], None],
@@ -481,7 +487,8 @@ def test_auto_load_state_ignores_an_unverifiable_state(
 
     append(data_file, b"tampered")
 
-    assert reader.bytes(data_file).state.position == 0
+    with pytest.raises(StateError, match="file size mismatch"):
+        reader.bytes(data_file)
 
 
 def test_auto_load_state_resumes_stale_state_without_verification(
@@ -512,7 +519,7 @@ def test_state_name_change_creates_orphaned_state(
     assert "job-old" in reader.states
 
 
-def test_reusing_state_name_for_different_file_reads_fresh_file(
+def test_auto_load_state_raises_when_the_name_tracks_another_file(
     make_file: Callable[..., Path], make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(auto_load_state=True)
@@ -522,14 +529,8 @@ def test_reusing_state_name_for_different_file_reads_fresh_file(
 
     reader.bytes(file_a, state="shared-name").state.save()
 
-    reused = reader.bytes(file_b, state="shared-name")
-
-    assert reused.state.file.path == file_b
-    assert next(reused) == b"b"
-
-    reused.state.save()
-
-    assert reader.states["shared-name"].file.path == file_b
+    with pytest.raises(StateError, match="file path mismatch"):
+        reader.bytes(file_b, state="shared-name")
 
 
 def test_auto_name_changes_when_file_moves(
@@ -663,8 +664,7 @@ def test_state_dir_change_creates_fresh_state(
 
     iterator.state.save()
 
-    config = Config(state_dir=tmp_path / "other-preader")
-    other_reader = PReader(config=config)
+    other_reader = make_reader(state_dir=tmp_path / "other-preader")
 
     assert other_reader.bytes(data_file, state=TEST_STATE_NAME).state.position == 0
 
@@ -675,18 +675,17 @@ def test_state_object_keeps_its_own_state_dir(
     owner = make_reader(auto_save_state=True)
     state = owner.bytes(data_file, state=TEST_STATE_NAME).state
 
-    config = Config(
+    reader = make_reader(
         state_dir=tmp_path / "other-preader", auto_save_state=True, verify_state=False
     )
-    reader = PReader(config=config)
 
     list(reader.bytes(data_file, state=state))
 
     assert (owner.config.state_dir / f"{TEST_STATE_NAME}.state.json").is_file()
-    assert not (config.state_dir / f"{TEST_STATE_NAME}.state.json").exists()
+    assert not (reader.config.state_dir / f"{TEST_STATE_NAME}.state.json").exists()
 
 
-def test_auto_load_state_ignores_a_corrupt_payload(
+def test_auto_load_state_raises_when_the_payload_is_corrupt(
     data_file: Path, make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(auto_load_state=True)
@@ -697,10 +696,11 @@ def test_auto_load_state_ignores_a_corrupt_payload(
     state_path = iterator.state.save()
     state_path.write_text("not valid json")
 
-    assert reader.bytes(data_file).state.position == 0
+    with pytest.raises(StateError, match="expected ident"):
+        reader.bytes(data_file)
 
 
-def test_auto_load_state_ignores_an_incomplete_payload(
+def test_auto_load_state_raises_when_the_payload_is_incomplete(
     data_file: Path, make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(auto_load_state=True)
@@ -715,7 +715,8 @@ def test_auto_load_state_ignores_an_incomplete_payload(
 
     state_path.write_text(json.dumps(payload))
 
-    assert reader.bytes(data_file).state.position == 0
+    with pytest.raises(StateError, match="missing field `timestamps`"):
+        reader.bytes(data_file)
 
 
 def test_second_iteration_yields_nothing(reader: PReader, data_file: Path) -> None:
@@ -790,9 +791,12 @@ def test_drop_warns_on_stderr_when_saving_fails(
     data_file: Path,
     make_reader: Callable[..., PReader],
     capfd: pytest.CaptureFixture[str],
+    config: Config,
 ) -> None:
+    config.state_dir.write_bytes(b"not a directory")
+
     reader = make_reader(auto_save_state=True)
-    iterator = reader.bytes(data_file, state="../../etc/passwd")
+    iterator = reader.bytes(data_file, state=TEST_STATE_NAME)
 
     next(iterator)
 

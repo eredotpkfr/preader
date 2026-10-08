@@ -4,9 +4,8 @@ use std::fs;
 use preader::{Config, PReader};
 use preader::{Error, IteratorBuild, STATE_FILE_EXTENSION};
 use rstest::rstest;
+use rstest_reuse::apply;
 
-#[cfg(unix)]
-use crate::common::macros::skip::skip;
 use crate::common::{
     constants::{
         TEST_EVERY_DEPTH, TEST_LINE, TEST_NESTED_STATE_NAME, TEST_OTHER_STATE_NAME, TEST_STATE_NAME,
@@ -15,6 +14,7 @@ use crate::common::{
     funcs::{names, native},
     macros::asserts::assert_err_is,
     sandbox::Sandbox,
+    templates::non_state_files,
 };
 
 fn every_depth() -> [String; 3] {
@@ -88,11 +88,7 @@ fn names_survives_a_midway_delete(sandbox: Sandbox) {
     assert_ne!(rest[0], first);
 }
 
-#[rstest]
-#[case::plain("README.md")]
-#[case::suffix_shaped("job-1.state.json.bak")]
-#[case::partial("job-1.state")]
-#[case::a_temporary_file("job-1.state.json.tmp")]
+#[apply(non_state_files)]
 fn names_ignores_a_non_state_file(sandbox: Sandbox, #[case] name: &str) {
     sandbox.save(TEST_STATE_NAME);
     fs::write(sandbox.state_dir().join(name), "not a state").unwrap();
@@ -100,9 +96,7 @@ fn names_ignores_a_non_state_file(sandbox: Sandbox, #[case] name: &str) {
     assert_eq!(names(&sandbox.states()), [TEST_STATE_NAME]);
 }
 
-#[rstest]
-#[case::unrelated("README.md")]
-#[case::a_temporary_file("job-1.state.json.tmp")]
+#[apply(non_state_files)]
 fn clear_keeps_a_non_state_file(sandbox: Sandbox, #[case] name: &str) {
     sandbox.save(TEST_STATE_NAME);
 
@@ -126,7 +120,7 @@ fn names_ignores_a_non_utf8_state(sandbox: Sandbox) {
     let ghost = OsStr::from_bytes(b"ghost-\xff.state.json");
 
     if fs::write(sandbox.state_dir().join(ghost), "{}").is_err() {
-        skip!("a non-UTF-8 file name cannot be created here");
+        return;
     }
 
     assert_eq!(names(&sandbox.states()), [TEST_STATE_NAME]);

@@ -129,6 +129,18 @@ impl State {
         self
     }
 
+    pub(crate) fn for_file(self, file: &Path) -> Result<Self> {
+        if self.file.path == file {
+            return Ok(self);
+        }
+
+        Err(Mismatch::Path {
+            saved: self.file.path.clone(),
+            current: file.to_path_buf(),
+        }
+        .into())
+    }
+
     fn commit(&self, data: &StateData) -> Result<PathBuf> {
         let (path, tmp) = (self.path()?, self.manager.tmp(&self.name)?);
 

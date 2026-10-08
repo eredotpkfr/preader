@@ -9,7 +9,7 @@ use crate::common::{
     fixtures::sandbox,
     funcs::digest,
     guards::set_pre_epoch_mtime,
-    macros::{asserts::assert_err_is, skip::skip},
+    macros::asserts::{assert_err_eq, assert_err_is},
     sandbox::Sandbox,
 };
 
@@ -62,19 +62,26 @@ fn compares_by_value(sandbox: Sandbox) {
 #[rstest]
 fn rejects_a_directory(sandbox: Sandbox) {
     let path = sandbox.dir_at("folder");
-    let error = FileMetadata::try_from(path.as_path()).unwrap_err();
 
-    assert!(matches!(error, Error::NotAFile(ref found) if *found == path));
+    assert_err_eq!(
+        FileMetadata::try_from(path.as_path()),
+        format!("not a file: {}", path.display())
+    );
 
-    assert_eq!(error.to_string(), format!("not a file: {}", path.display()));
+    assert_err_is!(
+        FileMetadata::try_from(path.as_path()),
+        Error::NotAFile(found) if *found == path
+    );
 }
 
 #[rstest]
 fn rejects_a_missing_file(sandbox: Sandbox) {
     let path = sandbox.path().join("missing.bin");
-    let error = FileMetadata::try_from(path.as_path()).unwrap_err();
 
-    assert!(matches!(error, Error::Io(error) if error.kind() == std::io::ErrorKind::NotFound));
+    assert_err_is!(
+        FileMetadata::try_from(path.as_path()),
+        Error::Io(error) if error.kind() == std::io::ErrorKind::NotFound
+    );
 }
 
 #[rstest]
@@ -82,7 +89,7 @@ fn rejects_a_pre_epoch_mtime(sandbox: Sandbox) {
     let path = sandbox.line_file();
 
     if !set_pre_epoch_mtime(&path) {
-        skip!("a pre-epoch mtime cannot be set here");
+        return;
     }
 
     assert_err_is!(FileMetadata::try_from(path.as_path()), Error::Time(_));

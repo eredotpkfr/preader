@@ -16,7 +16,10 @@ use crate::common::constants::{
     TEST_FILE_NAME, TEST_LARGE_COPIES, TEST_LINE, TEST_STATE_NAME, TEST_TRACKED_NAME,
 };
 #[cfg(unix)]
-use crate::common::{constants::TEST_RECORDED_SIZE, funcs::state_data};
+use crate::common::{
+    constants::TEST_RECORDED_SIZE,
+    funcs::{canonical, state_data},
+};
 
 #[derive(Debug)]
 pub struct Sandbox {
@@ -170,7 +173,7 @@ impl Sandbox {
 
     #[cfg(unix)]
     pub fn state_at(&self, path: &Path, position: u64) -> State {
-        let mut data = state_data(path.to_path_buf());
+        let mut data = state_data(canonical(path));
 
         data.file.size = TEST_RECORDED_SIZE;
         data.position = position;
