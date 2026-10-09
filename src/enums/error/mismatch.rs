@@ -24,4 +24,6 @@ pub enum Mismatch {
         current.display()
     )]
     Identity { saved: PathBuf, current: PathBuf },
+    #[error("state name mismatch (saved: '{saved}', current: '{current}') {RESTART_HINT}")]
+    Name { saved: String, current: String },
 }

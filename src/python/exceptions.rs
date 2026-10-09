@@ -6,7 +6,7 @@ pub struct StateError;
 #[pymethods]
 impl StateError {
     #[new]
-    #[pyo3(signature = (*_args))]
+    #[pyo3(signature = (*_args: "object"))]
     fn py_new(_args: &Bound<'_, PyTuple>) -> Self {
         Self
     }

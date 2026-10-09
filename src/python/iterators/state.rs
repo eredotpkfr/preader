@@ -21,7 +21,7 @@ impl StateIterator {
 
     fn __repr__(&self) -> String {
         pyrepr!("StateIterator" {
-            state_dir = quote(self.state_dir.display()),
+            state_dir = quote(self.manager.state_dir.display()),
             pattern = self.pattern.as_ref().map_or_else(|| "None".to_owned(), quote),
         })
     }

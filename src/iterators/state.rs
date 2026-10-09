@@ -1,29 +1,30 @@
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::{fs, path::MAIN_SEPARATOR};
 
 use regex::Regex;
 use walkdir::{IntoIter, WalkDir};
 
-use crate::{Error, Result, constants::STATE_FILE_EXTENSION, utils::path::has_no_symlinks};
+use crate::{
+    Error, Result,
+    constants::{NAME_SEPARATOR, STATE_FILE_EXTENSION},
+    manager::StateManager,
+};
 
 #[cfg_attr(feature = "python", pyo3::pyclass(module = "preader"))]
 #[derive(Debug)]
 pub struct StateIterator {
-    pub(crate) state_dir: PathBuf,
-    pub(crate) entries: IntoIter,
+    pub(crate) manager: StateManager,
     pub(crate) pattern: Option<Regex>,
+    pub(crate) entries: IntoIter,
 }
 
 impl StateIterator {
-    pub(crate) fn new(dir: &Path, pattern: Option<&str>) -> Result<Self> {
-        fs::create_dir_all(dir)?;
+    pub(crate) fn new(manager: &StateManager, pattern: Option<&str>) -> Result<Self> {
+        fs::create_dir_all(&manager.state_dir)?;
 
         Ok(Self {
-            state_dir: dir.to_path_buf(),
-            entries: WalkDir::new(dir).min_depth(1).into_iter(),
+            manager: manager.clone(),
             pattern: pattern.map(Regex::new).transpose()?,
+            entries: WalkDir::new(&manager.state_dir).min_depth(1).into_iter(),
         })
     }
 }
@@ -32,21 +33,25 @@ impl Iterator for StateIterator {
     type Item = Result<String>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (root, pattern) = (&self.state_dir, self.pattern.as_ref());
+        let (manager, pattern) = (&self.manager, self.pattern.as_ref());
 
         self.entries.find_map(|entry| {
             let entry = match entry {
-                Err(error) => return Some(Err(Error::Io(error.into()))),
                 Ok(entry) => entry,
+                Err(error) => return Some(Err(Error::Io(error.into()))),
             };
             let path = entry.path();
-            let file = path.strip_prefix(root).ok()?.to_str()?;
-            let name = file.strip_suffix(STATE_FILE_EXTENSION)?.to_owned();
+            let file = path
+                .strip_prefix(&manager.state_dir)
+                .ok()?
+                .to_str()?
+                .replace(MAIN_SEPARATOR, NAME_SEPARATOR);
+            let name = file.strip_suffix(STATE_FILE_EXTENSION)?;
 
-            (path.is_file()
-                && has_no_symlinks(root, path)
-                && pattern.is_none_or(|regex| regex.is_match(&name)))
-            .then_some(Ok(name))
+            (entry.file_type().is_file()
+                && pattern.is_none_or(|regex| regex.is_match(name))
+                && manager.path(name).is_ok_and(|located| located == path))
+            .then(|| Ok(name.to_owned()))
         })
     }
 }

@@ -5,8 +5,8 @@ pub enum PathError {
     Empty,
     #[error("path escapes root: {0}")]
     Escapes(String),
-    #[error("path must name an entry: {0}")]
-    Nameless(String),
-    #[error("path escapes root via symlink: {0}")]
-    Symlink(String),
+    #[error("path is invalid: {0}")]
+    Invalid(String),
+    #[error("path is a symlink or an alias of another entry: {0}")]
+    Alias(String),
 }

@@ -9,7 +9,7 @@ use crate::common::{
     fixtures::sandbox,
     funcs::digest,
     guards::set_pre_epoch_mtime,
-    macros::asserts::{assert_err_eq, assert_err_is},
+    macros::asserts::assert_err_is,
     sandbox::Sandbox,
 };
 
@@ -63,10 +63,7 @@ fn compares_by_value(sandbox: Sandbox) {
 fn rejects_a_directory(sandbox: Sandbox) {
     let path = sandbox.dir_at("folder");
 
-    assert_err_eq!(
-        FileMetadata::try_from(path.as_path()),
-        format!("not a file: {}", path.display())
-    );
+    assert_err_is!(FileMetadata::try_from(path.as_path()), Error::NotAFile(found) if *found == path);
 
     assert_err_is!(
         FileMetadata::try_from(path.as_path()),

@@ -1,11 +1,7 @@
 use preader::{Error, IteratorBuild, IteratorOptions, Skip};
 use rstest::rstest;
 
-use crate::common::{
-    fixtures::sandbox,
-    macros::asserts::{assert_err_eq, assert_err_is},
-    sandbox::Sandbox,
-};
+use crate::common::{fixtures::sandbox, macros::asserts::assert_err_is, sandbox::Sandbox};
 
 const FILE_SIZE: u64 = 100;
 
@@ -73,9 +69,9 @@ fn build_rejects_an_inverted_range(sandbox: Sandbox, #[case] options: IteratorOp
     let reader = sandbox.reader();
     let (start, end) = (options.start, options.end);
 
-    assert_err_eq!(
+    assert_err_is!(
         reader.bytes(&path).options(options).build(),
-        format!("start ({start}) must be <= end ({end})")
+        Error::InvalidRange { start: from, end: to } if *from == start && *to == end
     );
 
     assert_err_is!(

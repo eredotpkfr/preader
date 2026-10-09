@@ -6,8 +6,13 @@ use crate::common::{
     fixtures::sandbox,
     funcs::{items, try_items},
     matrix::{
-        BLANK_LINES, BLANK_SEGMENTS, CRLF_LINES, EMPTY, LINES, SEGMENTS, UNTERMINATED_LINES,
-        UNTERMINATED_SEGMENTS, WHOLE_SEGMENT, assert_bounds, expected, shapes, sizings, windows,
+        asserts::assert_bounds,
+        contents::{
+            BLANK_LINES, BLANK_SEGMENTS, CRLF_LINES, EMPTY, LINES, SEGMENTS, UNTERMINATED_LINES,
+            UNTERMINATED_SEGMENTS, WHOLE_SEGMENT,
+        },
+        expected,
+        windows::{shapes, sizings, windows},
     },
     sandbox::Sandbox,
 };
@@ -32,7 +37,7 @@ fn bytes_match_the_reference(
 
         assert_eq!(
             items(built.unwrap()),
-            expected::bytes(content, options),
+            expected::bytes::bytes(content, options),
             "{options:?}"
         );
     }
@@ -64,7 +69,7 @@ fn chunks_match_the_reference(
 
             assert_eq!(
                 items(built.unwrap()),
-                expected::chunks(content, size, options, drop_partial),
+                expected::chunks::chunks(content, size, options, drop_partial),
                 "{options:?} size={size} drop_partial={drop_partial}"
             );
         }
@@ -98,7 +103,7 @@ fn lines_match_the_reference(
 
             assert_eq!(
                 try_items(built.unwrap()).unwrap(),
-                expected::lines(content, shape, options),
+                expected::split::lines(content, shape, options),
                 "{options:?} {shape:?}"
             );
         }
@@ -134,7 +139,7 @@ fn segments_match_the_reference(
 
             assert_eq!(
                 items(built.unwrap()),
-                expected::segments(content, shape, options),
+                expected::split::segments(content, shape, options),
                 "{options:?} {shape:?}"
             );
         }

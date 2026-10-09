@@ -7,11 +7,15 @@ use chrono::Utc;
 use sha2::{Digest, Sha256};
 
 use crate::{
-    Error, PathError, Result, State, StateData,
-    constants::{STATE_FILE_EXTENSION, STATE_FILE_EXTENSION_WITHOUT_DOT, TMP_FILE_EXTENSION},
+    Error, Mismatch, PathError, Result, State, StateData,
+    constants::{STATE_FILE_EXTENSION, TMP_FILE_EXTENSION},
+    macros::ensure,
     types::config::Config,
-    utils::path::{has_no_symlinks, path_stem, scoped_join},
+    utils::path::{resolves_in_place, scoped_join},
 };
+
+// STATE_FILE_EXTENSION past its leading dot, since add_extension inserts the dot itself
+const STATE_FILE_EXTENSION_WITHOUT_DOT: &str = STATE_FILE_EXTENSION.split_at(1).1;
 
 #[derive(Clone, Debug)]
 pub struct StateManager {
@@ -47,11 +51,9 @@ impl StateManager {
 
     pub fn tmp(&self, name: &str) -> Result<PathBuf> {
         let stamp = Utc::now().timestamp_nanos_opt().unwrap_or(0).to_string();
+        let extensions = &[&stamp, STATE_FILE_EXTENSION_WITHOUT_DOT, TMP_FILE_EXTENSION];
 
-        self.locate(
-            name,
-            &[&stamp, STATE_FILE_EXTENSION_WITHOUT_DOT, TMP_FILE_EXTENSION],
-        )
+        self.locate(name, extensions)
     }
 
     pub fn state(&self, data: StateData) -> State {
@@ -64,12 +66,19 @@ impl StateManager {
     pub fn load(&self, name: &str) -> Result<State> {
         let path = self.path(name)?;
 
-        if !path.is_file() {
-            return Err(Error::NotFound(name.to_owned()));
-        }
+        ensure!(path.is_file(), Error::NotFound(name.to_owned()));
 
-        let content = fs::read_to_string(&path)?;
-        let state = self.state(serde_json::from_str(&content)?);
+        let data: StateData = serde_json::from_str(&fs::read_to_string(&path)?)?;
+
+        ensure!(
+            data.name == name,
+            Mismatch::Name {
+                saved: data.name,
+                current: name.to_owned()
+            }
+        );
+
+        let state = self.state(data);
 
         if self.verify_state {
             state.verify()?;
@@ -79,14 +88,17 @@ impl StateManager {
     }
 
     fn locate(&self, name: &str, extensions: &[&str]) -> Result<PathBuf> {
-        let mut path = scoped_join(&self.state_dir, &path_stem(name, STATE_FILE_EXTENSION))?;
+        let mut path = scoped_join(&self.state_dir, name)?;
 
         for extension in extensions {
-            path = path.with_added_extension(extension);
+            path.add_extension(extension);
         }
 
-        has_no_symlinks(&self.state_dir, &path)
-            .then_some(path)
-            .ok_or_else(|| PathError::Symlink(name.to_owned()).into())
+        ensure!(
+            resolves_in_place(&self.state_dir, &path),
+            PathError::Alias(name.to_owned())
+        );
+
+        Ok(path)
     }
 }

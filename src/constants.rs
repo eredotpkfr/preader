@@ -14,7 +14,7 @@ pub const DEFAULT_DELIMITER: u8 = b',';
 pub const DEFAULT_STATE_DIR: &str = "preader";
 // Extension appended to a state name to form its file name, leading dot included
 pub const STATE_FILE_EXTENSION: &str = ".state.json";
-// The same extension past its leading dot, for callers that add the dot themselves
-pub const STATE_FILE_EXTENSION_WITHOUT_DOT: &str = STATE_FILE_EXTENSION.split_at(1).1;
 // Extension marking the temporary file a state is written to before it is renamed into place
 pub const TMP_FILE_EXTENSION: &str = "tmp";
+// Separator between the directories of a state name on every platform, as in Go's io/fs
+pub const NAME_SEPARATOR: &str = "/";

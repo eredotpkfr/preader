@@ -9,7 +9,7 @@ use crate::common::{
     fixtures::sandbox,
     funcs::{drain, items, texts},
     sandbox::Sandbox,
-    templates::delimiter_characters,
+    templates::delimiter::delimiter_characters,
 };
 #[cfg(unix)]
 use crate::common::{

@@ -8,7 +8,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Error, Mismatch, Result, constants::FINGERPRINT_SAMPLE_BYTES, utils::file::fingerprint,
+    Error, Mismatch, Result, constants::FINGERPRINT_SAMPLE_BYTES, macros::ensure,
+    utils::file::fingerprint,
 };
 
 #[cfg_attr(
@@ -30,9 +31,7 @@ impl TryFrom<&Path> for FileMetadata {
     fn try_from(path: &Path) -> Result<Self> {
         let metadata = fs::metadata(path)?;
 
-        if !metadata.is_file() {
-            return Err(Error::NotAFile(path.to_path_buf()));
-        }
+        ensure!(metadata.is_file(), Error::NotAFile(path.to_path_buf()));
 
         let seconds = metadata.modified()?.duration_since(UNIX_EPOCH)?.as_secs().cast_signed();
         let mtime = DateTime::<Utc>::from_timestamp(seconds, 0);
@@ -52,29 +51,27 @@ impl FileMetadata {
     }
 
     pub(crate) fn compare(&self, current: &Self) -> Result<()> {
-        if self.size != current.size {
-            return Err(Mismatch::Size {
+        ensure!(
+            self.size == current.size,
+            Mismatch::Size {
                 saved: self.size,
-                current: current.size,
+                current: current.size
             }
-            .into());
-        }
-
-        if self.mtime != current.mtime {
-            return Err(Mismatch::Mtime {
+        );
+        ensure!(
+            self.mtime == current.mtime,
+            Mismatch::Mtime {
                 saved: self.mtime.timestamp(),
-                current: current.mtime.timestamp(),
+                current: current.mtime.timestamp()
             }
-            .into());
-        }
-
-        if self.fingerprint != current.fingerprint {
-            return Err(Mismatch::Fingerprint {
+        );
+        ensure!(
+            self.fingerprint == current.fingerprint,
+            Mismatch::Fingerprint {
                 saved: self.fingerprint.clone(),
-                current: current.fingerprint.clone(),
+                current: current.fingerprint.clone()
             }
-            .into());
-        }
+        );
 
         Ok(())
     }

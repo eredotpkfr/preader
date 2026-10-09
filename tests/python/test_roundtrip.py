@@ -177,7 +177,7 @@ def test_lines_reproduce_the_text(
 def test_lines_reject_an_archive(
     reader: PReader, make_file: Callable[..., Path], content: bytes
 ) -> None:
-    with pytest.raises(ValueError, match="utf-8"):
+    with pytest.raises(ValueError, match="invalid utf-8"):
         list(reader.lines(make_file(content)))
 
 

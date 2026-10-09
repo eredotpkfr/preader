@@ -1,5 +1,4 @@
 import json
-import os
 
 from collections.abc import Callable
 from pathlib import Path
@@ -7,13 +6,13 @@ from typing import Any
 
 import pytest
 
-from constants import (
-    TEST_STATE_NAME,
-    TEST_UNSAFE_STATE_NAME_IDS,
-    TEST_UNSAFE_STATE_NAMES,
-    TEST_WINDOWS_UNSAFE_STATE_NAME_IDS,
-    TEST_WINDOWS_UNSAFE_STATE_NAMES,
+from cases import (
+    DEVICE_STATE_NAMES,
+    INVALID_STATE_NAME_ERRORS,
+    UNPORTABLE_CHARACTERS,
+    WINDOWS_INVALID_STATE_NAMES,
 )
+from constants import TEST_STATE_FILE, TEST_STATE_NAME
 from preader import Config, IteratorOptions, PReader, State, StateError
 
 LINES = [f"line-{i}" for i in range(6)]
@@ -113,7 +112,7 @@ def test_raises_when_content_is_invalid_utf8(
 ) -> None:
     path = make_file(b"foo\n" + bytes([0xFF, 0xFE]) + b"\n")
 
-    with pytest.raises(ValueError, match="utf-8"):
+    with pytest.raises(ValueError, match="invalid utf-8"):
         list(reader.lines(path))
 
 
@@ -126,7 +125,7 @@ def test_read_counts_the_invalid_line(
     assert next(iterator) == "foo"
     assert iterator.state.position == 4
 
-    with pytest.raises(ValueError, match="utf-8"):
+    with pytest.raises(ValueError, match="invalid utf-8"):
         next(iterator)
 
     assert iterator.state.position == 7
@@ -150,7 +149,7 @@ def test_resume_after_an_invalid_line_stays_aligned(
 
     assert next(iterator) == "foo"
 
-    with pytest.raises(ValueError, match="utf-8"):
+    with pytest.raises(ValueError, match="invalid utf-8"):
         next(iterator)
 
     assert list(iterator) == ["bar", "baz"]
@@ -351,9 +350,7 @@ def test_extra_next_after_exhaustion_does_not_resave(
 
 
 def test_a_failing_threshold_save_stops_the_read(
-    config: Config,
-    make_reader: Callable[..., PReader],
-    data_file: Path,
+    config: Config, make_reader: Callable[..., PReader], data_file: Path
 ) -> None:
     config.state_dir.write_bytes(b"not a directory")
 
@@ -367,9 +364,7 @@ def test_a_failing_threshold_save_stops_the_read(
 
 
 def test_a_failed_save_exhausts_the_iterator(
-    config: Config,
-    make_reader: Callable[..., PReader],
-    data_file: Path,
+    config: Config, make_reader: Callable[..., PReader], data_file: Path
 ) -> None:
     config.state_dir.write_bytes(b"not a directory")
 
@@ -384,9 +379,7 @@ def test_a_failed_save_exhausts_the_iterator(
 
 
 def test_a_failing_final_save_reaches_every_item_first(
-    data_file: Path,
-    make_reader: Callable[..., PReader],
-    config: Config,
+    data_file: Path, make_reader: Callable[..., PReader], config: Config
 ) -> None:
     config.state_dir.write_bytes(b"not a directory")
 
@@ -437,9 +430,7 @@ def test_a_failing_autosave_stops_the_read_while_skipping(
 
 
 def test_a_failing_autosave_stops_the_read_on_a_skipped_item(
-    data_file: Path,
-    make_reader: Callable[..., PReader],
-    config: Config,
+    data_file: Path, make_reader: Callable[..., PReader], config: Config
 ) -> None:
     config.state_dir.write_bytes(b"not a directory")
 
@@ -454,9 +445,7 @@ def test_a_failing_autosave_stops_the_read_on_a_skipped_item(
 
 
 def test_a_failing_autosave_stops_the_read_on_a_filtered_blank(
-    make_file: Callable[..., Path],
-    make_reader: Callable[..., PReader],
-    config: Config,
+    make_file: Callable[..., Path], make_reader: Callable[..., PReader], config: Config
 ) -> None:
     config.state_dir.write_bytes(b"not a directory")
 
@@ -563,34 +552,37 @@ def test_raises_when_state_has_an_unsupported_type(
         reader.lines(data_file, state=state)
 
 
-@pytest.mark.parametrize(
-    ("name", "message"), TEST_UNSAFE_STATE_NAMES.items(), ids=TEST_UNSAFE_STATE_NAME_IDS
-)
-def test_raises_when_the_state_name_is_unsafe(
-    reader: PReader,
-    tmp_file: Path,
-    name: str,
-    message: str,
+@pytest.mark.parametrize(("name", "message"), INVALID_STATE_NAME_ERRORS)
+def test_raises_when_the_state_name_is_invalid(
+    reader: PReader, tmp_file: Path, name: str, message: str
 ) -> None:
     with pytest.raises(StateError, match=message):
         reader.lines(tmp_file, state=name)
 
 
-@pytest.mark.skipif(
-    os.name != "nt", reason="Windows path syntax is only unsafe on Windows"
-)
-@pytest.mark.parametrize(
-    ("name", "message"),
-    TEST_WINDOWS_UNSAFE_STATE_NAMES.items(),
-    ids=TEST_WINDOWS_UNSAFE_STATE_NAME_IDS,
-)
-def test_raises_when_a_windows_state_name_is_unsafe(
-    reader: PReader,
-    tmp_file: Path,
-    name: str,
-    message: str,
+@pytest.mark.parametrize("name", WINDOWS_INVALID_STATE_NAMES)
+def test_raises_when_the_state_name_is_not_portable(
+    reader: PReader, tmp_file: Path, name: str
 ) -> None:
-    with pytest.raises(StateError, match=message):
+    with pytest.raises(StateError, match="path is invalid"):
+        reader.lines(tmp_file, state=name)
+
+
+@pytest.mark.parametrize("name", DEVICE_STATE_NAMES)
+def test_raises_when_the_state_name_is_a_device(
+    reader: PReader, tmp_file: Path, name: str
+) -> None:
+    with pytest.raises(StateError, match="path is invalid"):
+        reader.lines(tmp_file, state=name)
+
+
+@pytest.mark.parametrize("character", UNPORTABLE_CHARACTERS)
+def test_raises_when_a_state_name_character_is_not_portable(
+    reader: PReader, tmp_file: Path, character: str
+) -> None:
+    name = f"job{character}1"
+
+    with pytest.raises(StateError, match="path is invalid"):
         reader.lines(tmp_file, state=name)
 
 
@@ -607,7 +599,7 @@ def test_raises_when_state_object_file_argument_mismatches(
         reader.lines(untracked, state=state)
 
 
-def test_raises_when_file_differs_and_verify_disabled(
+def test_raises_when_file_differs_without_verification(
     make_file: Callable[..., Path], make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(verify_state=False)
@@ -642,7 +634,7 @@ def test_verify_state_disabled_skips_verification(
     assert resumed.state.position == state.position
 
 
-def test_raises_when_file_deleted_and_verify_disabled(
+def test_raises_when_file_deleted_without_verification(
     data_file: Path, make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(verify_state=False)
@@ -679,7 +671,7 @@ def test_resync_allows_resuming_moved_file(
 
     moved = data_file.rename(tmp_path / "moved.bin")
 
-    with pytest.raises(StateError, match="resync"):
+    with pytest.raises(StateError, match=r"file path mismatch .*resync"):
         reader.lines(moved, state=state)
 
     resynced = state.resync(moved)
@@ -700,7 +692,7 @@ def test_resync_allows_resuming_grown_file(
 
     append(data_file, b"more\n")
 
-    with pytest.raises(StateError, match="size mismatch"):
+    with pytest.raises(StateError, match="file size mismatch"):
         reader.lines(data_file, state=state)
 
     resynced = state.resync(data_file)
@@ -749,7 +741,7 @@ def test_raises_when_resumed_after_file_grows(
 
     append(data_file, b"more\n")
 
-    with pytest.raises(StateError, match="size mismatch"):
+    with pytest.raises(StateError, match="file size mismatch"):
         reader.lines(data_file, state=state)
 
 
@@ -875,8 +867,8 @@ def test_state_object_keeps_its_own_state_dir(
 
     list(reader.lines(data_file, state=state))
 
-    assert (owner.config.state_dir / f"{TEST_STATE_NAME}.state.json").is_file()
-    assert not (reader.config.state_dir / f"{TEST_STATE_NAME}.state.json").exists()
+    assert (owner.config.state_dir / TEST_STATE_FILE).is_file()
+    assert not (reader.config.state_dir / TEST_STATE_FILE).exists()
 
 
 def test_resume_ignores_align_start_and_skip(

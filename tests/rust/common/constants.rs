@@ -4,6 +4,7 @@ pub const TEST_STAMP: i64 = 1_700_000_000;
 pub const TEST_TIMEOUT: Duration = Duration::from_secs(60);
 pub const TEST_STATE_NAME: &str = "job-1";
 pub const TEST_OTHER_STATE_NAME: &str = "job-2";
+pub const TEST_SUB_STATE_NAME: &str = "sub";
 pub const TEST_MISSING_STATE_NAME: &str = "job-missing";
 pub const TEST_NESTED_STATE_NAME: &str = "sub-1/sub-2/job-1";
 pub const TEST_DEEP_STATE_NAME: &str = "sub-1/sub-2/sub-3/sub-4/job-1";

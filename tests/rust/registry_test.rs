@@ -1,22 +1,21 @@
 use std::fs;
 
-use preader::{Error, STATE_FILE_EXTENSION};
+use preader::{Error, IteratorBuild, Mismatch, PathError};
 use rstest::rstest;
 use rstest_reuse::apply;
 
 #[cfg(unix)]
 use crate::common::guards::Blocked;
-#[cfg(windows)]
-use crate::common::templates::windows_unsafe_names;
 use crate::common::{
     constants::{
         TEST_EVERY_DEPTH, TEST_MISSING_STATE_NAME, TEST_OTHER_STATE_NAME, TEST_STATE_NAME,
     },
     fixtures::sandbox,
-    funcs::{names, native},
-    macros::asserts::{assert_err_eq, assert_err_is},
+    funcs::{names, state_file},
+    macros::asserts::assert_err_is,
+    rule::Rule,
     sandbox::Sandbox,
-    templates::unsafe_names,
+    templates::name::{device_names, invalid_names, unportable_characters, windows_invalid_names},
 };
 
 fn corrupt(sandbox: &Sandbox, name: &str) {
@@ -38,7 +37,7 @@ fn path_reports_the_state_file_location(sandbox: Sandbox) {
     assert_eq!(path, sandbox.save(TEST_STATE_NAME).path().unwrap());
     assert_eq!(
         path.file_name().unwrap(),
-        format!("{TEST_STATE_NAME}{STATE_FILE_EXTENSION}").as_str()
+        state_file(TEST_STATE_NAME).as_str()
     );
 }
 
@@ -65,7 +64,7 @@ fn load_reports_state_shaped_directory_as_missing(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn load_returns_the_name_from_the_payload(sandbox: Sandbox) {
+fn load_fails_when_the_payload_names_another_state(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let state = sandbox.stored(&path, TEST_STATE_NAME);
     let payload = state.path().unwrap();
@@ -76,43 +75,51 @@ fn load_returns_the_name_from_the_payload(sandbox: Sandbox) {
 
     fs::write(&payload, patched).unwrap();
 
-    assert_eq!(
-        sandbox.lenient().states().load(TEST_STATE_NAME).unwrap().name,
-        "a-different-name"
+    assert_err_is!(
+        sandbox.lenient().states().load(TEST_STATE_NAME),
+        Error::Mismatch(Mismatch::Name { saved, current })
+            if saved == "a-different-name" && current == TEST_STATE_NAME
     );
 }
 
-#[apply(unsafe_names)]
-fn every_lookup_rejects_an_unsafe_name(
-    sandbox: Sandbox,
-    #[case] name: &str,
-    #[case] message: String,
-) {
+#[apply(invalid_names)]
+fn every_lookup_rejects_an_invalid_name(sandbox: Sandbox, #[case] name: &str, #[case] rule: Rule) {
     let registry = sandbox.states();
 
     assert!(registry.find(name).is_none());
     assert!(!registry.exists(name));
 
-    assert_err_eq!(registry.load(name), message);
-    assert_err_eq!(registry.delete(name), message);
-    assert_err_eq!(registry.path(name), message);
+    assert_err_is!(registry.load(name), Error::Path(error) if rule.matches(error, name));
+    assert_err_is!(registry.delete(name), Error::Path(error) if rule.matches(error, name));
+    assert_err_is!(registry.path(name), Error::Path(error) if rule.matches(error, name));
 }
 
-#[cfg(windows)]
-#[apply(windows_unsafe_names)]
-fn every_lookup_rejects_an_unsafe_windows_name(
-    sandbox: Sandbox,
-    #[case] name: &str,
-    #[case] message: &str,
-) {
+#[apply(windows_invalid_names)]
+fn every_lookup_rejects_an_unportable_name(sandbox: Sandbox, #[case] name: &str) {
     let registry = sandbox.states();
-
     assert!(registry.find(name).is_none());
     assert!(!registry.exists(name));
 
-    assert_err_eq!(registry.load(name), message);
-    assert_err_eq!(registry.delete(name), message);
-    assert_err_eq!(registry.path(name), message);
+    assert_err_is!(registry.load(name), Error::Path(PathError::Invalid(found)) if found == name);
+    assert_err_is!(registry.delete(name), Error::Path(PathError::Invalid(found)) if found == name);
+    assert_err_is!(registry.path(name), Error::Path(PathError::Invalid(found)) if found == name);
+}
+
+#[apply(unportable_characters)]
+fn every_lookup_rejects_an_unportable_character(
+    sandbox: Sandbox,
+    #[case] character: char,
+    #[values("job{}1", "sub{}/job-1")] shape: &str,
+) {
+    let registry = sandbox.states();
+    let name = shape.replace("{}", &character.to_string());
+
+    assert!(registry.find(&name).is_none());
+    assert!(!registry.exists(&name));
+
+    assert_err_is!(registry.load(&name), Error::Path(PathError::Invalid(found)) if *found == name);
+    assert_err_is!(registry.delete(&name), Error::Path(PathError::Invalid(found)) if *found == name);
+    assert_err_is!(registry.path(&name), Error::Path(PathError::Invalid(found)) if *found == name);
 }
 
 #[rstest]
@@ -201,7 +208,7 @@ fn delete_removes_the_state_file(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn delete_fails_for_an_unknown_state(sandbox: Sandbox) {
+fn delete_fails_when_the_state_is_unknown(sandbox: Sandbox) {
     assert_err_is!(
         sandbox.states().delete(TEST_MISSING_STATE_NAME),
         Error::NotFound(_)
@@ -209,7 +216,7 @@ fn delete_fails_for_an_unknown_state(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn delete_fails_for_a_state_shaped_directory(sandbox: Sandbox) {
+fn delete_fails_when_the_state_is_a_directory(sandbox: Sandbox) {
     fs::create_dir_all(sandbox.states().path(TEST_STATE_NAME).unwrap()).unwrap();
 
     assert_err_is!(sandbox.states().delete(TEST_STATE_NAME), Error::Io(_));
@@ -242,7 +249,7 @@ fn clear_removes_a_corrupt_state(sandbox: Sandbox) {
 #[rstest]
 fn clear_removes_states_at_every_depth(sandbox: Sandbox) {
     for name in TEST_EVERY_DEPTH {
-        sandbox.save(&native(name));
+        sandbox.save(name);
     }
 
     sandbox.states().clear().unwrap();
@@ -259,7 +266,7 @@ fn registries_sharing_state_dir_see_each_other(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn state_dir_that_is_a_file_fails_every_walk(sandbox: Sandbox) {
+fn walk_fails_when_the_state_dir_is_a_file(sandbox: Sandbox) {
     sandbox.block_states();
 
     let registry = sandbox.states();
@@ -284,7 +291,7 @@ fn state_dir_that_is_file_still_answers_lookups(sandbox: Sandbox) {
 
 #[cfg(unix)]
 #[rstest]
-fn unreadable_subdirectory_fails_every_walk(sandbox: Sandbox) {
+fn walk_fails_when_a_subdirectory_is_unreadable(sandbox: Sandbox) {
     let mut blocked = Blocked::default();
 
     if !Blocked::enforced(&sandbox.path().join("probe")) {
@@ -296,11 +303,7 @@ fn unreadable_subdirectory_fails_every_walk(sandbox: Sandbox) {
     let nested = sandbox.state_dir().join("sub");
 
     fs::create_dir_all(&nested).unwrap();
-    fs::write(
-        nested.join(format!("{TEST_OTHER_STATE_NAME}{STATE_FILE_EXTENSION}")),
-        "{}",
-    )
-    .unwrap();
+    fs::write(nested.join(state_file(TEST_OTHER_STATE_NAME)), "{}").unwrap();
     blocked.block(&nested);
 
     let registry = sandbox.states();
@@ -308,4 +311,139 @@ fn unreadable_subdirectory_fails_every_walk(sandbox: Sandbox) {
     assert_err_is!(registry.count(), Error::Io(_));
     assert_err_is!(registry.all(), Error::Io(_));
     assert_err_is!(registry.clear(), Error::Io(_));
+}
+
+#[rstest]
+#[case::uppercase("job-1", "JOB-1")]
+#[case::decomposed("café", "cafe\u{301}")]
+#[case::uppercase_directory("sub/job-1", "SUB/job-1")]
+fn alias_never_touches_the_saved_state(sandbox: Sandbox, #[case] name: &str, #[case] alias: &str) {
+    let saved = sandbox.save(name).path().unwrap();
+    let before = fs::read(&saved).unwrap();
+    let registry = sandbox.states();
+
+    registry.delete(alias).ok();
+    sandbox
+        .reader()
+        .bytes(sandbox.line_file())
+        .state(alias)
+        .build()
+        .map(|mut bytes| bytes.state().save())
+        .ok();
+
+    assert!(names(&registry).contains(&name.to_owned()));
+
+    assert_eq!(fs::read(&saved).unwrap(), before);
+}
+
+#[rstest]
+fn path_uses_the_native_separator(sandbox: Sandbox) {
+    let path = sandbox.states().path("sub-1/sub-2/job-1").unwrap();
+    let expected = sandbox.state_dir().join("sub-1").join("sub-2").join(state_file("job-1"));
+
+    assert_eq!(path.as_os_str(), expected.as_os_str());
+}
+
+#[rstest]
+fn delete_removes_only_the_hard_link(sandbox: Sandbox) {
+    let outside = sandbox.write("outside.txt", b"foo");
+    let link = sandbox.states().path(TEST_STATE_NAME).unwrap();
+
+    fs::create_dir_all(sandbox.state_dir()).unwrap();
+    fs::hard_link(&outside, &link).unwrap();
+
+    sandbox.states().delete(TEST_STATE_NAME).unwrap();
+
+    assert!(!link.exists());
+
+    assert_eq!(fs::read(&outside).unwrap(), b"foo");
+}
+
+#[cfg(unix)]
+#[rstest]
+fn symlinked_state_dir_is_used_as_the_root(sandbox: Sandbox) {
+    use preader::{Config, PReader, StateRegistry};
+
+    let real = sandbox.dir_at("real");
+    let link = sandbox.path().join("linked");
+
+    std::os::unix::fs::symlink(&real, &link).unwrap();
+
+    let config = Config {
+        state_dir: link,
+        ..sandbox.config()
+    };
+    let registry = StateRegistry::from(&config);
+
+    PReader::from(config)
+        .bytes(sandbox.line_file())
+        .state(TEST_STATE_NAME)
+        .build()
+        .unwrap()
+        .state()
+        .save()
+        .unwrap();
+
+    assert!(real.join(state_file(TEST_STATE_NAME)).is_file());
+
+    assert_eq!(names(&registry), [TEST_STATE_NAME]);
+    assert_eq!(
+        registry.load(TEST_STATE_NAME).unwrap().name,
+        TEST_STATE_NAME
+    );
+
+    registry.delete(TEST_STATE_NAME).unwrap();
+
+    assert_eq!(fs::read_dir(&real).unwrap().count(), 0);
+}
+
+#[rstest]
+fn delete_treats_a_suffixed_name_as_another_state(sandbox: Sandbox) {
+    let saved = sandbox.save(TEST_STATE_NAME).path().unwrap();
+    let outcome = sandbox.states().delete(&state_file(TEST_STATE_NAME));
+
+    assert!(saved.exists());
+
+    assert_err_is!(outcome, Error::NotFound(_));
+}
+
+#[cfg(unix)]
+#[rstest]
+fn every_lookup_rejects_a_directory_alias(sandbox: Sandbox) {
+    let saved = sandbox.save("real/job-1").path().unwrap();
+    let before = fs::read(&saved).unwrap();
+    let registry = sandbox.states();
+
+    std::os::unix::fs::symlink(saved.parent().unwrap(), sandbox.state_dir().join("alias")).unwrap();
+
+    let path = sandbox.line_file();
+    let built = sandbox.reader().bytes(&path).state("alias/job-1").build();
+
+    assert!(registry.find("alias/job-1").is_none());
+    assert!(!registry.exists("alias/job-1"));
+
+    assert_eq!(names(&registry), ["real/job-1"]);
+    assert_eq!(fs::read(&saved).unwrap(), before);
+
+    assert_err_is!(
+        registry.load("alias/job-1"),
+        Error::Path(PathError::Alias(found)) if found == "alias/job-1"
+    );
+    assert_err_is!(
+        registry.delete("alias/job-1"),
+        Error::Path(PathError::Alias(found)) if found == "alias/job-1"
+    );
+    assert_err_is!(built, Error::Path(PathError::Alias(found)) if found == "alias/job-1");
+}
+
+#[apply(device_names)]
+fn every_lookup_rejects_a_device_name(sandbox: Sandbox, #[case] name: &str) {
+    let registry = sandbox.states();
+
+    assert!(registry.find(name).is_none());
+    assert!(!registry.exists(name));
+
+    assert_err_is!(registry.load(name), Error::Path(PathError::Invalid(found)) if found == name);
+    assert_err_is!(registry.delete(name), Error::Path(PathError::Invalid(found)) if found == name);
+    assert_err_is!(registry.path(name), Error::Path(PathError::Invalid(found)) if found == name);
 }
