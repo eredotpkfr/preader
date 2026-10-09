@@ -1,5 +1,6 @@
 use std::{
     fs,
+    io::ErrorKind,
     path::{Path, PathBuf},
 };
 
@@ -28,11 +29,11 @@ impl StateRegistry {
     }
 
     pub fn names(&self) -> Result<StateIterator> {
-        StateIterator::new(self.state_dir(), None)
+        StateIterator::new(&self.manager, None)
     }
 
     pub fn search(&self, pattern: &str) -> Result<StateIterator> {
-        StateIterator::new(self.state_dir(), Some(pattern))
+        StateIterator::new(&self.manager, Some(pattern))
     }
 
     pub fn load(&self, name: &str) -> Result<State> {
@@ -48,11 +49,11 @@ impl StateRegistry {
     }
 
     pub fn exists(&self, name: &str) -> bool {
-        self.manager.path(name).is_ok_and(|path| path.is_file())
+        self.path(name).is_ok_and(|path| path.is_file())
     }
 
     pub fn count(&self) -> Result<usize> {
-        self.names()?.try_fold(0, |total, name| name.and(Ok(total + 1)))
+        self.names()?.try_fold(0, |total, name| name.map(|_| total + 1))
     }
 
     pub fn path(&self, name: &str) -> Result<PathBuf> {
@@ -60,13 +61,10 @@ impl StateRegistry {
     }
 
     pub fn delete(&self, name: &str) -> Result<()> {
-        let path = self.path(name)?;
-
-        if !path.exists() {
-            return Err(Error::NotFound(name.to_owned()));
-        }
-
-        Ok(fs::remove_file(path)?)
+        fs::remove_file(self.path(name)?).map_err(|error| match error.kind() {
+            ErrorKind::NotFound => Error::NotFound(name.to_owned()),
+            _ => error.into(),
+        })
     }
 
     pub fn clear(&self) -> Result<()> {

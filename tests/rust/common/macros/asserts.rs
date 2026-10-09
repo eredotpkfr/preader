@@ -1,11 +1,3 @@
-macro_rules! assert_err {
-    ($outcome:expr, $($message:expr),+ $(,)?) => {{
-        let error = $outcome.unwrap_err();
-
-        $(assert!(error.to_string().contains($message), "{error}");)+
-    }};
-}
-
 macro_rules! assert_err_eq {
     ($outcome:expr, $message:expr $(,)?) => {{
         let error = $outcome.unwrap_err();
@@ -35,7 +27,6 @@ macro_rules! assert_percent {
     }};
 }
 
-pub(crate) use assert_err;
 pub(crate) use assert_err_eq;
 pub(crate) use assert_err_is;
 pub(crate) use assert_percent;

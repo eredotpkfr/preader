@@ -1,21 +1,14 @@
-use std::path::{MAIN_SEPARATOR_STR, Path};
+use std::path::Path;
 #[cfg(unix)]
 use std::{fs, os::unix::fs::symlink};
 
-use preader::{
-    DEFAULT_STATE_DIR, PathError, STATE_FILE_EXTENSION, default_state_dir, has_no_symlinks,
-    normalize_path, path_stem, scoped_join,
-};
+use preader::{DEFAULT_STATE_DIR, default_state_dir, resolves_in_place, scoped_join};
 use rstest::{fixture, rstest};
-#[cfg(windows)]
 use rstest_reuse::apply;
 
-#[cfg(windows)]
-use crate::common::templates::windows_unsafe_names;
 use crate::common::{
-    fixtures::sandbox,
-    macros::asserts::{assert_err_eq, assert_err_is},
-    sandbox::Sandbox,
+    fixtures::sandbox, macros::asserts::assert_err_is, rule::Rule, sandbox::Sandbox,
+    templates::name::valid_names,
 };
 
 #[fixture]
@@ -23,42 +16,37 @@ fn root() -> &'static Path {
     Path::new("/tmp/preader")
 }
 
-#[rstest]
-#[case::plain("job-1.state.json")]
-#[case::nested("nested/job-1.state.json")]
-#[case::unnormalized("./job-1")]
-fn scoped_join_keeps_contained_path_verbatim(root: &Path, #[case] contained: &str) {
-    assert_eq!(scoped_join(root, contained).unwrap(), root.join(contained));
+#[apply(valid_names)]
+fn scoped_join_keeps_a_valid_name_inside_the_root(root: &Path, #[case] name: &str) {
+    let joined = scoped_join(root, name).unwrap();
+    let parts: Vec<&str> = joined
+        .strip_prefix(root)
+        .unwrap()
+        .iter()
+        .map(|part| part.to_str().unwrap())
+        .collect();
+
+    assert!(joined.starts_with(root));
+
+    assert_eq!(parts.join("/"), name);
 }
 
 #[rstest]
-#[case::empty("", "path must not be empty")]
-#[case::absolute("/etc/passwd", "path escapes root: /etc/passwd")]
-#[case::root_itself("/", "path escapes root: /")]
-#[case::parent_traversal("../../etc/passwd", "path escapes root: ../../etc/passwd")]
-#[case::parent_that_stays_inside("nested/../job-1", "path escapes root: nested/../job-1")]
-#[case::bare_parent("..", "path escapes root: ..")]
-#[case::bare_current_dir(".", "path must name an entry: .")]
-#[case::only_current_dirs("./.", "path must name an entry: ./.")]
-fn scoped_join_fails_when_the_path_is_unsafe(
-    root: &Path,
-    #[case] unsafe_path: &str,
-    #[case] message: &str,
-) {
-    assert_err_eq!(scoped_join(root, unsafe_path), message);
-}
+fn scoped_join_uses_the_native_separator(root: &Path) {
+    let joined = scoped_join(root, "sub-1/sub-2/job-1").unwrap();
 
-#[cfg(windows)]
-#[apply(windows_unsafe_names)]
-fn scoped_join_fails_when_windows_path_is_unsafe(
-    root: &Path,
-    #[case] name: &str,
-    #[case] _message: &str,
-) {
-    assert_err_eq!(
-        scoped_join(root, name),
-        format!("path escapes root: {name}")
+    assert_eq!(
+        joined.as_os_str(),
+        root.join("sub-1").join("sub-2").join("job-1").as_os_str()
     );
+}
+
+#[rstest]
+#[case::empty("", Rule::Empty)]
+#[case::escapes("../x", Rule::Escapes)]
+#[case::invalid("job:1", Rule::Invalid)]
+fn scoped_join_fails_when_the_name_is_invalid(root: &Path, #[case] name: &str, #[case] rule: Rule) {
+    assert_err_is!(scoped_join(root, name), error if rule.matches(error, name));
 }
 
 #[rstest]
@@ -86,108 +74,40 @@ fn default_state_dir_is_absolute() {
 }
 
 #[rstest]
-#[case::plain("job-1", "job-1")]
-#[case::nested("sub/job-1", "sub/job-1")]
-#[case::repeated_separator("sub//job-1", "sub/job-1")]
-#[case::trailing_separator("sub/job-1/", "sub/job-1")]
-#[case::interior_current_dir("sub/./job-1", "sub/job-1")]
-#[case::leading_current_dir("./job-1", "job-1")]
-#[case::only_current_dirs("./.", "")]
-#[case::empty("", "")]
-#[case::parent("..", "..")]
-#[case::traversal("../../etc/passwd", "../../etc/passwd")]
-fn normalize_path_reduces_to_the_native_form(#[case] path: &str, #[case] expected: &str) {
-    assert_eq!(
-        normalize_path(path),
-        expected.replace('/', MAIN_SEPARATOR_STR)
-    );
-}
-
-#[cfg(unix)]
-#[rstest]
-fn normalize_path_treats_backslash_as_name_character() {
-    assert_eq!(normalize_path("sub\\job-1"), "sub\\job-1");
-}
-
-#[rstest]
-#[case::plain("job-1", "job-1")]
-#[case::suffixed("job-1.state.json", "job-1")]
-#[case::doubled_suffix("job-1.state.json.state.json", "job-1")]
-#[case::nested("sub/job-1.state.json", "sub/job-1")]
-#[case::trailing_separator("job-1.state.json/", "job-1")]
-#[case::suffix_shaped_parent(
-    "sub-1/.state.json/sub-2/job-1.state.json",
-    "sub-1/.state.json/sub-2/job-1"
-)]
-#[case::only_looks_suffixed("mystate.json", "mystate.json")]
-#[case::empty_name("", "")]
-#[case::different_case("job-1.STATE.JSON", "job-1.STATE.JSON")]
-#[case::bare_suffix("state.json", "state.json")]
-#[case::tripled_suffix("job-1.state.json.state.json.state.json", "job-1")]
-fn path_stem_strips_every_trailing_extension(#[case] path: &str, #[case] expected: &str) {
-    let stem = path_stem(path, STATE_FILE_EXTENSION);
-
-    assert_eq!(stem, expected.replace('/', MAIN_SEPARATOR_STR));
-    assert_eq!(path_stem(&stem, STATE_FILE_EXTENSION), stem);
-}
-
-#[rstest]
-#[case::empty("")]
-#[case::current_dir(".")]
-#[case::only_the_suffix(".state.json")]
-#[case::suffix_as_the_last_component("job-1/.state.json")]
-#[case::suffix_as_two_components("job-1/.state.json/.state.json")]
-#[case::suffix_as_three_components("a/.state.json/.state.json/.state.json")]
-#[case::stem_is_a_current_dir("..state.json")]
-#[case::stem_is_a_parent_dir("...state.json")]
-fn path_stem_is_empty_without_a_usable_stem(#[case] path: &str) {
-    assert!(path_stem(path, STATE_FILE_EXTENSION).is_empty());
-}
-
-#[rstest]
-#[case::parent("..")]
-#[case::traversal("../../etc/passwd")]
-#[case::root("/")]
-fn path_stem_keeps_an_unsafe_path_verbatim(#[case] path: &str) {
-    let stem = path_stem(path, STATE_FILE_EXTENSION);
-
-    assert_err_is!(
-        scoped_join(Path::new("/tmp/preader"), &stem),
-        PathError::Escapes(_)
-    );
-}
-
-#[rstest]
-fn has_no_symlinks_accepts_a_real_path(sandbox: Sandbox) {
-    assert!(has_no_symlinks(
+fn resolves_in_place_accepts_a_real_path(sandbox: Sandbox) {
+    assert!(resolves_in_place(
         sandbox.path(),
         &sandbox.path().join("job-1.state.json")
     ));
 }
 
 #[rstest]
-fn has_no_symlinks_accepts_a_missing_root() {
+fn resolves_in_place_accepts_a_missing_root() {
     let missing = Path::new("/tmp/preader-never-created");
 
-    assert!(has_no_symlinks(missing, &missing.join("job-1.state.json")));
+    assert!(resolves_in_place(
+        missing,
+        &missing.join("job-1.state.json")
+    ));
 }
 
 #[cfg(unix)]
 #[rstest]
-fn has_no_symlinks_rejects_a_symlinked_file(sandbox: Sandbox) {
+fn resolves_in_place_rejects_a_symlinked_file(sandbox: Sandbox) {
     let real = sandbox.path().join("real.state.json");
     let alias = sandbox.path().join("alias.state.json");
 
     fs::write(&real, b"{}").unwrap();
+
     symlink(&real, &alias).unwrap();
 
-    assert!(has_no_symlinks(sandbox.path(), &real));
-    assert!(!has_no_symlinks(sandbox.path(), &alias));
+    assert!(resolves_in_place(sandbox.path(), &real));
+    assert!(!resolves_in_place(sandbox.path(), &alias));
 }
 
 #[cfg(unix)]
 #[rstest]
-fn has_no_symlinks_rejects_escaping_symlink(sandbox: Sandbox) {
+fn resolves_in_place_rejects_escaping_symlink(sandbox: Sandbox) {
     let root = sandbox.path().join("root");
     let outside = sandbox.path().join("outside");
 
@@ -196,7 +116,7 @@ fn has_no_symlinks_rejects_escaping_symlink(sandbox: Sandbox) {
 
     symlink(&outside, root.join("link")).unwrap();
 
-    assert!(!has_no_symlinks(
+    assert!(!resolves_in_place(
         &root,
         &root.join("link").join("job-1.state.json")
     ));

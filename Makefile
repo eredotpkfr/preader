@@ -24,6 +24,7 @@ TARGETS := \
 	cargo-udeps \
 	cargo-update \
 	coverage \
+	coverage-codecov \
 	coverage-lcov \
 	develop \
 	install-cargo-clippy \
@@ -103,8 +104,9 @@ cargo-udeps:
 cargo-update:
 	@cargo update --verbose
 coverage: COVERAGE_REPORT := --html --open
+coverage-codecov: COVERAGE_REPORT := --codecov --output-path codecov.json
 coverage-lcov: COVERAGE_REPORT := --lcov --output-path lcov.info
-coverage coverage-lcov:
+coverage coverage-codecov coverage-lcov:
 	@( eval "$$(cargo llvm-cov show-env --sh)" && \
 		cargo llvm-cov clean --workspace && \
 		$(MAKE) --no-print-directory cargo-test cargo-doc-test pytest && \

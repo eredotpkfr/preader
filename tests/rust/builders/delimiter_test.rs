@@ -7,7 +7,7 @@ use crate::common::{
     fixtures::sandbox,
     funcs::{items, texts},
     sandbox::Sandbox,
-    templates::delimiter_characters,
+    templates::delimiter::delimiter_characters,
 };
 
 #[apply(delimiter_characters)]

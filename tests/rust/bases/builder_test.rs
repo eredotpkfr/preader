@@ -25,7 +25,7 @@ fn options_are_validated_before_file_is_opened(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn missing_file_fails_to_build(sandbox: Sandbox) {
+fn build_fails_when_the_file_is_missing(sandbox: Sandbox) {
     let missing = sandbox.path().join("missing.bin");
 
     assert_err_is!(
@@ -159,7 +159,7 @@ fn maximum_start_and_end_yield_nothing(sandbox: Sandbox) {
 
 #[cfg(unix)]
 #[rstest]
-fn unverifiable_alignment_fails_to_build(sandbox: Sandbox) {
+fn build_fails_when_the_alignment_read_fails(sandbox: Sandbox) {
     let directory = sandbox.dir_at("folder");
     let state = sandbox.state_at(&directory, TEST_READ_FROM);
     let built = sandbox

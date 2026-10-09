@@ -1,4 +1,4 @@
-use crate::{Error, Result, enums::skip::Skip, types::window::Window};
+use crate::{Error, Result, enums::skip::Skip, macros::ensure, types::window::Window};
 
 #[cfg_attr(
     feature = "python",
@@ -37,12 +37,13 @@ impl IteratorOptions {
     }
 
     pub(crate) fn validate(&self) -> Result<()> {
-        if self.start > self.end {
-            return Err(Error::InvalidRange {
+        ensure!(
+            self.start <= self.end,
+            Error::InvalidRange {
                 start: self.start,
-                end: self.end,
-            });
-        }
+                end: self.end
+            }
+        );
 
         Ok(())
     }

@@ -126,7 +126,7 @@ fn position_counts_bytes_not_characters(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn read_fails_on_invalid_utf8(sandbox: Sandbox) {
+fn read_fails_when_a_line_is_not_utf8(sandbox: Sandbox) {
     let path = sandbox.file(b"\xff\xfe\n");
     let mut lines = sandbox.reader().lines(&path).build().unwrap();
 

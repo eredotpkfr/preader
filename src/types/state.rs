@@ -10,6 +10,7 @@ use serde_json::to_string_pretty;
 
 use crate::{
     Mismatch, Result,
+    macros::ensure,
     manager::StateManager,
     types::{checksum::ChecksumBody, file::FileMetadata, time::Timestamps},
 };
@@ -66,13 +67,13 @@ impl State {
     pub fn verify(&self) -> Result<()> {
         let computed = self.checksum()?;
 
-        if computed != self.checksum {
-            return Err(Mismatch::Checksum {
+        ensure!(
+            computed == self.checksum,
+            Mismatch::Checksum {
                 saved: self.checksum.clone(),
-                computed,
+                computed
             }
-            .into());
-        }
+        );
 
         let current = FileMetadata::try_from(self.file.path.as_path())?;
 
@@ -92,13 +93,13 @@ impl State {
         let path = dunce::canonicalize(path)?;
         let data = self.refresh(Some(&path))?;
 
-        if self.manager.verify_state && !self.file.matches(&path)? {
-            return Err(Mismatch::Identity {
+        ensure!(
+            !self.manager.verify_state || self.file.matches(&path)?,
+            Mismatch::Identity {
                 saved: self.file.path.clone(),
-                current: path,
+                current: path
             }
-            .into());
-        }
+        );
 
         Ok(self.manager.state(data))
     }
@@ -130,15 +131,15 @@ impl State {
     }
 
     pub(crate) fn for_file(self, file: &Path) -> Result<Self> {
-        if self.file.path == file {
-            return Ok(self);
-        }
+        ensure!(
+            self.file.path == file,
+            Mismatch::Path {
+                saved: self.file.path.clone(),
+                current: file.to_path_buf()
+            }
+        );
 
-        Err(Mismatch::Path {
-            saved: self.file.path.clone(),
-            current: file.to_path_buf(),
-        }
-        .into())
+        Ok(self)
     }
 
     fn commit(&self, data: &StateData) -> Result<PathBuf> {

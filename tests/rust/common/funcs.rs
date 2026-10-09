@@ -1,10 +1,12 @@
 use std::{
     fs,
-    path::{MAIN_SEPARATOR_STR, Path, PathBuf},
+    path::{Path, PathBuf},
 };
 
 use chrono::DateTime;
-use preader::{FileMetadata, Result, State, StateData, StateRegistry, Timestamps};
+use preader::{
+    FileMetadata, Result, STATE_FILE_EXTENSION, State, StateData, StateRegistry, Timestamps,
+};
 use sha2::{Digest, Sha256};
 
 use crate::common::{
@@ -59,12 +61,12 @@ pub fn digest(content: &[u8]) -> String {
     hex::encode(Sha256::digest(content))
 }
 
-pub fn native(name: &str) -> String {
-    name.replace('/', MAIN_SEPARATOR_STR)
-}
-
 pub fn canonical(path: &Path) -> PathBuf {
     dunce::canonicalize(path).unwrap()
+}
+
+pub fn state_file(name: &str) -> String {
+    format!("{name}{STATE_FILE_EXTENSION}")
 }
 
 pub fn names(registry: &StateRegistry) -> Vec<String> {

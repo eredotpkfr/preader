@@ -6,11 +6,6 @@ import pytest
 from preader import Config
 
 
-def test_config_raises_when_positional() -> None:
-    with pytest.raises(TypeError):
-        Config(65536)  # type: ignore[call-arg]
-
-
 def test_config_defaults() -> None:
     config = Config()
 
@@ -19,6 +14,11 @@ def test_config_defaults() -> None:
     assert config.auto_save_state_bytes == 100 * 1024 * 1024
     assert config.auto_load_state is False
     assert config.verify_state is True
+
+
+def test_config_raises_when_positional() -> None:
+    with pytest.raises(TypeError):
+        Config(65536)  # type: ignore[call-arg]
 
 
 def test_config_compares_by_value(tmp_path: Path) -> None:

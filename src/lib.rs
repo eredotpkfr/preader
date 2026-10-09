@@ -6,6 +6,7 @@ mod constants;
 mod enums;
 mod interfaces;
 mod iterators;
+mod macros;
 mod manager;
 mod preader;
 #[cfg(feature = "python")]
@@ -13,6 +14,7 @@ mod python;
 mod registry;
 mod types;
 mod utils;
+mod validators;
 
 pub use bases::{builder::PReaderIteratorBuilder, iterator::PReaderIterator};
 pub use constants::{
@@ -49,6 +51,7 @@ pub use {
     types::{checksum::ChecksumBody, core::FileReader, window::Window},
     utils::{
         file::{fingerprint, starts_mid_item},
-        path::{default_state_dir, has_no_symlinks, normalize_path, path_stem, scoped_join},
+        path::{default_state_dir, resolves_in_place, scoped_join},
     },
+    validators::validate_name,
 };

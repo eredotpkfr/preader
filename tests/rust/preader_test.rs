@@ -2,11 +2,13 @@
 use std::fs;
 use std::{ffi::OsString, path::PathBuf};
 
+#[cfg(unix)]
+use preader::Error;
 use preader::{Config, IteratorBuild, IteratorRead, PReader};
 use rstest::rstest;
 
 #[cfg(unix)]
-use crate::common::{constants::TEST_NON_UTF8_NAME, macros::asserts::assert_err};
+use crate::common::{constants::TEST_NON_UTF8_NAME, macros::asserts::assert_err_is};
 use crate::common::{
     constants::{TEST_FILE_NAME, TEST_LINE, TEST_STATE_NAME},
     fixtures::sandbox,
@@ -182,7 +184,10 @@ fn socket_is_rejected(sandbox: Sandbox) {
     let socket = sandbox.path().join("a-socket");
     let _listener = UnixListener::bind(&socket).unwrap();
 
-    assert_err!(sandbox.reader().bytes(&socket).build(), "not a file");
+    assert_err_is!(
+        sandbox.reader().bytes(&socket).build(),
+        Error::NotAFile(found) if *found == canonical(&socket)
+    );
 }
 
 #[cfg(unix)]
@@ -196,5 +201,5 @@ fn non_utf8_path_is_rejected(sandbox: Sandbox) {
         return;
     }
 
-    assert_err!(sandbox.reader().bytes(&path).build(), "invalid UTF-8");
+    assert_err_is!(sandbox.reader().bytes(&path).build(), Error::Serde(_));
 }

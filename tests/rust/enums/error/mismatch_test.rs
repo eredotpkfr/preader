@@ -88,9 +88,26 @@ fn identity_suggests_a_restart() {
     let (saved, current) = paths();
     let message = Mismatch::Identity { saved, current }.to_string();
 
-    assert!(message.starts_with("file content differs from the tracked file"));
-    assert!(message.ends_with(RESTART_HINT));
-    assert!(!message.contains(RESYNC_HINT));
+    assert_eq!(
+        message,
+        format!(
+            "file content differs from the tracked file (saved: '/tmp/saved.bin', current: '/tmp/current.bin') {RESTART_HINT}"
+        )
+    );
+}
+
+#[rstest]
+fn name_suggests_a_restart() {
+    let message = Mismatch::Name {
+        saved: "job-2".to_owned(),
+        current: "job-1".to_owned(),
+    }
+    .to_string();
+
+    assert_eq!(
+        message,
+        format!("state name mismatch (saved: 'job-2', current: 'job-1') {RESTART_HINT}")
+    );
 }
 
 #[rstest]

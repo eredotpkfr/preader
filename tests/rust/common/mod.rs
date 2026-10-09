@@ -7,5 +7,6 @@ pub mod iterators;
 pub mod macros;
 pub mod matrix;
 pub mod rng;
+pub mod rule;
 pub mod sandbox;
 pub mod templates;

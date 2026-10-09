@@ -6,9 +6,9 @@ use rstest::rstest;
 use crate::common::{
     constants::{TEST_INVALID_UTF8, TEST_MISSING_STATE_NAME, TEST_STATE_NAME},
     fixtures::sandbox,
-    funcs::{canonical, native, state_data},
+    funcs::{canonical, state_data},
     guards::set_pre_epoch_mtime,
-    macros::asserts::{assert_err, assert_err_eq, assert_err_is},
+    macros::asserts::{assert_err_eq, assert_err_is},
     sandbox::Sandbox,
 };
 
@@ -29,14 +29,20 @@ fn serde_errors_are_transparent(sandbox: Sandbox) {
 
     fs::write(state.path().unwrap(), b"{ not json").unwrap();
 
-    assert_err!(sandbox.states().load(TEST_STATE_NAME), "line 1 column");
+    assert_err_eq!(
+        sandbox.states().load(TEST_STATE_NAME),
+        "key must be a string at line 1 column 3"
+    );
 
     assert_err_is!(sandbox.states().load(TEST_STATE_NAME), Error::Serde(_));
 }
 
 #[rstest]
 fn regex_errors_are_transparent(sandbox: Sandbox) {
-    assert_err!(sandbox.states().search("["), "regex parse error");
+    assert_err_eq!(
+        sandbox.states().search("["),
+        "regex parse error:\n    [\n    ^\nerror: unclosed character class"
+    );
 
     assert_err_is!(sandbox.states().search("["), Error::Regex(_));
 }
@@ -76,10 +82,7 @@ fn path_errors_are_transparent(sandbox: Sandbox) {
         "{error}"
     );
 
-    assert_eq!(
-        error.to_string(),
-        format!("path escapes root: {}", native("../escape"))
-    );
+    assert_eq!(error.to_string(), "path escapes root: ../escape");
 }
 
 #[rstest]

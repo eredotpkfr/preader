@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import sys
 
 from collections.abc import Callable
 from pathlib import Path
@@ -8,16 +9,13 @@ from typing import Any
 
 import pytest
 
-from constants import (
-    TEST_DIRECTORY_ERRORS,
-    TEST_LONG_NAME_ERROR,
-    TEST_STATE_NAME,
-    TEST_UNRESOLVED_PATH_ERROR,
-    TEST_UNSAFE_STATE_NAME_IDS,
-    TEST_UNSAFE_STATE_NAMES,
-    TEST_WINDOWS_UNSAFE_STATE_NAME_IDS,
-    TEST_WINDOWS_UNSAFE_STATE_NAMES,
+from cases import (
+    DEVICE_STATE_NAMES,
+    INVALID_STATE_NAME_ERRORS,
+    UNPORTABLE_CHARACTERS,
+    WINDOWS_INVALID_STATE_NAMES,
 )
+from constants import TEST_STATE_FILE, TEST_STATE_FILE_EXTENSION, TEST_STATE_NAME
 from preader import Config, PReader, State, StateError
 
 
@@ -27,38 +25,56 @@ def test_state_fields(config: Config, reader: PReader, tmp_file: Path) -> None:
     assert state.name == TEST_STATE_NAME
     assert state.position == 0
     assert state.file.path == tmp_file
-    assert state.path() == config.state_dir / f"{state.name}.state.json"
+    assert state.path() == config.state_dir / f"{state.name}{TEST_STATE_FILE_EXTENSION}"
     assert state.timestamps.created_at == state.timestamps.updated_at
 
 
-@pytest.mark.parametrize(
-    ("name", "message"), TEST_UNSAFE_STATE_NAMES.items(), ids=TEST_UNSAFE_STATE_NAME_IDS
-)
-def test_state_raises_when_the_name_is_unsafe(
-    reader: PReader,
-    tmp_file: Path,
-    name: str,
-    message: str,
+@pytest.mark.parametrize(("name", "message"), INVALID_STATE_NAME_ERRORS)
+def test_state_raises_when_the_name_is_invalid(
+    reader: PReader, tmp_file: Path, name: str, message: str
 ) -> None:
     with pytest.raises(StateError, match=message):
         reader.bytes(tmp_file, state=name)
 
 
-@pytest.mark.skipif(
-    os.name != "nt", reason="Windows path syntax is only unsafe on Windows"
-)
-@pytest.mark.parametrize(
-    ("name", "message"),
-    TEST_WINDOWS_UNSAFE_STATE_NAMES.items(),
-    ids=TEST_WINDOWS_UNSAFE_STATE_NAME_IDS,
-)
-def test_state_raises_when_a_windows_name_is_unsafe(
-    reader: PReader,
-    tmp_file: Path,
-    name: str,
-    message: str,
+def test_state_raises_when_the_name_is_not_utf8(
+    reader: PReader, tmp_file: Path
 ) -> None:
-    with pytest.raises(StateError, match=message):
+    with pytest.raises(TypeError, match="state must be None"):
+        reader.bytes(tmp_file, state="job-\udcff")
+
+
+def test_state_raises_when_the_name_is_a_path(reader: PReader, tmp_file: Path) -> None:
+    with pytest.raises(TypeError, match="state must be None"):
+        reader.bytes(tmp_file, state=Path(TEST_STATE_NAME))  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("name", WINDOWS_INVALID_STATE_NAMES)
+def test_state_raises_when_the_name_is_not_portable(
+    reader: PReader, tmp_file: Path, name: str
+) -> None:
+    with pytest.raises(StateError, match="path is invalid"):
+        reader.bytes(tmp_file, state=name)
+
+
+@pytest.mark.parametrize(
+    "shape", ["{}", "job{}1", "{}job-1", "job-1{}", "sub/job{}1", "sub{}/job-1"]
+)
+@pytest.mark.parametrize("character", UNPORTABLE_CHARACTERS)
+def test_state_raises_when_a_character_is_not_portable(
+    reader: PReader, tmp_file: Path, character: str, shape: str
+) -> None:
+    name = shape.format(character)
+
+    with pytest.raises(StateError, match="path is invalid"):
+        reader.bytes(tmp_file, state=name)
+
+
+@pytest.mark.parametrize("name", DEVICE_STATE_NAMES)
+def test_state_raises_when_the_name_is_a_device(
+    reader: PReader, tmp_file: Path, name: str
+) -> None:
+    with pytest.raises(StateError, match="path is invalid"):
         reader.bytes(tmp_file, state=name)
 
 
@@ -89,6 +105,7 @@ def test_save_returns_created_path(
     reader: PReader, tmp_file: Path, read_state: Callable[..., Any]
 ) -> None:
     state = reader.bytes(tmp_file).state
+
     assert not state.path().exists()
 
     assert state.save() == state.path()
@@ -128,9 +145,7 @@ def test_save_persists_across_new_reader(
 
 
 def test_save_raises_when_the_state_dir_is_a_file(
-    config: Config,
-    make_reader: Callable[..., PReader],
-    tmp_file: Path,
+    config: Config, make_reader: Callable[..., PReader], tmp_file: Path
 ) -> None:
     config.state_dir.write_bytes(b"not a directory")
 
@@ -146,7 +161,7 @@ def test_save_raises_when_state_path_is_a_directory(
     state = reader.bytes(tmp_file).state
     state.path().mkdir(parents=True)
 
-    with pytest.raises(TEST_DIRECTORY_ERRORS):
+    with pytest.raises((IsADirectoryError, PermissionError)):
         state.save()
 
 
@@ -325,13 +340,13 @@ def test_save_leaves_the_state_untouched_when_it_fails(
 
     state_dir.mkdir()
 
-    (state_dir / f"{TEST_STATE_NAME}.state.json").mkdir()
+    (state_dir / TEST_STATE_FILE).mkdir()
 
     state = make_reader().bytes(tmp_file, state=TEST_STATE_NAME).state
     before = state.timestamps.updated_at
     checksum = state.checksum()
 
-    with pytest.raises(TEST_DIRECTORY_ERRORS):
+    with pytest.raises((IsADirectoryError, PermissionError)):
         state.save()
 
     assert state.timestamps.updated_at == before
@@ -349,12 +364,12 @@ def test_save_leaves_no_temporary_file(
     state_dir.mkdir()
 
     if blocked:
-        (state_dir / f"{TEST_STATE_NAME}.state.json").mkdir()
+        (state_dir / TEST_STATE_FILE).mkdir()
 
     state = make_reader().bytes(tmp_file, state=TEST_STATE_NAME).state
 
     if blocked:
-        with pytest.raises(TEST_DIRECTORY_ERRORS):
+        with pytest.raises((IsADirectoryError, PermissionError)):
             state.save()
     else:
         state.save()
@@ -636,7 +651,7 @@ def test_resync_keeps_the_state_dir_for_the_save(
     [("missing.bin", FileNotFoundError), ("elsewhere", StateError)],
     ids=["missing", "a_directory"],
 )
-def test_resync_still_checks_the_path_without_verification(
+def test_resync_raises_when_the_path_is_not_a_file_without_verification(
     make_reader: Callable[..., PReader],
     tmp_file: Path,
     tmp_path: Path,
@@ -776,7 +791,14 @@ def test_resync_raises_when_the_path_cannot_be_resolved(
         target.symlink_to(second)
         second.symlink_to(target)
 
-    with pytest.raises(OSError, match=TEST_UNRESOLVED_PATH_ERROR):
+    with pytest.raises(
+        OSError,
+        match=(
+            r"cannot find the file|cannot be resolved"
+            if sys.platform == "win32"
+            else r"No such file|Too many levels"
+        ),
+    ):
         state.resync(target)
 
 
@@ -789,7 +811,7 @@ def test_resync_allows_resuming_moved_file(
 
     moved = tmp_file.rename(tmp_path / "moved.bin")
 
-    with pytest.raises(StateError, match="resync"):
+    with pytest.raises(StateError, match=r"file path mismatch .*resync"):
         reader.bytes(moved, state=state)
 
     resynced = state.resync(moved)
@@ -810,7 +832,7 @@ def test_resync_allows_resuming_grown_file(
 
     append(tmp_file, b"more")
 
-    with pytest.raises(StateError, match="size mismatch"):
+    with pytest.raises(StateError, match="file size mismatch"):
         reader.bytes(tmp_file, state=state)
 
     resynced = state.resync(tmp_file)
@@ -847,20 +869,11 @@ def test_state_repr(
     )
 
 
-def test_name_drops_the_suffix(reader: PReader, tmp_file: Path) -> None:
-    state = reader.bytes(tmp_file, state=f"{TEST_STATE_NAME}.state.json").state
+def test_name_keeps_a_state_suffix(reader: PReader, tmp_file: Path) -> None:
+    state = reader.bytes(tmp_file, state=TEST_STATE_FILE).state
 
-    assert state.name == TEST_STATE_NAME
-    assert state.path().name == f"{TEST_STATE_NAME}.state.json"
-
-
-def test_save_accepts_a_unicode_name(
-    reader: PReader, tmp_file: Path, read_state: Callable[..., Any]
-) -> None:
-    state = reader.bytes(tmp_file, state="job-café").state
-
-    assert state.save().name == "job-café.state.json"
-    assert read_state(state)["name"] == "job-café"
+    assert state.name == TEST_STATE_FILE
+    assert state.path().name == f"{TEST_STATE_FILE}{TEST_STATE_FILE_EXTENSION}"
 
 
 def test_state_getter_returns_an_independent_snapshot(
@@ -911,10 +924,22 @@ def test_percent_treats_a_zero_size_as_one_byte(
     assert reader.states[TEST_STATE_NAME].percent() == 500.0
 
 
+def test_state_raises_when_the_name_has_a_nul_byte(
+    reader: PReader, tmp_file: Path
+) -> None:
+    with pytest.raises(StateError, match="path is invalid"):
+        reader.bytes(tmp_file, state="job\0")
+
+
 def test_save_raises_when_the_name_is_too_long(reader: PReader, tmp_file: Path) -> None:
     state = reader.bytes(tmp_file, state="x" * 300).state
 
-    with pytest.raises(OSError, match=TEST_LONG_NAME_ERROR):
+    with pytest.raises(
+        OSError,
+        match=(
+            "syntax is incorrect" if sys.platform == "win32" else "File name too long"
+        ),
+    ):
         state.save()
 
 
@@ -1004,7 +1029,7 @@ def test_save_is_relative_without_a_state_dir(
     state = reader.bytes(tmp_file, state=TEST_STATE_NAME).state
     path = state.save()
 
-    assert str(path) == f"{TEST_STATE_NAME}.state.json"
+    assert str(path) == TEST_STATE_FILE
     assert (tmp_path / path).exists()
     assert read_state(state)
 
@@ -1027,3 +1052,72 @@ def test_verify_reports_the_checksum_first(
 
     with pytest.raises(StateError, match="checksum mismatch"):
         _get_unverified_state(make_reader, state.name).verify()
+
+
+def test_path_uses_the_native_separator(
+    reader: PReader, config: Config, tmp_file: Path
+) -> None:
+    state = reader.bytes(tmp_file, state="sub-1/sub-2/job-1").state
+
+    assert str(state.path()) == str(
+        config.state_dir / "sub-1" / "sub-2" / TEST_STATE_FILE
+    )
+
+
+def test_save_replaces_a_hard_link_without_touching_its_target(
+    reader: PReader, config: Config, tmp_file: Path, tmp_path: Path
+) -> None:
+    outside = tmp_path / "outside.txt"
+    outside.write_text("foo")
+
+    link = config.state_dir / TEST_STATE_FILE
+    link.parent.mkdir(parents=True, exist_ok=True)
+    link.hardlink_to(outside)
+
+    reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
+
+    assert outside.read_text() == "foo"
+    assert link.read_text() != "foo"
+
+
+def test_save_raises_when_a_state_file_blocks_the_directory(
+    reader: PReader, tmp_file: Path
+) -> None:
+    saved = reader.bytes(tmp_file, state="x").state.save()
+    before = saved.read_bytes()
+    state = reader.bytes(tmp_file, state="x.state.json/y").state
+
+    with pytest.raises(OSError, match=r"os error"):
+        state.save()
+
+    assert saved.read_bytes() == before
+
+
+def test_save_raises_when_a_directory_blocks_the_state_file(
+    reader: PReader, tmp_file: Path
+) -> None:
+    nested = reader.bytes(tmp_file, state="x.state.json/y").state.save()
+    state = reader.bytes(tmp_file, state="x").state
+
+    with pytest.raises(OSError, match=r"os error"):
+        state.save()
+
+    assert nested.exists()
+
+
+@pytest.mark.usefixtures("requires_symlinks")
+def test_path_raises_when_the_state_file_is_a_symlink(
+    reader: PReader, config: Config, tmp_file: Path, tmp_path: Path
+) -> None:
+    state = reader.bytes(tmp_file, state=TEST_STATE_NAME).state
+
+    outside = tmp_path / "outside.json"
+    outside.write_text("{}")
+
+    config.state_dir.mkdir(parents=True, exist_ok=True)
+    (config.state_dir / TEST_STATE_FILE).symlink_to(outside)
+
+    with pytest.raises(
+        StateError, match="path is a symlink or an alias of another entry"
+    ):
+        state.path()

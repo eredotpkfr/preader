@@ -22,6 +22,7 @@ def test_file_metadata_fingerprint_ignores_bytes_beyond_4096(
     assert len(tmp_large_file.read_bytes()) > 4096
 
     metadata = reader.bytes(tmp_large_file).state.file
+
     assert metadata.fingerprint == fingerprint(tmp_large_file)
 
 

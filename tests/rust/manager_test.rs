@@ -2,30 +2,36 @@
 use std::os::unix::fs::symlink;
 #[cfg(unix)]
 use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
-use std::{fs, path::Path};
+use std::{fs, io::ErrorKind, path::Path};
 
 use preader::{
-    Config, FileMetadata, STATE_FILE_EXTENSION, State, StateData, StateManager, TMP_FILE_EXTENSION,
-    Timestamps, default_state_dir,
+    Config, Error, FileMetadata, Mismatch, PathError, STATE_FILE_EXTENSION, State, StateData,
+    StateManager, TMP_FILE_EXTENSION, Timestamps, default_state_dir,
 };
-#[cfg(unix)]
-use preader::{Error, PathError};
 use rstest::rstest;
 use rstest_reuse::apply;
 use sha2::{Digest, Sha256};
 
-#[cfg(unix)]
-use crate::common::macros::asserts::assert_err_is;
 use crate::common::{
     constants::{TEST_FILE_PATH, TEST_LINE, TEST_LINE_FINGERPRINT, TEST_STATE_NAME},
     fixtures::sandbox,
-    funcs::native,
-    macros::asserts::{assert_err, assert_err_eq},
+    funcs::state_file,
+    macros::asserts::assert_err_is,
+    rule::Rule,
     sandbox::Sandbox,
-    templates::{malformed_payloads, unsafe_names, windows_unsafe_names},
+    templates::{
+        name::{
+            device_names, invalid_names, unportable_characters, valid_names, windows_invalid_names,
+        },
+        payload::malformed_payloads,
+    },
 };
 
 const PATH_DIGEST: &str = "07cb9e47c6d8681a47020d0bb04776e06ada8b6d7aabcf4838a127f98e9f4fe2";
+
+fn tmp_suffix() -> String {
+    format!("{STATE_FILE_EXTENSION}.{TMP_FILE_EXTENSION}")
+}
 
 fn lenient(sandbox: &Sandbox) -> StateManager {
     StateManager::from(&Config {
@@ -162,7 +168,7 @@ fn path_appends_the_suffix(sandbox: Sandbox) {
     assert_eq!(path.parent().unwrap(), sandbox.state_dir());
     assert_eq!(
         path.file_name().unwrap(),
-        format!("{TEST_STATE_NAME}{STATE_FILE_EXTENSION}").as_str()
+        state_file(TEST_STATE_NAME).as_str()
     );
 }
 
@@ -170,19 +176,19 @@ fn path_appends_the_suffix(sandbox: Sandbox) {
 #[case::plain("job-1", "job-1.state.json")]
 #[case::with_a_dot("job.1", "job.1.state.json")]
 #[case::only_looks_suffixed("mystate.json", "mystate.json.state.json")]
-#[case::already_suffixed("job-1.state.json", "job-1.state.json")]
-fn path_normalizes_the_name(sandbox: Sandbox, #[case] name: &str, #[case] expected: &str) {
+#[case::already_suffixed("job-1.state.json", "job-1.state.json.state.json")]
+fn path_appends_the_extension_to_the_name(
+    sandbox: Sandbox,
+    #[case] name: &str,
+    #[case] expected: &str,
+) {
     assert_eq!(
         sandbox.manager().path(name).unwrap().file_name().unwrap(),
         expected
     );
 }
 
-#[rstest]
-#[case::plain("job-1")]
-#[case::nested("sub/job-1")]
-#[case::unnormalized("./job-1")]
-#[case::already_suffixed("job-1.state.json")]
+#[apply(valid_names)]
 fn path_stays_inside_the_state_dir(sandbox: Sandbox, #[case] name: &str) {
     assert!(sandbox.manager().path(name).unwrap().starts_with(sandbox.state_dir()));
 }
@@ -195,10 +201,10 @@ fn path_nests_under_a_subdirectory(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn path_ignores_a_trailing_slash(sandbox: Sandbox) {
-    assert_eq!(
-        sandbox.manager().path("job-1/").unwrap(),
-        sandbox.manager().path("job-1").unwrap()
+fn path_rejects_a_trailing_slash(sandbox: Sandbox) {
+    assert_err_is!(
+        sandbox.manager().path("job-1/"),
+        Error::Path(PathError::Invalid(found)) if found == "job-1/"
     );
 }
 
@@ -212,36 +218,9 @@ fn path_does_not_need_the_state_dir(sandbox: Sandbox) {
     assert_eq!(path.parent().unwrap(), state_dir);
 }
 
-#[apply(unsafe_names)]
-fn path_fails_when_the_name_is_unsafe(
-    sandbox: Sandbox,
-    #[case] name: &str,
-    #[case] message: String,
-) {
-    assert_err_eq!(sandbox.manager().path(name), message);
-}
-
-#[cfg(windows)]
-#[apply(windows_unsafe_names)]
-fn path_fails_when_a_windows_name_is_unsafe(
-    sandbox: Sandbox,
-    #[case] name: &str,
-    #[case] message: &str,
-) {
-    assert_err_eq!(sandbox.manager().path(name), message);
-}
-
-#[cfg(unix)]
-#[apply(windows_unsafe_names)]
-fn path_accepts_a_windows_name_on_unix(
-    sandbox: Sandbox,
-    #[case] name: &str,
-    #[case] _message: &str,
-) {
-    assert_eq!(
-        sandbox.manager().path(name).unwrap(),
-        sandbox.state_dir().join(format!("{name}{STATE_FILE_EXTENSION}"))
-    );
+#[apply(invalid_names)]
+fn path_fails_when_the_name_is_invalid(sandbox: Sandbox, #[case] name: &str, #[case] rule: Rule) {
+    assert_err_is!(sandbox.manager().path(name), Error::Path(error) if rule.matches(error, name));
 }
 
 #[cfg(unix)]
@@ -254,11 +233,11 @@ fn path_fails_when_name_escapes_through_symlink(sandbox: Sandbox) {
 
     assert_err_is!(
         sandbox.manager().path("link/job-1"),
-        Error::Path(PathError::Symlink(_))
+        Error::Path(PathError::Alias(_))
     );
     assert_err_is!(
         sandbox.manager().tmp("link/job-1"),
-        Error::Path(PathError::Symlink(_))
+        Error::Path(PathError::Alias(_))
     );
 }
 
@@ -268,7 +247,7 @@ fn tmp_carries_both_suffixes(sandbox: Sandbox) {
     let name = tmp.file_name().unwrap().to_str().unwrap();
 
     assert!(name.starts_with(&format!("{TEST_STATE_NAME}.")));
-    assert!(name.ends_with(&format!("{STATE_FILE_EXTENSION}.{TMP_FILE_EXTENSION}")));
+    assert!(name.ends_with(&tmp_suffix()));
 
     assert_eq!(tmp.parent().unwrap(), sandbox.state_dir());
 }
@@ -296,7 +275,7 @@ fn tmp_uses_a_nanosecond_stamp(sandbox: Sandbox) {
     let stamp = name
         .strip_prefix(&format!("{TEST_STATE_NAME}."))
         .unwrap()
-        .strip_suffix(&format!("{STATE_FILE_EXTENSION}.{TMP_FILE_EXTENSION}"))
+        .strip_suffix(&tmp_suffix())
         .unwrap();
 
     assert!(stamp.parse::<i64>().unwrap() > 0);
@@ -306,12 +285,15 @@ fn tmp_uses_a_nanosecond_stamp(sandbox: Sandbox) {
 #[case::plain("job-1", "job-1")]
 #[case::with_a_dot("job.1", "job.1")]
 #[case::only_looks_suffixed("mystate.json", "mystate.json")]
-#[case::already_suffixed("job-1.state.json", "job-1")]
-fn tmp_normalizes_the_name(sandbox: Sandbox, #[case] name: &str, #[case] expected: &str) {
+#[case::already_suffixed("job-1.state.json", "job-1.state.json")]
+fn tmp_keeps_the_name_before_the_stamp(
+    sandbox: Sandbox,
+    #[case] name: &str,
+    #[case] expected: &str,
+) {
     let tmp = sandbox.manager().tmp(name).unwrap();
     let file_name = tmp.file_name().unwrap().to_str().unwrap();
-    let tail = format!("{STATE_FILE_EXTENSION}.{TMP_FILE_EXTENSION}");
-    let (stem, _stamp) = file_name.strip_suffix(&tail).unwrap().rsplit_once('.').unwrap();
+    let (stem, _stamp) = file_name.strip_suffix(&tmp_suffix()).unwrap().rsplit_once('.').unwrap();
 
     assert_eq!(stem, expected);
 }
@@ -333,23 +315,9 @@ fn tmp_does_not_need_the_state_dir(sandbox: Sandbox) {
     assert_eq!(tmp.parent().unwrap(), state_dir);
 }
 
-#[apply(unsafe_names)]
-fn tmp_fails_when_the_name_is_unsafe(
-    sandbox: Sandbox,
-    #[case] name: &str,
-    #[case] message: String,
-) {
-    assert_err_eq!(sandbox.manager().tmp(name), message);
-}
-
-#[cfg(windows)]
-#[apply(windows_unsafe_names)]
-fn tmp_fails_when_a_windows_name_is_unsafe(
-    sandbox: Sandbox,
-    #[case] name: &str,
-    #[case] message: &str,
-) {
-    assert_err_eq!(sandbox.manager().tmp(name), message);
+#[apply(invalid_names)]
+fn tmp_fails_when_the_name_is_invalid(sandbox: Sandbox, #[case] name: &str, #[case] rule: Rule) {
+    assert_err_is!(sandbox.manager().tmp(name), Error::Path(error) if rule.matches(error, name));
 }
 
 #[rstest]
@@ -375,70 +343,61 @@ fn load_returns_a_verified_state(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn load_accepts_an_already_suffixed_name(sandbox: Sandbox) {
+fn load_treats_a_suffixed_name_as_another_state(sandbox: Sandbox) {
     verifiable(&sandbox, TEST_STATE_NAME, 2);
 
-    let suffixed = format!("{TEST_STATE_NAME}{STATE_FILE_EXTENSION}");
+    let suffixed = state_file(TEST_STATE_NAME);
 
-    assert_eq!(sandbox.manager().load(&suffixed).unwrap().position, 2);
+    assert_err_is!(sandbox.manager().load(&suffixed), Error::NotFound(found) if *found == suffixed);
 }
 
 #[rstest]
 fn load_fails_when_the_state_is_missing(sandbox: Sandbox) {
-    assert_err!(sandbox.manager().load(TEST_STATE_NAME), "state not found");
+    assert_err_is!(
+        sandbox.manager().load(TEST_STATE_NAME),
+        Error::NotFound(found) if found == TEST_STATE_NAME
+    );
 }
 
 #[rstest]
 fn load_fails_when_the_path_is_a_directory(sandbox: Sandbox) {
     fs::create_dir_all(sandbox.manager().path(TEST_STATE_NAME).unwrap()).unwrap();
 
-    assert_err!(sandbox.manager().load(TEST_STATE_NAME), "state not found");
+    assert_err_is!(
+        sandbox.manager().load(TEST_STATE_NAME),
+        Error::NotFound(found) if found == TEST_STATE_NAME
+    );
 }
 
 #[apply(malformed_payloads)]
-fn load_fails_when_the_payload_is_malformed(
-    sandbox: Sandbox,
-    #[case] payload: &str,
-    #[case] message: &str,
-) {
+fn load_fails_when_the_payload_is_malformed(sandbox: Sandbox, #[case] payload: &str) {
     write_state(&sandbox, TEST_STATE_NAME, payload);
 
-    assert_err!(sandbox.manager().load(TEST_STATE_NAME), message);
+    assert_err_is!(sandbox.manager().load(TEST_STATE_NAME), Error::Serde(_));
 }
 
 #[rstest]
 fn load_fails_when_the_content_is_not_utf8(sandbox: Sandbox) {
     write_state(&sandbox, TEST_STATE_NAME, b"{\"name\": \"\xff\"}");
 
-    assert_err!(sandbox.manager().load(TEST_STATE_NAME), "valid UTF-8");
+    assert_err_is!(
+        sandbox.manager().load(TEST_STATE_NAME),
+        Error::Io(error) if error.kind() == ErrorKind::InvalidData
+    );
 }
 
-#[apply(unsafe_names)]
-fn load_fails_when_the_name_is_unsafe(
-    sandbox: Sandbox,
-    #[case] name: &str,
-    #[case] message: String,
-) {
-    assert_err_eq!(sandbox.manager().load(name), message);
-}
-
-#[cfg(windows)]
-#[apply(windows_unsafe_names)]
-fn load_fails_when_a_windows_name_is_unsafe(
-    sandbox: Sandbox,
-    #[case] name: &str,
-    #[case] message: &str,
-) {
-    assert_err_eq!(sandbox.manager().load(name), message);
+#[apply(invalid_names)]
+fn load_fails_when_the_name_is_invalid(sandbox: Sandbox, #[case] name: &str, #[case] rule: Rule) {
+    assert_err_is!(sandbox.manager().load(name), Error::Path(error) if rule.matches(error, name));
 }
 
 #[rstest]
 fn load_verifies_by_default(sandbox: Sandbox) {
     write_state(&sandbox, TEST_STATE_NAME, unverifiable(TEST_STATE_NAME));
 
-    assert_err!(
+    assert_err_is!(
         sandbox.manager().load(TEST_STATE_NAME),
-        "state checksum mismatch"
+        Error::Mismatch(Mismatch::Checksum { saved, .. }) if saved == "not-a-real-checksum"
     );
 }
 
@@ -483,4 +442,50 @@ fn default_agrees_with_the_default_config() {
 
     assert_eq!(derived, configured);
     assert_eq!(derived.parent().unwrap(), default_state_dir());
+}
+
+#[apply(windows_invalid_names)]
+fn every_location_rejects_an_unportable_name(sandbox: Sandbox, #[case] name: &str) {
+    let manager = sandbox.manager();
+
+    assert_err_is!(manager.path(name), Error::Path(PathError::Invalid(found)) if found == name);
+    assert_err_is!(manager.tmp(name), Error::Path(PathError::Invalid(found)) if found == name);
+    assert_err_is!(manager.load(name), Error::Path(PathError::Invalid(found)) if found == name);
+}
+
+#[apply(unportable_characters)]
+fn every_location_rejects_an_unportable_character(
+    sandbox: Sandbox,
+    #[case] character: char,
+    #[values("job{}1", "sub{}/job-1")] shape: &str,
+) {
+    let manager = sandbox.manager();
+    let name = shape.replace("{}", &character.to_string());
+
+    assert_err_is!(manager.path(&name), Error::Path(PathError::Invalid(found)) if *found == name);
+    assert_err_is!(manager.tmp(&name), Error::Path(PathError::Invalid(found)) if *found == name);
+    assert_err_is!(manager.load(&name), Error::Path(PathError::Invalid(found)) if *found == name);
+}
+
+#[apply(valid_names)]
+fn tmp_keeps_the_name_beside_the_state_file(sandbox: Sandbox, #[case] name: &str) {
+    let tmp = sandbox.manager().tmp(name).unwrap();
+    let path = sandbox.manager().path(name).unwrap();
+    let file_name = path.file_name().unwrap().to_str().unwrap();
+    let tmp_name = tmp.file_name().unwrap().to_str().unwrap();
+    let stem = file_name.strip_suffix(STATE_FILE_EXTENSION).unwrap();
+
+    assert!(tmp_name.starts_with(&format!("{stem}.")));
+    assert!(tmp_name.ends_with(&tmp_suffix()));
+
+    assert_eq!(tmp.parent(), path.parent());
+}
+
+#[apply(device_names)]
+fn every_location_rejects_a_device_name(sandbox: Sandbox, #[case] name: &str) {
+    let manager = sandbox.manager();
+
+    assert_err_is!(manager.path(name), Error::Path(PathError::Invalid(found)) if found == name);
+    assert_err_is!(manager.tmp(name), Error::Path(PathError::Invalid(found)) if found == name);
+    assert_err_is!(manager.load(name), Error::Path(PathError::Invalid(found)) if found == name);
 }

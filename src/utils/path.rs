@@ -1,69 +1,27 @@
-use std::path::{
-    Component::{CurDir, ParentDir, Prefix, RootDir},
-    Path, PathBuf,
-};
+use std::path::{Path, PathBuf};
 
-use crate::{PathError, constants::DEFAULT_STATE_DIR};
+use crate::{
+    PathError,
+    constants::{DEFAULT_STATE_DIR, NAME_SEPARATOR},
+    validators::validate_name,
+};
 
 pub fn default_state_dir() -> PathBuf {
     scoped_join(&dirs::cache_dir().unwrap_or_default(), DEFAULT_STATE_DIR).unwrap()
 }
 
-pub fn scoped_join(root: &Path, unsafe_path: &str) -> Result<PathBuf, PathError> {
-    if unsafe_path.is_empty() {
-        return Err(PathError::Empty);
-    }
-
-    let candidate = Path::new(unsafe_path);
-    let escapes = candidate
-        .components()
-        .any(|component| matches!(component, ParentDir | Prefix(_) | RootDir));
-
-    if escapes {
-        return Err(PathError::Escapes(unsafe_path.to_owned()));
-    }
-
-    if candidate.file_name().is_none() {
-        return Err(PathError::Nameless(unsafe_path.to_owned()));
-    }
-
-    Ok(root.join(unsafe_path))
+pub fn scoped_join(root: &Path, name: &str) -> Result<PathBuf, PathError> {
+    Ok(root.join(validate_name(name)?.split(NAME_SEPARATOR).collect::<PathBuf>()))
 }
 
-pub fn has_no_symlinks(root: &Path, path: &Path) -> bool {
-    let (Ok(canonical), Ok(relative)) = (root.canonicalize(), path.strip_prefix(root)) else {
+pub fn resolves_in_place(root: &Path, path: &Path) -> bool {
+    let (Ok(canonical), Ok(relative)) = (dunce::canonicalize(root), path.strip_prefix(root)) else {
         return true;
     };
     let scoped = canonical.join(relative);
 
-    let Some(existing) = scoped.ancestors().find(|ancestor| ancestor.exists()) else {
-        return true;
-    };
-
-    existing.canonicalize().is_ok_and(|real| real == existing)
-}
-
-pub fn normalize_path(path: &str) -> String {
-    Path::new(path)
-        .components()
-        .filter(|component| component != &CurDir)
-        .collect::<PathBuf>()
-        .to_string_lossy()
-        .into_owned()
-}
-
-pub fn path_stem(path: &str, extension: &str) -> String {
-    let normalized = normalize_path(path);
-    let candidate = Path::new(&normalized);
-
-    let Some(last) = candidate.file_name().and_then(|last| last.to_str()) else {
-        return normalized;
-    };
-    let stem = last.trim_end_matches(extension);
-
-    if Path::new(stem).file_name().and_then(|stem| stem.to_str()) != Some(stem) {
-        return String::new();
-    }
-
-    candidate.with_file_name(stem).to_string_lossy().into_owned()
+    scoped
+        .ancestors()
+        .find(|ancestor| ancestor.exists())
+        .is_none_or(|existing| dunce::canonicalize(existing).is_ok_and(|real| real == existing))
 }

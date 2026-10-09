@@ -65,10 +65,6 @@ files = ["python/preader", "tests/python"]
 python_version = "3.12"
 strict = true
 
-[[tool.mypy.overrides]]
-module = "preader.preader"
-disable_error_code = ["no-untyped-def"]
-
 [tool.pytest.ini_options]
 addopts = "-n auto -ra --disable-socket --strict-config --strict-markers"
 filterwarnings = ["error"]
@@ -77,6 +73,9 @@ timeout = 10
 
 [tool.ruff]
 extend-exclude = ["python/preader/preader.pyi"]
+
+[tool.ruff.format]
+skip-magic-trailing-comma = true
 
 [tool.ruff.lint]
 select = ["ALL"]
@@ -88,8 +87,9 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["constants", "preader"]
+known-first-party = ["cases", "constants", "preader"]
 lines-between-types = 1
+split-on-trailing-comma = false
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = [

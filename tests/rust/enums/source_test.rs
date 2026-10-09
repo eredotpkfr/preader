@@ -1,16 +1,15 @@
-use preader::{Error, IteratorBuild, IteratorRead, Mismatch, State, StateSource};
+use preader::{Error, IteratorBuild, IteratorRead, Mismatch, PathError, State, StateSource};
 use rstest::rstest;
 use rstest_reuse::apply;
 
-#[cfg(windows)]
-use crate::common::templates::windows_unsafe_names;
 use crate::common::{
     constants::{TEST_LINE, TEST_OTHER_STATE_NAME, TEST_STATE_NAME},
     fixtures::sandbox,
-    funcs::native,
-    macros::asserts::{assert_err, assert_err_eq, assert_err_is},
+    funcs::canonical,
+    macros::asserts::assert_err_is,
+    rule::Rule,
     sandbox::Sandbox,
-    templates::unsafe_names,
+    templates::name::{device_names, invalid_names, unportable_characters, windows_invalid_names},
 };
 
 #[rstest]
@@ -102,9 +101,11 @@ fn advanced_state_needs_save_before_it_is_reused(sandbox: Sandbox) {
 
     drop(bytes);
 
-    assert_err!(
+    let recorded = state.checksum.clone();
+
+    assert_err_is!(
         sandbox.reader().bytes(&path).state(state).build(),
-        "state checksum mismatch"
+        Error::Mismatch(Mismatch::Checksum { saved, .. }) if *saved == recorded
     );
 }
 
@@ -118,13 +119,13 @@ fn existing_state_accepts_a_box(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn name_is_normalized_before_it_is_used(sandbox: Sandbox) {
+fn name_is_used_verbatim(sandbox: Sandbox) {
     let path = sandbox.line_file();
-    let source = StateSource::from(format!("{TEST_STATE_NAME}.state.json"));
+    let source = StateSource::from("sub/job-1.state.json");
 
     assert_eq!(
         sandbox.reader().bytes(&path).state(source).build().unwrap().state().name,
-        TEST_STATE_NAME
+        "sub/job-1.state.json"
     );
 }
 
@@ -159,27 +160,39 @@ fn auto_load_starts_fresh_without_a_saved_state(sandbox: Sandbox) {
     assert_eq!(bytes.state().position, 0);
 }
 
-#[apply(unsafe_names)]
-fn build_fails_when_the_name_is_unsafe(
-    sandbox: Sandbox,
-    #[case] name: &str,
-    #[case] message: String,
-) {
+#[apply(invalid_names)]
+fn build_fails_when_the_name_is_invalid(sandbox: Sandbox, #[case] name: &str, #[case] rule: Rule) {
     let path = sandbox.line_file();
 
-    assert_err_eq!(sandbox.reader().bytes(&path).state(name).build(), message);
+    assert_err_is!(
+        sandbox.reader().bytes(&path).state(name).build(),
+        Error::Path(error) if rule.matches(error, name)
+    );
 }
 
-#[cfg(windows)]
-#[apply(windows_unsafe_names)]
-fn build_fails_when_a_windows_name_is_unsafe(
-    sandbox: Sandbox,
-    #[case] name: &str,
-    #[case] message: &str,
-) {
+#[apply(windows_invalid_names)]
+fn build_fails_when_the_name_is_not_portable(sandbox: Sandbox, #[case] name: &str) {
     let path = sandbox.line_file();
 
-    assert_err_eq!(sandbox.reader().bytes(&path).state(name).build(), message);
+    assert_err_is!(
+        sandbox.reader().bytes(&path).state(name).build(),
+        Error::Path(PathError::Invalid(found)) if found == name
+    );
+}
+
+#[apply(unportable_characters)]
+fn build_fails_when_a_character_is_not_portable(
+    sandbox: Sandbox,
+    #[case] character: char,
+    #[values("job{}1", "sub{}/job-1")] shape: &str,
+) {
+    let path = sandbox.line_file();
+    let name = shape.replace("{}", &character.to_string());
+
+    assert_err_is!(
+        sandbox.reader().bytes(&path).state(name.as_str()).build(),
+        Error::Path(PathError::Invalid(found)) if *found == name
+    );
 }
 
 #[rstest]
@@ -188,9 +201,12 @@ fn existing_state_is_rejected_for_another_file(sandbox: Sandbox) {
     let other = sandbox.write("other.bin", TEST_LINE);
     let state: State = sandbox.state(&path);
 
-    assert_err!(
+    let recorded = state.file.path.clone();
+
+    assert_err_is!(
         sandbox.reader().bytes(&other).state(state).build(),
-        "file path mismatch",
+        Error::Mismatch(Mismatch::Path { saved, current })
+            if *saved == recorded && *current == canonical(&other)
     );
 }
 
@@ -213,4 +229,32 @@ fn missing_name_starts_a_fresh_state(sandbox: Sandbox) {
 
     assert_eq!(state.name, TEST_OTHER_STATE_NAME);
     assert_eq!(state.position, 0);
+}
+
+#[rstest]
+fn auto_load_fails_when_the_payload_names_another_state(sandbox: Sandbox) {
+    let path = sandbox.line_file();
+    let state = sandbox.saved(&path, TEST_STATE_NAME);
+    let payload = state.path().unwrap();
+    let patched = std::fs::read_to_string(&payload).unwrap().replace(
+        &format!("\"name\": \"{TEST_STATE_NAME}\""),
+        &format!("\"name\": \"{TEST_OTHER_STATE_NAME}\""),
+    );
+
+    std::fs::write(&payload, patched).unwrap();
+
+    assert_err_is!(
+        sandbox.resuming().bytes(&path).state(TEST_STATE_NAME).build(),
+        Error::Mismatch(Mismatch::Name { .. })
+    );
+}
+
+#[apply(device_names)]
+fn build_fails_when_the_name_is_a_device(sandbox: Sandbox, #[case] name: &str) {
+    let path = sandbox.line_file();
+
+    assert_err_is!(
+        sandbox.reader().bytes(&path).state(name).build(),
+        Error::Path(PathError::Invalid(found)) if found == name
+    );
 }

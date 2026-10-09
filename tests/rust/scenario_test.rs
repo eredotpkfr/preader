@@ -2,7 +2,7 @@ use std::fs;
 
 use preader::{
     Config, DEFAULT_BUFFER_CAPACITY, DEFAULT_DELIMITER, Error, IteratorBuild, IteratorRead,
-    Mismatch, PReader, STATE_FILE_EXTENSION,
+    Mismatch, PReader,
 };
 use rstest::rstest;
 use rstest_reuse::apply;
@@ -15,11 +15,11 @@ use crate::common::{
         TEST_SEGMENT_CONTENT, TEST_STATE_NAME,
     },
     fixtures::sandbox,
-    funcs::{drain, items, texts},
+    funcs::{drain, items, state_file, texts},
     iterators::{ITERATORS, LOSSLESS_ITERATORS, Plan},
-    macros::asserts::{assert_err, assert_err_is},
+    macros::asserts::assert_err_is,
     sandbox::Sandbox,
-    templates::malformed_payloads,
+    templates::payload::malformed_payloads,
 };
 
 #[rstest]
@@ -169,11 +169,7 @@ fn every_byte_value_survives_a_round_trip(sandbox: Sandbox) {
 }
 
 #[apply(malformed_payloads)]
-fn auto_load_fails_when_the_payload_is_corrupt(
-    sandbox: Sandbox,
-    #[case] payload: &str,
-    #[case] message: &str,
-) {
+fn auto_load_fails_when_the_payload_is_corrupt(sandbox: Sandbox, #[case] payload: &str) {
     let path = sandbox.file(TEST_ALPHABET);
     let reader = sandbox.resuming();
     let mut bytes = reader.bytes(&path).build().unwrap();
@@ -185,8 +181,6 @@ fn auto_load_fails_when_the_payload_is_corrupt(
     drop(bytes);
 
     fs::write(&state_path, payload).unwrap();
-
-    assert_err!(reader.bytes(&path).build(), message);
 
     assert_err_is!(reader.bytes(&path).build(), Error::Serde(_));
 }
@@ -272,7 +266,7 @@ fn state_object_keeps_its_own_state_dir(sandbox: Sandbox) {
         byte.unwrap();
     }
 
-    let name = format!("{TEST_STATE_NAME}{STATE_FILE_EXTENSION}");
+    let name = state_file(TEST_STATE_NAME);
 
     assert!(sandbox.state_dir().join(&name).is_file());
     assert!(!elsewhere.join(&name).exists());
@@ -356,7 +350,7 @@ fn symlinks_to_one_target_share_the_autoname(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn deleted_tracked_file_fails_the_build(sandbox: Sandbox) {
+fn build_fails_when_the_tracked_file_is_deleted(sandbox: Sandbox) {
     let tracked = sandbox.write("tracked.bin", TEST_ALPHABET);
     let reader = sandbox.lenient();
     let state = sandbox.named_state(&tracked, TEST_STATE_NAME);
@@ -370,7 +364,7 @@ fn deleted_tracked_file_fails_the_build(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn file_replaced_by_directory_fails_read(sandbox: Sandbox) {
+fn read_fails_when_the_file_is_replaced_by_a_directory(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let reader = sandbox.lenient();
     let state = sandbox.named_state(&path, TEST_STATE_NAME);

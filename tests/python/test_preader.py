@@ -10,6 +10,23 @@ from constants import TEST_ALPHABET, TEST_DEFAULT_DELIMITER, TEST_STATE_NAME
 from preader import Config, IteratorOptions, PReader, StateError
 
 
+def test_preader_defaults() -> None:
+    config = PReader().config
+    default = Config()
+
+    assert config.buffer_capacity == default.buffer_capacity
+    assert config.state_dir == default.state_dir
+    assert config.auto_save_state == default.auto_save_state
+    assert config.auto_save_state_bytes == default.auto_save_state_bytes
+    assert config.auto_load_state == default.auto_load_state
+    assert config.verify_state == default.verify_state
+
+
+def test_raises_when_config_is_none() -> None:
+    with pytest.raises(TypeError):
+        PReader(config=None)  # type: ignore[arg-type]
+
+
 def test_every_iterator_counts_invalid_bytes(
     reader: PReader, make_file: Callable[..., Path]
 ) -> None:
@@ -28,7 +45,7 @@ def test_every_iterator_counts_invalid_bytes(
 
     assert next(lines) == "foo"
 
-    with pytest.raises(ValueError, match="utf-8"):
+    with pytest.raises(ValueError, match="invalid utf-8"):
         next(lines)
 
     assert next(lines) == "bar"
@@ -37,23 +54,6 @@ def test_every_iterator_counts_invalid_bytes(
         next(lines)
 
     assert lines.state.position == 11
-
-
-def test_preader_defaults() -> None:
-    config = PReader().config
-    default = Config()
-
-    assert config.buffer_capacity == default.buffer_capacity
-    assert config.state_dir == default.state_dir
-    assert config.auto_save_state == default.auto_save_state
-    assert config.auto_save_state_bytes == default.auto_save_state_bytes
-    assert config.auto_load_state == default.auto_load_state
-    assert config.verify_state == default.verify_state
-
-
-def test_raises_when_config_is_none() -> None:
-    with pytest.raises(TypeError):
-        PReader(config=None)  # type: ignore[arg-type]
 
 
 def test_buffer_capacity_zero(
@@ -470,12 +470,14 @@ def test_delimiter_accepts_a_control_character(
 def test_delimiter_raises_when_not_a_single_character(
     reader: PReader, tmp_file: Path, delimiter: str
 ) -> None:
-    with pytest.raises(ValueError, match="length 1"):
+    with pytest.raises(ValueError, match="expected a string of length 1"):
         reader.delimiter(tmp_file, delimiter=delimiter)
 
 
 def test_delimiter_raises_when_missing(reader: PReader, tmp_file: Path) -> None:
-    with pytest.raises(TypeError, match="delimiter"):
+    with pytest.raises(
+        TypeError, match="missing 1 required keyword argument: 'delimiter'"
+    ):
         reader.delimiter(tmp_file)  # type: ignore[call-arg]
 
 
@@ -506,7 +508,7 @@ def test_bytes_raises_when_the_maximum_start_exceeds_the_end(
 ) -> None:
     options = IteratorOptions(start=2**64 - 1, end=0)
 
-    with pytest.raises(ValueError, match="must be <="):
+    with pytest.raises(ValueError, match=r"start .* must be <= end"):
         reader.bytes(tmp_file, options=options)
 
 
@@ -514,6 +516,7 @@ def test_bytes_resolves_a_relative_path_to_the_same_name(
     reader: PReader, make_file: Callable[..., Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     path = make_file(b"foo")
+
     monkeypatch.chdir(path.parent)
 
     assert reader.bytes(path.name).state.name == reader.bytes(path).state.name

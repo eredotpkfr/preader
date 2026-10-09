@@ -1,6 +1,6 @@
 use preader::{DEFAULT_DELIMITER, IteratorOptions};
 
-use crate::common::matrix::{Shape, expected::cursor::cursor};
+use crate::common::matrix::{expected::cursor::cursor, windows::Shape};
 
 const LINE_BOUNDARY: u8 = b'\n';
 
