@@ -248,7 +248,9 @@ def test_names_ignores_non_state_files(
     reader: PReader, registry: StateRegistry, tmp_file: Path, name: str
 ) -> None:
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
-    registry.path(TEST_STATE_NAME).parent.joinpath(name).write_text("not a state")
+    registry.path(TEST_STATE_NAME).parent.joinpath(name).write_text(
+        "not a state", encoding="utf-8"
+    )
 
     assert set(registry.names()) == {TEST_STATE_NAME}
     assert len(registry) == 1
@@ -260,7 +262,9 @@ def test_names_ignores_a_non_utf8_state(
 ) -> None:
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
 
-    (config.state_dir / os.fsdecode(b"ghost-\xff.state.json")).write_text("{}")
+    (config.state_dir / os.fsdecode(b"ghost-\xff.state.json")).write_text(
+        "{}", encoding="utf-8"
+    )
 
     assert list(registry.names()) == [TEST_STATE_NAME]
 
@@ -276,7 +280,7 @@ def test_clear_keeps_non_state_files(
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
 
     unrelated = registry.path(TEST_STATE_NAME).parent / name
-    unrelated.write_text("not a state")
+    unrelated.write_text("not a state", encoding="utf-8")
 
     registry.clear()
 
@@ -401,7 +405,7 @@ def test_delete_raises_when_the_name_escapes_through_a_symlink(
     (config.state_dir / "link").symlink_to(outside, target_is_directory=True)
 
     victim = outside / TEST_STATE_FILE
-    victim.write_text("{}")
+    victim.write_text("{}", encoding="utf-8")
 
     with pytest.raises(
         StateError, match="path is a symlink or an alias of another entry"
@@ -534,7 +538,7 @@ def test_find_returns_none_when_state_is_corrupted(
     registry: StateRegistry, reader: PReader, tmp_file: Path
 ) -> None:
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
-    registry.path(TEST_STATE_NAME).write_text("not valid json")
+    registry.path(TEST_STATE_NAME).write_text("not valid json", encoding="utf-8")
 
     assert registry.exists(TEST_STATE_NAME)
     assert registry.find(TEST_STATE_NAME) is None
@@ -615,7 +619,7 @@ def test_clear_removes_corrupted_states(
     reader: PReader, registry: StateRegistry, tmp_file: Path
 ) -> None:
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
-    registry.path(OTHER_STATE_NAME).write_text("not valid json")
+    registry.path(OTHER_STATE_NAME).write_text("not valid json", encoding="utf-8")
 
     registry.clear()
 
@@ -707,7 +711,9 @@ def test_len_counts_states_that_all_rejects(
 ) -> None:
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
 
-    (config.state_dir / "broken.state.json").write_text("not valid json")
+    (config.state_dir / "broken.state.json").write_text(
+        "not valid json", encoding="utf-8"
+    )
 
     assert len(registry) == 2
 
@@ -756,7 +762,7 @@ def test_all_raises_when_any_state_is_corrupt(
         reader.bytes(tmp_file, state=name).state.save()
 
     (config.state_dir / f"{corrupted}{TEST_STATE_FILE_EXTENSION}").write_text(
-        "not valid json"
+        "not valid json", encoding="utf-8"
     )
 
     with pytest.raises(StateError, match="expected ident"):
@@ -853,7 +859,9 @@ def test_registry_raises_when_a_subdirectory_is_unreadable(
     blocked = config.state_dir / "sub"
     blocked.mkdir()
 
-    (blocked / f"{OTHER_STATE_NAME}{TEST_STATE_FILE_EXTENSION}").write_text("{}")
+    (blocked / f"{OTHER_STATE_NAME}{TEST_STATE_FILE_EXTENSION}").write_text(
+        "{}", encoding="utf-8"
+    )
 
     revoke_permissions(blocked)
 
@@ -887,7 +895,7 @@ def test_saved_name_round_trips_through_names(
     path = reader.bytes(tmp_file, state=name).state.save()
 
     assert path == config.state_dir / f"{name}{TEST_STATE_FILE_EXTENSION}"
-    assert json.loads(path.read_text())["name"] == name
+    assert json.loads(path.read_text(encoding="utf-8"))["name"] == name
     assert list(registry.names()) == [name]
     assert list(registry.search(f"^{re.escape(name)}$")) == [name]
     assert registry[name].name == name
@@ -1010,7 +1018,7 @@ def test_foreign_state_file_is_listed_under_its_own_name(
 
     foreign = config.state_dir / file
     foreign.parent.mkdir(parents=True, exist_ok=True)
-    foreign.write_text("{}")
+    foreign.write_text("{}", encoding="utf-8")
 
     assert sorted(registry.names()) == sorted([TEST_STATE_NAME, SUB_STATE_NAME, name])
     assert registry.path(name) == foreign
@@ -1031,7 +1039,7 @@ def test_walk_skips_a_file_it_cannot_address(
 
     stray = config.state_dir / file
     stray.parent.mkdir(parents=True, exist_ok=True)
-    stray.write_text("{}")
+    stray.write_text("{}", encoding="utf-8")
 
     assert sorted(registry.names()) == [TEST_STATE_NAME, SUB_STATE_NAME]
     assert len(registry) == 2
@@ -1049,7 +1057,7 @@ def test_clear_keeps_a_file_it_cannot_address(
 
     stray = config.state_dir / file
     stray.parent.mkdir(parents=True, exist_ok=True)
-    stray.write_text("{}")
+    stray.write_text("{}", encoding="utf-8")
 
     registry.clear()
 
@@ -1069,7 +1077,7 @@ def test_delete_removes_only_the_hard_link(
     registry: StateRegistry, config: Config, tmp_path: Path
 ) -> None:
     outside = tmp_path / "outside.txt"
-    outside.write_text("foo")
+    outside.write_text("foo", encoding="utf-8")
 
     link = config.state_dir / TEST_STATE_FILE
     link.parent.mkdir(parents=True, exist_ok=True)
@@ -1078,7 +1086,7 @@ def test_delete_removes_only_the_hard_link(
     del registry[TEST_STATE_NAME]
 
     assert not link.exists()
-    assert outside.read_text() == "foo"
+    assert outside.read_text(encoding="utf-8") == "foo"
 
 
 @pytest.mark.usefixtures("requires_symlinks")
@@ -1156,7 +1164,7 @@ def test_walk_skips_a_file_it_cannot_represent(
 
     stray = config.state_dir / file
     stray.parent.mkdir(parents=True, exist_ok=True)
-    stray.write_text("{}")
+    stray.write_text("{}", encoding="utf-8")
 
     assert list(registry.names()) == [TEST_STATE_NAME]
     assert len(registry) == 1
@@ -1173,7 +1181,7 @@ def test_clear_keeps_a_file_it_cannot_represent(
 
     stray = config.state_dir / file
     stray.parent.mkdir(parents=True, exist_ok=True)
-    stray.write_text("{}")
+    stray.write_text("{}", encoding="utf-8")
 
     registry.clear()
 
