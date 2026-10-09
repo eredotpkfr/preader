@@ -747,7 +747,7 @@ def test_auto_load_state_raises_when_the_payload_is_corrupt(
     next(iterator)
 
     state_path = iterator.state.save()
-    state_path.write_text("not valid json")
+    state_path.write_text("not valid json", encoding="utf-8")
 
     with pytest.raises(StateError, match="expected ident"):
         reader.chunks(data_file, chunk_size=3)
@@ -762,11 +762,11 @@ def test_auto_load_state_raises_when_the_payload_is_incomplete(
     next(iterator)
 
     state_path = iterator.state.save()
-    payload = json.loads(state_path.read_text())
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
 
     del payload["timestamps"]
 
-    state_path.write_text(json.dumps(payload))
+    state_path.write_text(json.dumps(payload), encoding="utf-8")
 
     with pytest.raises(StateError, match="missing field `timestamps`"):
         reader.chunks(data_file, chunk_size=3)

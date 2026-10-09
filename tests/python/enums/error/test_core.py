@@ -32,7 +32,7 @@ def test_serde_errors_map_to_state_error(registry: StateRegistry) -> None:
     path = registry.path(TEST_STATE_NAME)
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("not valid json")
+    path.write_text("not valid json", encoding="utf-8")
 
     with pytest.raises(StateError, match="expected ident"):
         registry[TEST_STATE_NAME]

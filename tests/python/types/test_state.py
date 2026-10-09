@@ -728,10 +728,10 @@ def test_resync_reseals_a_tampered_state(
     path = make_file(b"a" * 20)
     state_path = reader.bytes(path, state=TEST_STATE_NAME).state.save()
 
-    payload = json.loads(state_path.read_text())
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
     payload["position"] = 999
 
-    state_path.write_text(json.dumps(payload))
+    state_path.write_text(json.dumps(payload), encoding="utf-8")
 
     tampered = reader.states[TEST_STATE_NAME]
 
@@ -898,10 +898,10 @@ def test_percent_exceeds_hundred_past_the_file_size(
     path = make_file(b"foo")
     state_path = consume(reader.bytes(path, state=TEST_STATE_NAME)).state.save()
 
-    payload = json.loads(state_path.read_text())
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
     payload["position"] = 999
 
-    state_path.write_text(json.dumps(payload))
+    state_path.write_text(json.dumps(payload), encoding="utf-8")
 
     assert reader.states[TEST_STATE_NAME].percent() == 33300.0
 
@@ -915,11 +915,11 @@ def test_percent_treats_a_zero_size_as_one_byte(
     path = make_file(b"foo")
     state_path = consume(reader.bytes(path, state=TEST_STATE_NAME)).state.save()
 
-    payload = json.loads(state_path.read_text())
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
     payload["file"]["size"] = 0
     payload["position"] = 5
 
-    state_path.write_text(json.dumps(payload))
+    state_path.write_text(json.dumps(payload), encoding="utf-8")
 
     assert reader.states[TEST_STATE_NAME].percent() == 500.0
 
@@ -1068,7 +1068,7 @@ def test_save_replaces_a_hard_link_without_touching_its_target(
     reader: PReader, config: Config, tmp_file: Path, tmp_path: Path
 ) -> None:
     outside = tmp_path / "outside.txt"
-    outside.write_text("foo")
+    outside.write_text("foo", encoding="utf-8")
 
     link = config.state_dir / TEST_STATE_FILE
     link.parent.mkdir(parents=True, exist_ok=True)
@@ -1076,8 +1076,8 @@ def test_save_replaces_a_hard_link_without_touching_its_target(
 
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
 
-    assert outside.read_text() == "foo"
-    assert link.read_text() != "foo"
+    assert outside.read_text(encoding="utf-8") == "foo"
+    assert link.read_text(encoding="utf-8") != "foo"
 
 
 def test_save_raises_when_a_state_file_blocks_the_directory(
@@ -1112,7 +1112,7 @@ def test_path_raises_when_the_state_file_is_a_symlink(
     state = reader.bytes(tmp_file, state=TEST_STATE_NAME).state
 
     outside = tmp_path / "outside.json"
-    outside.write_text("{}")
+    outside.write_text("{}", encoding="utf-8")
 
     config.state_dir.mkdir(parents=True, exist_ok=True)
     (config.state_dir / TEST_STATE_FILE).symlink_to(outside)
