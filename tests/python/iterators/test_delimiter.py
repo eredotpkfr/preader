@@ -17,7 +17,9 @@ from preader import Config, IteratorOptions, PReader, State, StateError
 
 SEGMENTS = [f"seg-{i}" for i in range(10)]
 DELIMITER_CONTENT = TEST_DEFAULT_DELIMITER.join(SEGMENTS).encode()
-BLANK_SEGMENT_CONTENT = TEST_DEFAULT_DELIMITER.join(["seg-0", "", "seg-2", ""]).encode()
+BLANK_SEGMENT_CONTENT = TEST_DEFAULT_DELIMITER.join(
+    [SEGMENTS[0], "", SEGMENTS[2], ""]
+).encode()
 
 
 @pytest.fixture
@@ -50,7 +52,7 @@ def test_options_narrow_the_output(
     assert segments == [seg.encode() for seg in expected]
 
 
-def test_read_splits_invalid_bytes(
+def test_read_yields_invalid_bytes(
     reader: PReader, make_file: Callable[..., Path]
 ) -> None:
     invalid = b"foo," + bytes([0xFF, 0xFE]) + b",bar"
@@ -167,7 +169,7 @@ def test_buffer_capacity_smaller_than_segment_length(
     ]
 
 
-def test_no_delimiter_yields_single_segment(
+def test_content_without_the_delimiter_yields_one_segment(
     reader: PReader, make_file: Callable[..., Path]
 ) -> None:
     content = DELIMITER_CONTENT.replace(TEST_DEFAULT_DELIMITER.encode(), b"")
@@ -184,7 +186,7 @@ def test_null_byte_delimiter_splits_the_content(
     assert list(reader.delimiter(path, delimiter="\x00")) == [b"foo", b"bar", b"baz"]
 
 
-def test_resume_with_different_delimiter(
+def test_resume_applies_a_different_delimiter(
     reader: PReader, make_file: Callable[..., Path], consume: Callable[..., Any]
 ) -> None:
     content = DELIMITER_CONTENT + b";" + DELIMITER_CONTENT
@@ -315,9 +317,7 @@ def test_drop_saves_partial_progress(
     assert reader.states[TEST_STATE_NAME].position == 6
 
 
-def test_drop_does_not_save_when_auto_save_disabled(
-    reader: PReader, tmp_file: Path
-) -> None:
+def test_drop_does_not_save_by_default(reader: PReader, tmp_file: Path) -> None:
     iterator = reader.delimiter(
         tmp_file, delimiter=TEST_DEFAULT_DELIMITER, state=TEST_STATE_NAME
     )
@@ -382,7 +382,7 @@ def test_a_failing_threshold_save_stops_the_read(
         next(iterator)
 
 
-def test_a_failed_save_exhausts_the_iterator(
+def test_a_failing_save_exhausts_the_iterator(
     config: Config, make_reader: Callable[..., PReader], data_file: Path
 ) -> None:
     config.state_dir.write_bytes(b"not a directory")
@@ -572,7 +572,7 @@ def test_auto_load_state_resumes_stale_state_without_verification(
     )
 
 
-def test_auto_load_state_disabled_ignores_existing_state(
+def test_auto_load_state_ignores_an_existing_state_by_default(
     reader: PReader, tmp_file: Path, consume: Callable[..., Any]
 ) -> None:
     consume(reader.delimiter(tmp_file, delimiter=TEST_DEFAULT_DELIMITER)).state.save()
@@ -639,11 +639,11 @@ def test_raises_when_a_state_name_character_is_not_portable(
         reader.delimiter(tmp_file, delimiter=TEST_DEFAULT_DELIMITER, state=name)
 
 
-def test_raises_when_state_object_file_argument_mismatches(
+def test_raises_when_the_state_tracks_another_file(
     reader: PReader, make_file: Callable[..., Path]
 ) -> None:
-    tracked = make_file(DELIMITER_CONTENT, name="tracked.bin")
-    untracked = make_file(DELIMITER_CONTENT, name="untracked.bin")
+    tracked = make_file(b"foo", name="tracked.bin")
+    untracked = make_file(b"foo", name="untracked.bin")
 
     state = reader.delimiter(
         tracked, delimiter=TEST_DEFAULT_DELIMITER, state=TEST_STATE_NAME
@@ -654,12 +654,12 @@ def test_raises_when_state_object_file_argument_mismatches(
         reader.delimiter(untracked, delimiter=TEST_DEFAULT_DELIMITER, state=state)
 
 
-def test_raises_when_file_differs_without_verification(
+def test_raises_when_the_file_differs_without_verification(
     make_file: Callable[..., Path], make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(verify_state=False)
-    tracked = make_file(DELIMITER_CONTENT, name="tracked.bin")
-    untracked = make_file(DELIMITER_CONTENT.upper(), name="untracked.bin")
+    tracked = make_file(b"foo", name="tracked.bin")
+    untracked = make_file(b"bar", name="untracked.bin")
 
     state = reader.delimiter(
         tracked, delimiter=TEST_DEFAULT_DELIMITER, state=TEST_STATE_NAME
@@ -670,7 +670,7 @@ def test_raises_when_file_differs_without_verification(
         reader.delimiter(untracked, delimiter=TEST_DEFAULT_DELIMITER, state=state)
 
 
-def test_verify_state_disabled_skips_verification(
+def test_resumes_a_grown_file_without_verification(
     data_file: Path,
     make_reader: Callable[..., PReader],
     append: Callable[[Path, bytes], None],
@@ -695,7 +695,7 @@ def test_verify_state_disabled_skips_verification(
     assert resumed.state.position == state.position
 
 
-def test_raises_when_file_deleted_without_verification(
+def test_raises_when_the_file_is_deleted_without_verification(
     data_file: Path, make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(verify_state=False)
@@ -715,7 +715,7 @@ def test_raises_when_the_tracked_file_is_deleted(
     make_file: Callable[..., Path], make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(verify_state=False)
-    tracked = make_file(DELIMITER_CONTENT, name="tracked.bin")
+    tracked = make_file(b"foo", name="tracked.bin")
 
     state = reader.delimiter(
         tracked, state=TEST_STATE_NAME, delimiter=TEST_DEFAULT_DELIMITER
@@ -783,8 +783,8 @@ def test_auto_load_state_raises_when_the_name_tracks_another_file(
 ) -> None:
     reader = make_reader(auto_load_state=True)
 
-    file_a = make_file(b"foo,", name="data-1.bin")
-    file_b = make_file(b"bar,", name="data-2.bin")
+    file_a = make_file(b"foo", name="data-1.bin")
+    file_b = make_file(b"bar", name="data-2.bin")
 
     reader.delimiter(
         file_a, delimiter=TEST_DEFAULT_DELIMITER, state="shared-name"
@@ -821,7 +821,7 @@ def test_raises_when_resumed_after_file_grows(
     ).state
     state.save()
 
-    append(data_file, b"more,")
+    append(data_file, b"more")
 
     with pytest.raises(StateError, match="file size mismatch"):
         reader.delimiter(data_file, delimiter=TEST_DEFAULT_DELIMITER, state=state)
@@ -842,7 +842,7 @@ def test_recorded_file_size_never_refreshes_after_file_grows(
     ).state
     state.save()
 
-    append(data_file, b"more,")
+    append(data_file, b"more")
 
     options = IteratorOptions(end=100)
     resumed = reader.delimiter(
@@ -879,7 +879,7 @@ def test_clear_does_not_affect_live_iterator(reader: PReader, data_file: Path) -
 @pytest.mark.parametrize(
     "options", [IteratorOptions(), IteratorOptions(skip=1)], ids=["reading", "skipping"]
 )
-def test_raises_when_reading_a_directory(
+def test_raises_when_reading_a_directory_without_verification(
     data_file: Path, make_reader: Callable[..., PReader], options: IteratorOptions
 ) -> None:
     reader = make_reader(verify_state=False)
@@ -902,7 +902,7 @@ def test_raises_when_reading_a_directory(
         )
 
 
-def test_raises_when_aligning_on_a_directory(
+def test_raises_when_aligning_on_a_directory_without_verification(
     data_file: Path, make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(verify_state=False)
@@ -924,7 +924,7 @@ def test_raises_when_aligning_on_a_directory(
         )
 
 
-def test_raises_when_resumed_file_replaced_by_directory(
+def test_raises_when_the_resumed_file_is_replaced_by_a_directory(
     reader: PReader, data_file: Path
 ) -> None:
     state = reader.delimiter(
@@ -1035,21 +1035,24 @@ def test_newline_delimiter_splits_lines(
 def test_delimiter_only_file_yields_blank_segments(
     reader: PReader, make_file: Callable[..., Path]
 ) -> None:
-    path = make_file(b"|||")
+    path = make_file(TEST_DEFAULT_DELIMITER.encode() * 3)
 
-    assert list(reader.delimiter(path, delimiter="|")) == [b"", b"", b""]
+    assert list(reader.delimiter(path, delimiter=TEST_DEFAULT_DELIMITER)) == [
+        b"",
+        b"",
+        b"",
+    ]
 
 
 def test_delimiter_only_file_keeps_each_delimiter(
     reader: PReader, make_file: Callable[..., Path]
 ) -> None:
-    path = make_file(b"|||")
+    path = make_file(TEST_DEFAULT_DELIMITER.encode() * 3)
+    iterator = reader.delimiter(
+        path, delimiter=TEST_DEFAULT_DELIMITER, keep_delimiter=True
+    )
 
-    assert list(reader.delimiter(path, delimiter="|", keep_delimiter=True)) == [
-        b"|",
-        b"|",
-        b"|",
-    ]
+    assert list(iterator) == [TEST_DEFAULT_DELIMITER.encode()] * 3
 
 
 @pytest.mark.parametrize(

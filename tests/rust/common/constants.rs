@@ -34,8 +34,6 @@ pub const TEST_INVALID_UTF8: &[u8] = b"\xff";
 pub const TEST_NON_UTF8_NAME: &[u8] = b"data-\xff.bin";
 pub const TEST_WINDOW: usize = preader::FINGERPRINT_SAMPLE_BYTES as usize;
 #[cfg(unix)]
-pub const TEST_RECORDED_SIZE: u64 = 64;
-#[cfg(unix)]
 pub const TEST_READ_FROM: u64 = 10;
 #[cfg(unix)]
 pub const TEST_REWOUND_TO: u64 = 2;

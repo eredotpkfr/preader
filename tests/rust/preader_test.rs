@@ -123,7 +123,7 @@ fn every_iterator_counts_invalid_bytes(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn unnormalized_path_resolves_to_same_name(sandbox: Sandbox) {
+fn unnormalized_path_resolves_to_the_same_name(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let detoured = sandbox.path().join(".").join(TEST_FILE_NAME);
     let reader = sandbox.reader();
@@ -178,7 +178,7 @@ fn symlink_is_resolved_to_its_target(sandbox: Sandbox) {
 
 #[cfg(unix)]
 #[rstest]
-fn socket_is_rejected(sandbox: Sandbox) {
+fn bytes_fails_when_the_path_is_a_socket(sandbox: Sandbox) {
     use std::os::unix::net::UnixListener;
 
     let socket = sandbox.path().join("a-socket");
@@ -192,7 +192,7 @@ fn socket_is_rejected(sandbox: Sandbox) {
 
 #[cfg(unix)]
 #[rstest]
-fn non_utf8_path_is_rejected(sandbox: Sandbox) {
+fn bytes_fails_when_the_path_is_not_utf8(sandbox: Sandbox) {
     use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 
     let path = sandbox.path().join(OsStr::from_bytes(TEST_NON_UTF8_NAME));

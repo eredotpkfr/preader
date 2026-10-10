@@ -7,7 +7,7 @@ use crate::common::constants::TEST_STATE_NAME;
 #[case::empty(PathError::Empty, "path must not be empty")]
 #[case::escapes(PathError::Escapes("../etc".to_owned()), "path escapes root: ../etc")]
 #[case::invalid(PathError::Invalid("job:1".to_owned()), "path is invalid: job:1")]
-#[case::alias(PathError::Alias("link/job".to_owned()), "path is a symlink or an alias of another entry: link/job")]
+#[case::alias(PathError::Alias("link/job-1".to_owned()), "path is a symlink or an alias of another entry: link/job-1")]
 fn every_variant_describes_itself(#[case] error: PathError, #[case] expected: &str) {
     assert_eq!(error.to_string(), expected);
 }

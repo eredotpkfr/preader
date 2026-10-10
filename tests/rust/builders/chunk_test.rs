@@ -32,8 +32,8 @@ fn last_size_wins(sandbox: Sandbox) {
 }
 
 #[rstest]
-#[case::keeps_the_tail(false, 3)]
-#[case::drops_the_tail(true, 2)]
+#[case::kept(false, 3)]
+#[case::dropped(true, 2)]
 fn drop_partial_decides_about_the_tail(
     sandbox: Sandbox,
     #[case] drop_partial: bool,

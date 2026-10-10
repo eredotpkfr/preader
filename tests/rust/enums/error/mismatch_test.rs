@@ -8,8 +8,8 @@ const RESTART_HINT: &str = "(read it under a new state to start over)";
 
 fn checksum() -> Mismatch {
     Mismatch::Checksum {
-        saved: "aaa".to_owned(),
-        computed: "bbb".to_owned(),
+        saved: "foo".to_owned(),
+        computed: "bar".to_owned(),
     }
 }
 
@@ -24,7 +24,7 @@ fn paths() -> (PathBuf, PathBuf) {
 fn checksum_reports_both_digests() {
     assert_eq!(
         checksum().to_string(),
-        "state checksum mismatch (saved: aaa, computed: bbb)"
+        "state checksum mismatch (saved: foo, computed: bar)"
     );
 }
 
@@ -72,14 +72,14 @@ fn mtime_suggests_a_resync() {
 #[rstest]
 fn fingerprint_suggests_a_resync() {
     let message = Mismatch::Fingerprint {
-        saved: "aaa".to_owned(),
-        current: "bbb".to_owned(),
+        saved: "foo".to_owned(),
+        current: "bar".to_owned(),
     }
     .to_string();
 
     assert_eq!(
         message,
-        format!("file fingerprint mismatch (saved: aaa, current: bbb) {RESYNC_HINT}")
+        format!("file fingerprint mismatch (saved: foo, current: bar) {RESYNC_HINT}")
     );
 }
 

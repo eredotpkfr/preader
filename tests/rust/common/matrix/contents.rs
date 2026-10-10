@@ -6,4 +6,4 @@ pub const BLANK_LINES: &[u8] = b"\n\n\n";
 pub const SEGMENTS: &[u8] = b"seg-0,seg-1,,seg-2,";
 pub const UNTERMINATED_SEGMENTS: &[u8] = b"seg-0,seg-1,,seg-2";
 pub const BLANK_SEGMENTS: &[u8] = b",,,";
-pub const WHOLE_SEGMENT: &[u8] = b"no-delimiter-here";
+pub const WHOLE_SEGMENT: &[u8] = b"seg-0";

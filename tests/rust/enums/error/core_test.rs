@@ -125,7 +125,7 @@ fn inverted_range_reports_both_bounds(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn directory_is_not_a_file(sandbox: Sandbox) {
+fn not_a_file_names_the_path(sandbox: Sandbox) {
     let directory = canonical(&sandbox.dir_at("folder"));
     let reader = sandbox.reader();
 

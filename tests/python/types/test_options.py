@@ -26,7 +26,7 @@ def test_iterator_options_compares_by_value() -> None:
     [-1, -2, -100, -(2**31), -(2**63)],
     ids=["minus_one", "minus_two", "minus_hundred", "i32_min", "i64_min"],
 )
-def test_iterator_options_raises_when_negative(value: int) -> None:
+def test_iterator_options_raises_when_the_start_is_negative(value: int) -> None:
     with pytest.raises((OverflowError, TypeError)):
         IteratorOptions(start=value)
 

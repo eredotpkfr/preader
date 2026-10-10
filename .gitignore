@@ -46,7 +46,6 @@ htmlcov/
 nosetests.xml
 coverage.xml
 lcov.info
-codecov.json
 *.profraw
 *.profdata
 

@@ -4,9 +4,9 @@ use rstest_reuse::template;
 #[rstest]
 #[case::plain("README.md")]
 #[case::suffix_shaped("job-1.state.json.bak")]
-#[case::partial("job-1.state")]
-#[case::a_temporary_file("job-1.state.json.tmp")]
-#[case::uppercase_extension("job-2.STATE.JSON")]
+#[case::partial_suffix("job-1.state")]
+#[case::temporary_suffix("job-1.state.json.tmp")]
+#[case::uppercase_suffix("job-2.STATE.JSON")]
 fn non_state_files(#[case] name: &str) {}
 
 #[template]
@@ -15,7 +15,7 @@ fn non_state_files(#[case] name: &str) {}
 #[case::nested_doubled_suffix("sub/job-1.state.json.state.json", "sub/job-1.state.json")]
 #[case::state_shaped_directory("archive.state.json/job-1.state.json", "archive.state.json/job-1")]
 #[case::hidden(".job-2.state.json", ".job-2")]
-#[case::uppercase("Other.state.json", "Other")]
+#[case::uppercase("Job-2.state.json", "Job-2")]
 #[case::unicode("café.state.json", "café")]
 #[case::space("job 2.state.json", "job 2")]
 fn foreign_state_files(#[case] file: &str, #[case] name: &str) {}

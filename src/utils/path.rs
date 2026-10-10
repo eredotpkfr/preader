@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use crate::{
     PathError,
@@ -15,7 +18,7 @@ pub fn scoped_join(root: &Path, name: &str) -> Result<PathBuf, PathError> {
 }
 
 pub fn resolves_in_place(root: &Path, path: &Path) -> bool {
-    let (Ok(canonical), Ok(relative)) = (dunce::canonicalize(root), path.strip_prefix(root)) else {
+    let (Ok(canonical), Ok(relative)) = (fs::canonicalize(root), path.strip_prefix(root)) else {
         return true;
     };
     let scoped = canonical.join(relative);
@@ -23,5 +26,5 @@ pub fn resolves_in_place(root: &Path, path: &Path) -> bool {
     scoped
         .ancestors()
         .find(|ancestor| ancestor.exists())
-        .is_none_or(|existing| dunce::canonicalize(existing).is_ok_and(|real| real == existing))
+        .is_none_or(|existing| fs::canonicalize(existing).is_ok_and(|real| real == existing))
 }

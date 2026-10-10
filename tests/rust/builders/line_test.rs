@@ -47,7 +47,7 @@ fn align_drops_a_partial_line(sandbox: Sandbox, #[case] align: bool, #[case] exp
 }
 
 #[rstest]
-fn last_flag_wins(sandbox: Sandbox) {
+fn last_keepends_wins(sandbox: Sandbox) {
     let path = sandbox.file(TEST_LINE_CONTENT);
     let read = items(
         sandbox

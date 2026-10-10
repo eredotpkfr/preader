@@ -8,6 +8,7 @@ use preader::{
     PathError, StateManager, TMP_FILE_EXTENSION, fingerprint,
 };
 use rstest::rstest;
+use rstest_reuse::apply;
 
 #[cfg(unix)]
 use crate::common::{constants::TEST_NON_UTF8_NAME, guards::Blocked};
@@ -17,10 +18,11 @@ use crate::common::{
         TEST_TRACKED_NAME, TEST_WINDOW,
     },
     fixtures::sandbox,
-    funcs::{canonical, consume, drain, state_data, state_file, tamper},
+    funcs::{canonical, consume, drain, names, state_data, state_file, tamper},
     guards::{mtime, set_mtime, set_pre_epoch_mtime},
     macros::asserts::assert_err_is,
     sandbox::Sandbox,
+    templates::name::{longest_names, too_long_names},
 };
 
 const PAST_WINDOW: usize = TEST_WINDOW + 404;
@@ -120,7 +122,7 @@ fn path_is_relative_without_a_state_dir(sandbox: Sandbox) {
 }
 
 #[rstest]
-#[case::past_the_size("\"position\": 3", "\"position\": 999", 33300.0)]
+#[case::position_past_the_size("\"position\": 3", "\"position\": 999", 33300.0)]
 #[case::zero_size("\"size\": 3", "\"size\": 0", 300.0)]
 fn percent_reads_the_stored_numbers(
     sandbox: Sandbox,
@@ -188,7 +190,7 @@ fn verify_fails_when_the_payload_is_tampered(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn verify_reports_checksum_before_file(sandbox: Sandbox) {
+fn verify_reports_the_checksum_first(sandbox: Sandbox) {
     let path = sandbox.large_file();
     let state = sandbox.stored(&path, TEST_STATE_NAME);
 
@@ -233,7 +235,7 @@ fn verify_fails_when_the_mtime_changed(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn verify_fails_when_the_fingerprint_window_changes(sandbox: Sandbox) {
+fn verify_fails_when_the_fingerprint_window_changed(sandbox: Sandbox) {
     let path = sandbox.large_file();
     let state = sandbox.stored(&path, TEST_STATE_NAME);
     let stamp = mtime(&path);
@@ -276,7 +278,7 @@ fn verify_fails_when_the_file_is_deleted(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn verify_reports_a_directory_as_not_a_file(sandbox: Sandbox) {
+fn verify_fails_when_the_path_is_a_directory(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let state = sandbox.state(&path);
 
@@ -288,7 +290,7 @@ fn verify_reports_a_directory_as_not_a_file(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn verify_suggests_a_resync(sandbox: Sandbox) {
+fn verify_fails_when_the_file_grew(sandbox: Sandbox) {
     let path = sandbox.large_file();
     let state = sandbox.stored(&path, TEST_STATE_NAME);
 
@@ -360,7 +362,7 @@ fn resync_does_not_mutate_the_original(sandbox: Sandbox) {
 #[case::replaced_at_the_same_size(TEST_LINE, 25, b"bar\n", 25)]
 #[case::emptied(TEST_LINE, 25, b"", 0)]
 #[case::truncated_at_the_window(b"a", TEST_WINDOW, b"a", TEST_WINDOW - 1)]
-fn resync_rejects_a_lost_prefix(
+fn resync_fails_when_the_prefix_is_gone(
     sandbox: Sandbox,
     #[case] before: &[u8],
     #[case] copies: usize,
@@ -411,7 +413,7 @@ fn resync_clamps_the_position_to_the_new_size(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn resync_ignores_changes_past_the_window(sandbox: Sandbox) {
+fn resync_ignores_a_change_past_the_fingerprint_window(sandbox: Sandbox) {
     let mut after = TEST_LINE.repeat(TEST_LARGE_COPIES);
 
     after[PAST_WINDOW] = b'\xff';
@@ -438,7 +440,7 @@ fn resync_accepts_anything_for_an_empty_file(sandbox: Sandbox) {
 #[rstest]
 #[case::at_the_window(TEST_WINDOW, TEST_WINDOW, 100, 100, 100.0 * 100.0 / TEST_WINDOW as f64)]
 #[case::past_the_window(TEST_WINDOW + 1, TEST_WINDOW, TEST_WINDOW as u64 + 1, TEST_WINDOW as u64, 100.0)]
-fn resync_accepts_at_the_window_edge(
+fn resync_accepts_at_the_fingerprint_window(
     sandbox: Sandbox,
     #[case] before: usize,
     #[case] after: usize,
@@ -458,7 +460,7 @@ fn resync_accepts_at_the_window_edge(
 #[case::replaced(b"bar\n", 25, 50.0)]
 #[case::shrunk(TEST_LINE, 2, 625.0)]
 #[case::emptied(b"", 0, 5000.0)]
-fn resync_trusts_path_without_verification(
+fn resync_trusts_the_path_without_verification(
     sandbox: Sandbox,
     #[case] unit: &[u8],
     #[case] copies: usize,
@@ -504,7 +506,7 @@ fn resync_fails_when_the_path_is_not_a_file_without_verification(
 }
 
 #[rstest]
-fn resync_keeps_position_that_equals_size(sandbox: Sandbox) {
+fn resync_keeps_a_position_that_equals_the_size(sandbox: Sandbox) {
     let content = TEST_LINE.repeat(25);
     let saved = sandbox.recorded(&content, 100);
     let path = sandbox.write(TEST_TRACKED_NAME, &content);
@@ -569,16 +571,16 @@ fn resync_keeps_an_unsafe_name_for_the_save(sandbox: Sandbox) {
     let path = sandbox.write(TEST_TRACKED_NAME, &TEST_LINE.repeat(25));
     let mut data = state_data(canonical(&path));
 
-    data.name = "../../escape".to_owned();
+    data.name = "../../etc/passwd".to_owned();
 
     let saved = sandbox.manager().state(data);
     let mut resynced = saved.resync(&path).unwrap();
 
-    assert_eq!(resynced.name, "../../escape");
+    assert_eq!(resynced.name, "../../etc/passwd");
 
     assert_err_is!(
         resynced.save(),
-        Error::Path(PathError::Escapes(found)) if found == "../../escape"
+        Error::Path(PathError::Escapes(found)) if found == "../../etc/passwd"
     );
 }
 
@@ -598,7 +600,7 @@ fn resync_keeps_the_state_dir_for_the_save(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn resync_fails_when_mtime_precedes_epoch(sandbox: Sandbox) {
+fn resync_fails_when_the_mtime_precedes_the_epoch(sandbox: Sandbox) {
     let content = TEST_LINE.repeat(25);
     let saved = sandbox.recorded(&content, 5);
     let path = sandbox.path().join(TEST_TRACKED_NAME);
@@ -631,7 +633,7 @@ fn resync_accepts_every_path_shape(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn resynced_state_is_rejected_for_another_file(sandbox: Sandbox) {
+fn build_fails_when_a_resynced_state_tracks_another_file(sandbox: Sandbox) {
     let first = sandbox.write("a.bin", &b"a".repeat(10));
     let second = sandbox.write("b.bin", &b"b".repeat(10));
     let resynced = sandbox.state(&first).resync(&first).unwrap();
@@ -672,7 +674,7 @@ fn resync_fails_when_the_path_is_a_directory(sandbox: Sandbox, #[case] linked: b
 #[case::missing(false)]
 #[case::a_symlink_loop(true)]
 #[cfg(unix)]
-fn resync_fails_when_path_cannot_be_resolved(sandbox: Sandbox, #[case] looped: bool) {
+fn resync_fails_when_the_path_cannot_be_resolved(sandbox: Sandbox, #[case] looped: bool) {
     use std::os::unix::fs::symlink;
 
     let state = sandbox.state(&sandbox.line_file());
@@ -684,7 +686,7 @@ fn resync_fails_when_path_cannot_be_resolved(sandbox: Sandbox, #[case] looped: b
 
         first
     } else {
-        sandbox.path().join("does-not-exist.bin")
+        sandbox.path().join("missing.bin")
     };
 
     assert_err_is!(state.resync(&target), Error::Io(_));
@@ -851,7 +853,7 @@ fn save_fails_when_the_state_dir_is_a_file(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn save_fails_when_state_path_is_directory(sandbox: Sandbox) {
+fn save_fails_when_the_state_path_is_a_directory(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let mut state = sandbox.state(&path);
 
@@ -870,12 +872,25 @@ fn build_fails_when_the_name_has_a_nul_byte(sandbox: Sandbox) {
     );
 }
 
-#[rstest]
-fn save_fails_when_the_name_is_too_long(sandbox: Sandbox) {
+#[apply(too_long_names)]
+fn build_fails_when_the_name_is_too_long(sandbox: Sandbox, #[case] name: String) {
     let path = sandbox.line_file();
-    let mut state = sandbox.named_state(&path, &"x".repeat(300));
 
-    assert_err_is!(state.save(), Error::Io(_));
+    assert_err_is!(
+        sandbox.reader().bytes(&path).state(name.as_str()).build(),
+        Error::Path(PathError::Invalid(found)) if *found == name
+    );
+}
+
+#[apply(longest_names)]
+fn save_round_trips_the_longest_portable_name(sandbox: Sandbox, #[case] name: String) {
+    let path = sandbox.line_file();
+    let mut state = sandbox.named_state(&path, &name);
+
+    state.save().unwrap();
+
+    assert_eq!(names(&sandbox.states()), [name.as_str()]);
+    assert_eq!(sandbox.states().load(&name).unwrap().name, name);
 }
 
 #[cfg(unix)]
@@ -890,7 +905,7 @@ fn save_fails_when_the_path_is_not_utf8(sandbox: Sandbox) {
 #[rstest]
 #[case::path_rejected("../../etc/passwd")]
 #[case::commit_failed(TEST_STATE_NAME)]
-fn save_leaves_state_untouched_when_it_fails(sandbox: Sandbox, #[case] name: &str) {
+fn save_leaves_the_state_untouched_when_it_fails(sandbox: Sandbox, #[case] name: &str) {
     let mut data = state_data(sandbox.line_file());
 
     data.name = name.to_owned();
@@ -943,7 +958,7 @@ fn load_fails_when_the_file_is_deleted(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn reloaded_state_matches_to_the_second(sandbox: Sandbox) {
+fn load_restores_the_saved_state_to_the_second(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let mut bytes = sandbox.reader().bytes(&path).state(TEST_STATE_NAME).build().unwrap();
 
@@ -1035,10 +1050,10 @@ fn save_replaces_a_hard_link_without_touching_its_target(sandbox: Sandbox) {
 
 #[rstest]
 fn save_fails_when_a_state_file_blocks_the_directory(sandbox: Sandbox) {
-    let saved = sandbox.save("x").path().unwrap();
+    let saved = sandbox.save(TEST_STATE_NAME).path().unwrap();
     let before = fs::read(&saved).unwrap();
     let path = sandbox.line_file();
-    let mut state = sandbox.named_state(&path, "x.state.json/y");
+    let mut state = sandbox.named_state(&path, "job-1.state.json/job-2");
     let outcome = state.save();
 
     assert_eq!(fs::read(&saved).unwrap(), before);
@@ -1048,9 +1063,9 @@ fn save_fails_when_a_state_file_blocks_the_directory(sandbox: Sandbox) {
 
 #[rstest]
 fn save_fails_when_a_directory_blocks_the_state_file(sandbox: Sandbox) {
-    let nested = sandbox.save("x.state.json/y").path().unwrap();
+    let nested = sandbox.save("job-1.state.json/job-2").path().unwrap();
     let path = sandbox.line_file();
-    let mut state = sandbox.named_state(&path, "x");
+    let mut state = sandbox.named_state(&path, TEST_STATE_NAME);
     let outcome = state.save();
 
     assert!(nested.exists());

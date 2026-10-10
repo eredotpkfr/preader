@@ -201,7 +201,7 @@ fn names_ignores_a_broken_symlink(sandbox: Sandbox) {
 
 #[cfg(unix)]
 #[rstest]
-fn names_does_not_descend_into_symlinked_directory(sandbox: Sandbox) {
+fn names_does_not_descend_into_a_symlinked_directory(sandbox: Sandbox) {
     use std::os::unix::fs::symlink;
 
     outside_state(&sandbox);
@@ -219,7 +219,7 @@ fn names_does_not_descend_into_symlinked_directory(sandbox: Sandbox) {
 
 #[cfg(unix)]
 #[rstest]
-fn names_ignores_symlink_that_leaves_state_dir(sandbox: Sandbox) {
+fn names_ignores_a_symlink_that_leaves_the_state_dir(sandbox: Sandbox) {
     use std::os::unix::fs::symlink;
 
     let target = outside_state(&sandbox);
@@ -237,8 +237,12 @@ fn search_filters_by_the_pattern(sandbox: Sandbox) {
     sandbox.save(TEST_STATE_NAME);
     sandbox.save(TEST_OTHER_STATE_NAME);
 
-    let matched: Vec<String> =
-        sandbox.states().search("job-2").unwrap().map(Result::unwrap).collect();
+    let matched: Vec<String> = sandbox
+        .states()
+        .search(TEST_OTHER_STATE_NAME)
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
 
     assert_eq!(matched, [TEST_OTHER_STATE_NAME]);
 }
@@ -256,7 +260,7 @@ fn search_returns_nothing_without_a_match(sandbox: Sandbox) {
 #[rstest]
 #[case::everything("", 2)]
 #[case::anywhere("ob-", 2)]
-#[case::regex("^job-[12]$", 2)]
+#[case::character_class("^job-[12]$", 2)]
 #[case::anchored("^job-1$", 1)]
 fn search_treats_the_pattern_as_a_regex(
     sandbox: Sandbox,
@@ -277,7 +281,7 @@ fn search_matches_states_at_every_depth(sandbox: Sandbox) {
         sandbox.save(name);
     }
 
-    assert_eq!(sandbox.states().search("job-1").unwrap().count(), 3);
+    assert_eq!(sandbox.states().search(TEST_STATE_NAME).unwrap().count(), 3);
 }
 
 #[rstest]
@@ -304,7 +308,7 @@ fn item_is_yielded_once_per_state(sandbox: Sandbox) {
 }
 
 #[apply(valid_names)]
-fn saved_name_round_trips_through_the_listing(sandbox: Sandbox, #[case] name: &str) {
+fn saved_name_round_trips_through_names(sandbox: Sandbox, #[case] name: &str) {
     let saved = sandbox.save(name).path().unwrap();
     let registry = sandbox.states();
     let file = sandbox.state_dir().join(state_file(name));
@@ -437,7 +441,7 @@ fn clear_removes_a_foreign_state_file(sandbox: Sandbox, #[case] file: &str, #[ca
 
 #[cfg(unix)]
 #[rstest]
-fn clear_keeps_a_non_utf8_state_file(sandbox: Sandbox) {
+fn clear_keeps_a_non_utf8_state(sandbox: Sandbox) {
     use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 
     let ghost = sandbox.state_dir().join(OsStr::from_bytes(b"ghost-\xff.state.json"));

@@ -91,7 +91,7 @@ fn existing_state_is_carried_through(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn advanced_state_needs_save_before_it_is_reused(sandbox: Sandbox) {
+fn build_fails_when_the_existing_state_is_unsaved(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let mut bytes = sandbox.reader().bytes(&path).state(TEST_STATE_NAME).build().unwrap();
 
@@ -196,7 +196,7 @@ fn build_fails_when_a_character_is_not_portable(
 }
 
 #[rstest]
-fn existing_state_is_rejected_for_another_file(sandbox: Sandbox) {
+fn build_fails_when_the_existing_state_tracks_another_file(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let other = sandbox.write("other.bin", TEST_LINE);
     let state: State = sandbox.state(&path);
@@ -211,7 +211,7 @@ fn existing_state_is_rejected_for_another_file(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn existing_state_is_rejected_for_another_file_without_verification(sandbox: Sandbox) {
+fn build_fails_when_the_existing_state_tracks_another_file_without_verification(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let other = sandbox.write("other.bin", TEST_LINE);
     let state = sandbox.state(&path);

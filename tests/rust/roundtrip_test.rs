@@ -4,7 +4,7 @@ use preader::{
 use rstest::rstest;
 
 use crate::common::{
-    constants::TEST_TIMEOUT,
+    constants::{TEST_FILE_NAME, TEST_TIMEOUT},
     fixtures::sandbox,
     funcs::items,
     macros::{asserts::assert_percent, cycle::cycle},
@@ -110,7 +110,7 @@ fn skip_empty_drops_the_blank_lines(sandbox: Sandbox, #[values(1, 2, 3)] seed: u
 }
 
 #[rstest]
-fn lines_reject_binary_content(sandbox: Sandbox) {
+fn lines_fail_when_the_content_is_binary(sandbox: Sandbox) {
     let path = sandbox.file(&seeded_bytes(1, SAMPLE));
     let mut lines = sandbox.reader().lines(&path).build().unwrap();
     let mut error = None;
@@ -149,7 +149,7 @@ fn resume_rebuilds_the_file_in_cycles(sandbox: Sandbox) {
         auto_save_state: true,
         ..sandbox.config()
     });
-    let binary = sandbox.write("data.bin", &seeded_bytes(1, SAMPLE));
+    let binary = sandbox.write(TEST_FILE_NAME, &seeded_bytes(1, SAMPLE));
     let textual = sandbox.write("data.txt", seeded_text(1, SAMPLE).as_bytes());
 
     cycle!(

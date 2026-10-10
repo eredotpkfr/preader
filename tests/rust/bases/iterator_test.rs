@@ -19,7 +19,7 @@ use crate::common::{
 const CONTENT_SIZE: u64 = TEST_ALPHABET.len() as u64;
 
 #[rstest]
-fn autosave_off_writes_nothing(sandbox: Sandbox) {
+fn draining_writes_nothing_by_default(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let mut bytes = sandbox.reader().bytes(&path).state(TEST_STATE_NAME).build().unwrap();
 
@@ -141,7 +141,7 @@ fn dropping_without_progress_writes_nothing(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn dropping_with_autosave_off_writes_nothing(sandbox: Sandbox) {
+fn dropping_writes_nothing_by_default(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let mut bytes = sandbox.reader().bytes(&path).state(TEST_STATE_NAME).build().unwrap();
 
@@ -347,7 +347,7 @@ fn file_growth_during_iteration_is_ignored(sandbox: Sandbox) {
     let mut bytes = sandbox.reader().bytes(&path).build().unwrap();
 
     bytes.read().unwrap();
-    sandbox.append(&path, b"0123456789");
+    sandbox.append(&path, b"more");
 
     assert_eq!(drain(&mut bytes) + 1, TEST_ALPHABET.len());
     assert_eq!(bytes.state().file.size, CONTENT_SIZE);
@@ -403,7 +403,7 @@ fn recorded_size_never_refreshes(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn failing_threshold_save_stops_the_read(sandbox: Sandbox) {
+fn read_fails_when_a_threshold_save_fails(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
 
     sandbox.block_states();
@@ -442,7 +442,7 @@ fn failed_save_exhausts_the_iterator(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn failing_final_save_reaches_every_item_first(sandbox: Sandbox) {
+fn read_fails_when_the_final_save_fails(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let reader = sandbox.autosaving(0);
     let mut bytes = reader.bytes(&path).state(TEST_STATE_NAME).build().unwrap();
@@ -488,7 +488,7 @@ fn error_ignoring_loop_still_terminates(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn read_error_reaches_caller_before_any_save(sandbox: Sandbox) {
+fn read_fails_when_a_line_is_not_utf8_before_any_save(sandbox: Sandbox) {
     let path = sandbox.file(b"foo\n\xff\xfe\n");
     let reader = sandbox.autosaving(0);
     let mut lines = reader.lines(&path).state(TEST_STATE_NAME).build().unwrap();
@@ -554,7 +554,7 @@ fn resumed_read_covers_what_failed_save_left_behind(sandbox: Sandbox) {
 
 #[cfg(unix)]
 #[rstest]
-fn mid_item_read_error_keeps_the_position(sandbox: Sandbox) {
+fn read_fails_when_io_fails_mid_item(sandbox: Sandbox) {
     let directory = sandbox.dir_at("folder");
     let opened = sandbox.state_at(&directory, TEST_READ_FROM);
     let mut lines = sandbox.lenient().lines(&directory).state(opened).build().unwrap();

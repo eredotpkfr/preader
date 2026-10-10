@@ -38,13 +38,13 @@ WORDS = (
 )
 
 
-def seeded_bytes(seed: int, size: int) -> bytes:
+def _seeded_bytes(seed: int, size: int) -> bytes:
     return hashlib.shake_256(str(seed).encode()).digest(size)
 
 
-def seeded_text(seed: int, size: int, line_length: int = 40) -> str:
+def _seeded_text(seed: int, size: int, line_length: int = 40) -> str:
     line_count = size // line_length
-    stream = iter(seeded_bytes(seed, line_count * (MAX_WORDS_PER_LINE + 1)))
+    stream = iter(_seeded_bytes(seed, line_count * (MAX_WORDS_PER_LINE + 1)))
 
     def line() -> str:
         words = next(stream) % (MAX_WORDS_PER_LINE + 1)
@@ -54,7 +54,7 @@ def seeded_text(seed: int, size: int, line_length: int = 40) -> str:
     return "".join(f"{line()}\n" for _ in range(line_count))
 
 
-def seeded_zip(
+def _seeded_zip(
     seed: int,
     size: int,
     member_count: int = 3,
@@ -65,24 +65,24 @@ def seeded_zip(
     with zipfile.ZipFile(archive, "w") as members:
         for offset in range(member_count):
             member = zipfile.ZipInfo(f"member-{offset}.bin", timestamp)
-            content = seeded_bytes(seed + offset, size // member_count)
+            content = _seeded_bytes(seed + offset, size // member_count)
             members.writestr(member, content, zipfile.ZIP_DEFLATED)
 
     return archive.getvalue()
 
 
-def sized_content(kind: str, seed: int, size: int) -> bytes:
+def _sized_content(kind: str, seed: int, size: int) -> bytes:
     match kind:
         case "random":
-            return seeded_bytes(seed, size)
+            return _seeded_bytes(seed, size)
         case "text":
-            return seeded_text(seed, size).encode()
+            return _seeded_text(seed, size).encode()
         case _:
-            return seeded_zip(seed, size)
+            return _seeded_zip(seed, size)
 
 
 CONTENTS = {
-    f"{kind}-{size}b-seed-{seed}": sized_content(kind, seed, size)
+    f"{kind}-{size}b-seed-{seed}": _sized_content(kind, seed, size)
     for kind in KINDS
     for size in SIZES
     for seed in SEEDS
@@ -111,7 +111,7 @@ ITERATORS = {
 }
 
 
-def flows(*names: str) -> dict[str, tuple[Callable[..., Any], bytes]]:
+def _flows(*names: str) -> dict[str, tuple[Callable[..., Any], bytes]]:
     return {
         f"{name}-{source}": (ITERATORS[name], content)
         for name in names
@@ -120,9 +120,9 @@ def flows(*names: str) -> dict[str, tuple[Callable[..., Any], bytes]]:
     }
 
 
-FLOWS = flows(*ITERATORS)
-BINARY = flows("bytes", "chunks", "delimiter")
-WINDOWS = flows("bytes", "chunks")
+FLOWS = _flows(*ITERATORS)
+BINARY = _flows("bytes", "chunks", "delimiter")
+WINDOWS = _flows("bytes", "chunks")
 
 
 @pytest.mark.parametrize(("make_iterator", "content"), BINARY.values(), ids=BINARY)
