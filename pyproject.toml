@@ -48,14 +48,15 @@ package = false
 [dependency-groups]
 dev = [
     "maturin>=1.15.0,<2.0",
-    "pytest",
-    "pytest-xdist",
-    "pytest-randomly",
-    "pytest-timeout",
-    "pytest-socket",
-    "pytest-icdiff",
-    "pytest-sugar",
     "mypy",
+    "pytest",
+    "pytest-icdiff",
+    "pytest-randomly",
+    "pytest-repeat",
+    "pytest-socket",
+    "pytest-sugar",
+    "pytest-timeout",
+    "pytest-xdist",
     "ruff",
 ]
 
