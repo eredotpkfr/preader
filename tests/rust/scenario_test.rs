@@ -182,7 +182,7 @@ fn auto_load_fails_when_the_payload_is_corrupt(sandbox: Sandbox, #[case] payload
 
     fs::write(&state_path, payload).unwrap();
 
-    assert_err_is!(reader.bytes(&path).build(), Error::Serde(_));
+    assert_err_is!(reader.bytes(&path).build(), Error::Corrupt { .. });
 }
 
 #[cfg(unix)]
@@ -221,10 +221,7 @@ fn auto_load_fails_when_the_file_changed(sandbox: Sandbox) {
 
     sandbox.append(&path, b"more");
 
-    assert_err_is!(
-        reader.bytes(&path).build(),
-        Error::Mismatch(Mismatch::Size { .. })
-    );
+    assert_err_is!(reader.bytes(&path).build(), Error::Mismatch(Mismatch::Size));
 }
 
 #[rstest]

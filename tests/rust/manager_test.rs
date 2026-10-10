@@ -2,10 +2,10 @@
 use std::os::unix::fs::symlink;
 #[cfg(unix)]
 use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
-use std::{fs, io::ErrorKind, path::Path};
+use std::{fs, path::Path};
 
 use preader::{
-    Config, Error, FileMetadata, Mismatch, PathError, STATE_FILE_EXTENSION, State, StateData,
+    Config, Error, FileMetadata, Mismatch, NameError, STATE_FILE_EXTENSION, State, StateData,
     StateManager, TMP_FILE_EXTENSION, Timestamps, default_state_dir,
 };
 use rstest::rstest;
@@ -20,7 +20,6 @@ use crate::common::{
     fixtures::sandbox,
     funcs::state_file,
     macros::asserts::assert_err_is,
-    rule::Rule,
     sandbox::Sandbox,
     templates::{
         name::{
@@ -207,7 +206,7 @@ fn path_nests_under_a_subdirectory(sandbox: Sandbox) {
 fn path_fails_when_the_name_has_a_trailing_slash(sandbox: Sandbox) {
     assert_err_is!(
         sandbox.manager().path("job-1/"),
-        Error::Path(PathError::Invalid(found)) if found == "job-1/"
+        Error::Name(NameError::Invalid)
     );
 }
 
@@ -222,8 +221,12 @@ fn path_does_not_need_the_state_dir(sandbox: Sandbox) {
 }
 
 #[apply(invalid_names)]
-fn path_fails_when_the_name_is_invalid(sandbox: Sandbox, #[case] name: &str, #[case] rule: Rule) {
-    assert_err_is!(sandbox.manager().path(name), Error::Path(error) if rule.matches(error, name));
+fn path_fails_when_the_name_is_invalid(
+    sandbox: Sandbox,
+    #[case] name: &str,
+    #[case] expected: NameError,
+) {
+    assert_err_is!(sandbox.manager().path(name), Error::Name(error) if *error == expected);
 }
 
 #[cfg(unix)]
@@ -236,11 +239,11 @@ fn path_fails_when_the_name_escapes_through_a_symlink(sandbox: Sandbox) {
 
     assert_err_is!(
         sandbox.manager().path("link/job-1"),
-        Error::Path(PathError::Alias(_))
+        Error::Name(NameError::Alias)
     );
     assert_err_is!(
         sandbox.manager().tmp("link/job-1"),
-        Error::Path(PathError::Alias(_))
+        Error::Name(NameError::Alias)
     );
 }
 
@@ -319,8 +322,12 @@ fn tmp_does_not_need_the_state_dir(sandbox: Sandbox) {
 }
 
 #[apply(invalid_names)]
-fn tmp_fails_when_the_name_is_invalid(sandbox: Sandbox, #[case] name: &str, #[case] rule: Rule) {
-    assert_err_is!(sandbox.manager().tmp(name), Error::Path(error) if rule.matches(error, name));
+fn tmp_fails_when_the_name_is_invalid(
+    sandbox: Sandbox,
+    #[case] name: &str,
+    #[case] expected: NameError,
+) {
+    assert_err_is!(sandbox.manager().tmp(name), Error::Name(error) if *error == expected);
 }
 
 #[rstest]
@@ -376,7 +383,10 @@ fn load_fails_when_the_path_is_a_directory(sandbox: Sandbox) {
 fn load_fails_when_the_payload_is_malformed(sandbox: Sandbox, #[case] payload: &str) {
     write_state(&sandbox, TEST_STATE_NAME, payload);
 
-    assert_err_is!(sandbox.manager().load(TEST_STATE_NAME), Error::Serde(_));
+    assert_err_is!(
+        sandbox.manager().load(TEST_STATE_NAME),
+        Error::Corrupt { .. }
+    );
 }
 
 #[rstest]
@@ -385,13 +395,17 @@ fn load_fails_when_the_content_is_not_utf8(sandbox: Sandbox) {
 
     assert_err_is!(
         sandbox.manager().load(TEST_STATE_NAME),
-        Error::Io(error) if error.kind() == ErrorKind::InvalidData
+        Error::Corrupt { .. }
     );
 }
 
 #[apply(invalid_names)]
-fn load_fails_when_the_name_is_invalid(sandbox: Sandbox, #[case] name: &str, #[case] rule: Rule) {
-    assert_err_is!(sandbox.manager().load(name), Error::Path(error) if rule.matches(error, name));
+fn load_fails_when_the_name_is_invalid(
+    sandbox: Sandbox,
+    #[case] name: &str,
+    #[case] expected: NameError,
+) {
+    assert_err_is!(sandbox.manager().load(name), Error::Name(error) if *error == expected);
 }
 
 #[rstest]
@@ -400,7 +414,7 @@ fn load_verifies_by_default(sandbox: Sandbox) {
 
     assert_err_is!(
         sandbox.manager().load(TEST_STATE_NAME),
-        Error::Mismatch(Mismatch::Checksum { saved, .. }) if saved == "not-a-real-checksum"
+        Error::Mismatch(Mismatch::Checksum)
     );
 }
 
@@ -451,9 +465,9 @@ fn default_agrees_with_the_default_config() {
 fn every_location_fails_when_the_name_is_not_portable(sandbox: Sandbox, #[case] name: &str) {
     let manager = sandbox.manager();
 
-    assert_err_is!(manager.path(name), Error::Path(PathError::Invalid(found)) if found == name);
-    assert_err_is!(manager.tmp(name), Error::Path(PathError::Invalid(found)) if found == name);
-    assert_err_is!(manager.load(name), Error::Path(PathError::Invalid(found)) if found == name);
+    assert_err_is!(manager.path(name), Error::Name(NameError::Invalid));
+    assert_err_is!(manager.tmp(name), Error::Name(NameError::Invalid));
+    assert_err_is!(manager.load(name), Error::Name(NameError::Invalid));
 }
 
 #[apply(unportable_characters)]
@@ -465,9 +479,9 @@ fn every_location_fails_when_a_character_is_not_portable(
     let manager = sandbox.manager();
     let name = shape.replace("{}", &character.to_string());
 
-    assert_err_is!(manager.path(&name), Error::Path(PathError::Invalid(found)) if *found == name);
-    assert_err_is!(manager.tmp(&name), Error::Path(PathError::Invalid(found)) if *found == name);
-    assert_err_is!(manager.load(&name), Error::Path(PathError::Invalid(found)) if *found == name);
+    assert_err_is!(manager.path(&name), Error::Name(NameError::Invalid));
+    assert_err_is!(manager.tmp(&name), Error::Name(NameError::Invalid));
+    assert_err_is!(manager.load(&name), Error::Name(NameError::Invalid));
 }
 
 #[apply(valid_names)]
@@ -488,7 +502,7 @@ fn tmp_keeps_the_name_beside_the_state_file(sandbox: Sandbox, #[case] name: &str
 fn every_location_fails_when_the_name_is_a_device(sandbox: Sandbox, #[case] name: &str) {
     let manager = sandbox.manager();
 
-    assert_err_is!(manager.path(name), Error::Path(PathError::Invalid(found)) if found == name);
-    assert_err_is!(manager.tmp(name), Error::Path(PathError::Invalid(found)) if found == name);
-    assert_err_is!(manager.load(name), Error::Path(PathError::Invalid(found)) if found == name);
+    assert_err_is!(manager.path(name), Error::Name(NameError::Invalid));
+    assert_err_is!(manager.tmp(name), Error::Name(NameError::Invalid));
+    assert_err_is!(manager.load(name), Error::Name(NameError::Invalid));
 }

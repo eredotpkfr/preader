@@ -2,12 +2,12 @@ use std::path::Path;
 #[cfg(unix)]
 use std::{fs, os::unix::fs::symlink};
 
-use preader::{DEFAULT_STATE_DIR, default_state_dir, resolves_in_place, scoped_join};
+use preader::{DEFAULT_STATE_DIR, NameError, default_state_dir, resolves_in_place, scoped_join};
 use rstest::{fixture, rstest};
 use rstest_reuse::apply;
 
 use crate::common::{
-    fixtures::sandbox, macros::asserts::assert_err_is, rule::Rule, sandbox::Sandbox,
+    fixtures::sandbox, macros::asserts::assert_err_is, sandbox::Sandbox,
     templates::name::valid_names,
 };
 
@@ -42,11 +42,15 @@ fn scoped_join_uses_the_native_separator(root: &Path) {
 }
 
 #[rstest]
-#[case::empty("", Rule::Empty)]
-#[case::escapes("../x", Rule::Escapes)]
-#[case::invalid("job:1", Rule::Invalid)]
-fn scoped_join_fails_when_the_name_is_invalid(root: &Path, #[case] name: &str, #[case] rule: Rule) {
-    assert_err_is!(scoped_join(root, name), error if rule.matches(error, name));
+#[case::empty("", NameError::Empty)]
+#[case::escapes("../x", NameError::Escapes)]
+#[case::invalid("job:1", NameError::Invalid)]
+fn scoped_join_fails_when_the_name_is_invalid(
+    root: &Path,
+    #[case] name: &str,
+    #[case] expected: NameError,
+) {
+    assert_err_is!(scoped_join(root, name), error if *error == expected);
 }
 
 #[rstest]

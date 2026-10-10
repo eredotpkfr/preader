@@ -6,8 +6,6 @@ use std::{
 #[cfg(unix)]
 use std::{os::unix::fs::PermissionsExt, path::PathBuf};
 
-const PRE_EPOCH_OFFSET: Duration = Duration::from_secs(86_400);
-
 pub fn mtime(path: &Path) -> SystemTime {
     fs::metadata(path).unwrap().modified().unwrap()
 }
@@ -16,8 +14,8 @@ pub fn set_mtime(path: &Path, stamp: SystemTime) {
     File::options().write(true).open(path).unwrap().set_modified(stamp).unwrap();
 }
 
-pub fn set_pre_epoch_mtime(path: &Path) -> bool {
-    let times = FileTimes::new().set_modified(UNIX_EPOCH - PRE_EPOCH_OFFSET);
+pub fn set_pre_epoch_mtime(path: &Path, before: Duration) -> bool {
+    let times = FileTimes::new().set_modified(UNIX_EPOCH - before);
 
     File::options()
         .write(true)

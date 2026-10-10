@@ -7,7 +7,7 @@ mod preader {
         Timestamps,
         python::{
             bases::iterator::IteratorBase,
-            exceptions::StateError,
+            exceptions::{StateError, StateMismatchError},
             iterators::{
                 byte::ByteIterator, chunk::ChunkIterator, delimiter::DelimiterIterator,
                 line::LineIterator,

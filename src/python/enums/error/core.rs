@@ -3,17 +3,28 @@ use pyo3::{
     exceptions::{PyKeyError, PyValueError},
 };
 
-use crate::{Error, python::exceptions::StateError};
+use crate::{
+    Error, NameError,
+    python::exceptions::{StateError, StateMismatchError},
+};
 
 impl From<Error> for PyErr {
     fn from(error: Error) -> Self {
+        let message = error.to_string();
+
         match error {
             Error::Io(error) => error.into(),
             Error::NotFound(name) => PyKeyError::new_err(name),
-            error @ (Error::InvalidRange { .. } | Error::Utf8(_)) => {
-                PyValueError::new_err(error.to_string())
+            Error::Mismatch(_) => Self::new::<StateMismatchError, _>(message),
+            Error::Name(NameError::Alias) | Error::Corrupt { .. } => {
+                Self::new::<StateError, _>(message)
             }
-            error => Self::new::<StateError, _>(error.to_string()),
+            Error::Name(_)
+            | Error::InvalidRange
+            | Error::InvalidMtime
+            | Error::Regex(_)
+            | Error::Serde(_)
+            | Error::Utf8(_) => PyValueError::new_err(message),
         }
     }
 }

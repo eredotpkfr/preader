@@ -13,7 +13,14 @@ from cases import (
     WINDOWS_INVALID_STATE_NAMES,
 )
 from constants import TEST_STATE_FILE, TEST_STATE_NAME
-from preader import Config, IteratorOptions, PReader, State, StateError
+from preader import (
+    Config,
+    IteratorOptions,
+    PReader,
+    State,
+    StateError,
+    StateMismatchError,
+)
 
 LINES = [f"line-{i}" for i in range(6)]
 LINE_CONTENT = "\n".join(LINES).encode()
@@ -502,7 +509,7 @@ def test_auto_load_state_raises_when_the_file_changed(
 
     append(data_file, b"tampered")
 
-    with pytest.raises(StateError, match="file size mismatch"):
+    with pytest.raises(StateMismatchError, match="file size changed"):
         reader.lines(data_file)
 
 
@@ -554,7 +561,7 @@ def test_raises_when_state_has_an_unsupported_type(
 def test_raises_when_the_state_name_is_invalid(
     reader: PReader, tmp_file: Path, name: str, message: str
 ) -> None:
-    with pytest.raises(StateError, match=message):
+    with pytest.raises(ValueError, match=message):
         reader.lines(tmp_file, state=name)
 
 
@@ -562,7 +569,7 @@ def test_raises_when_the_state_name_is_invalid(
 def test_raises_when_the_state_name_is_not_portable(
     reader: PReader, tmp_file: Path, name: str
 ) -> None:
-    with pytest.raises(StateError, match="path is invalid"):
+    with pytest.raises(ValueError, match="is not valid"):
         reader.lines(tmp_file, state=name)
 
 
@@ -570,7 +577,7 @@ def test_raises_when_the_state_name_is_not_portable(
 def test_raises_when_the_state_name_is_a_device(
     reader: PReader, tmp_file: Path, name: str
 ) -> None:
-    with pytest.raises(StateError, match="path is invalid"):
+    with pytest.raises(ValueError, match="is not valid"):
         reader.lines(tmp_file, state=name)
 
 
@@ -580,7 +587,7 @@ def test_raises_when_a_state_name_character_is_not_portable(
 ) -> None:
     name = f"job{character}1"
 
-    with pytest.raises(StateError, match="path is invalid"):
+    with pytest.raises(ValueError, match="is not valid"):
         reader.lines(tmp_file, state=name)
 
 
@@ -593,7 +600,9 @@ def test_raises_when_the_state_tracks_another_file(
     state = reader.lines(tracked, state=TEST_STATE_NAME).state
     state.save()
 
-    with pytest.raises(StateError, match=r"file path mismatch .*resync"):
+    with pytest.raises(
+        StateMismatchError, match=r"state tracks a different file .*resync"
+    ):
         reader.lines(untracked, state=state)
 
 
@@ -607,7 +616,7 @@ def test_raises_when_the_file_differs_without_verification(
     state = reader.lines(tracked, state=TEST_STATE_NAME).state
     state.save()
 
-    with pytest.raises(StateError, match="file path mismatch"):
+    with pytest.raises(StateMismatchError, match="state tracks a different file"):
         reader.lines(untracked, state=state)
 
 
@@ -669,7 +678,9 @@ def test_resync_allows_resuming_moved_file(
 
     moved = data_file.rename(tmp_path / "moved.bin")
 
-    with pytest.raises(StateError, match=r"file path mismatch .*resync"):
+    with pytest.raises(
+        StateMismatchError, match=r"state tracks a different file .*resync"
+    ):
         reader.lines(moved, state=state)
 
     resynced = state.resync(moved)
@@ -690,7 +701,7 @@ def test_resync_allows_resuming_grown_file(
 
     append(data_file, b"more\n")
 
-    with pytest.raises(StateError, match="file size mismatch"):
+    with pytest.raises(StateMismatchError, match="file size changed"):
         reader.lines(data_file, state=state)
 
     resynced = state.resync(data_file)
@@ -710,7 +721,7 @@ def test_auto_load_state_raises_when_the_name_tracks_another_file(
 
     reader.lines(file_a, state="shared-name").state.save()
 
-    with pytest.raises(StateError, match="file path mismatch"):
+    with pytest.raises(StateMismatchError, match="state tracks a different file"):
         reader.lines(file_b, state="shared-name")
 
 
@@ -739,7 +750,7 @@ def test_raises_when_resumed_after_file_grows(
 
     append(data_file, b"more")
 
-    with pytest.raises(StateError, match="file size mismatch"):
+    with pytest.raises(StateMismatchError, match="file size changed"):
         reader.lines(data_file, state=state)
 
 
@@ -818,7 +829,7 @@ def test_raises_when_the_resumed_file_is_replaced_by_a_directory(
     data_file.unlink()
     data_file.mkdir()
 
-    with pytest.raises(StateError, match="not a file"):
+    with pytest.raises(IsADirectoryError, match="is a directory"):
         reader.lines(data_file, state=state)
 
 

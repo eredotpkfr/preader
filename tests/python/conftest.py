@@ -150,7 +150,7 @@ def requires_non_utf8_names(tmp_path: Path) -> None:
 
 
 @pytest.fixture
-def revoke_permissions(tmp_path: Path) -> Iterator[Callable[[Path], Path]]:
+def revoke_permissions(tmp_path: Path) -> Iterator[Callable[..., Path]]:
     probe = tmp_path / "probe"
 
     probe.mkdir()
@@ -165,9 +165,9 @@ def revoke_permissions(tmp_path: Path) -> Iterator[Callable[[Path], Path]]:
 
     blocked: list[Path] = []
 
-    def _revoke_permissions(path: Path) -> Path:
+    def _revoke_permissions(path: Path, mode: int = 0o000) -> Path:
         blocked.append(path)
-        path.chmod(0o000)
+        path.chmod(mode)
 
         return path
 

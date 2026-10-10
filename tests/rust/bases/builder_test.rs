@@ -20,7 +20,7 @@ fn build_fails_when_the_range_is_inverted_before_opening_the_file(sandbox: Sandb
 
     assert_err_is!(
         sandbox.reader().bytes(&missing).start(9).end(4).build(),
-        Error::InvalidRange { .. }
+        Error::InvalidRange
     );
 }
 

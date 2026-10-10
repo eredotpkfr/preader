@@ -1,5 +1,6 @@
 use std::{
     fs,
+    io::{self, ErrorKind},
     path::{Path, PathBuf},
     time::UNIX_EPOCH,
 };
@@ -31,15 +32,24 @@ impl TryFrom<&Path> for FileMetadata {
     fn try_from(path: &Path) -> Result<Self> {
         let metadata = fs::metadata(path)?;
 
-        ensure!(metadata.is_file(), Error::NotAFile(path.to_path_buf()));
+        ensure!(!metadata.is_dir(), io::Error::from(ErrorKind::IsADirectory));
+        ensure!(
+            metadata.is_file(),
+            io::Error::new(ErrorKind::InvalidInput, "not a regular file")
+        );
 
-        let seconds = metadata.modified()?.duration_since(UNIX_EPOCH)?.as_secs().cast_signed();
+        let seconds = match metadata.modified()?.duration_since(UNIX_EPOCH) {
+            Ok(after) => after.as_secs().cast_signed(),
+            Err(before) => 0_i64.saturating_sub_unsigned(
+                before.duration().as_secs() + u64::from(before.duration().subsec_nanos() > 0),
+            ),
+        };
         let mtime = DateTime::<Utc>::from_timestamp(seconds, 0);
 
         Ok(Self {
             path: path.to_path_buf(),
             size: metadata.len(),
-            mtime: mtime.ok_or(Error::InvalidMtime(seconds))?,
+            mtime: mtime.ok_or(Error::InvalidMtime)?,
             fingerprint: fingerprint(path, FINGERPRINT_SAMPLE_BYTES)?,
         })
     }
@@ -51,26 +61,11 @@ impl FileMetadata {
     }
 
     pub(crate) fn compare(&self, current: &Self) -> Result<()> {
-        ensure!(
-            self.size == current.size,
-            Mismatch::Size {
-                saved: self.size,
-                current: current.size
-            }
-        );
-        ensure!(
-            self.mtime == current.mtime,
-            Mismatch::Mtime {
-                saved: self.mtime.timestamp(),
-                current: current.mtime.timestamp()
-            }
-        );
+        ensure!(self.size == current.size, Mismatch::Size);
+        ensure!(self.mtime == current.mtime, Mismatch::Mtime);
         ensure!(
             self.fingerprint == current.fingerprint,
-            Mismatch::Fingerprint {
-                saved: self.fingerprint.clone(),
-                current: current.fingerprint.clone()
-            }
+            Mismatch::Fingerprint
         );
 
         Ok(())

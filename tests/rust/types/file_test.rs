@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{io::ErrorKind, path::Path, time::Duration};
 
 use preader::{Error, FINGERPRINT_SAMPLE_BYTES, FileMetadata};
 use rstest::rstest;
@@ -63,11 +63,11 @@ fn compares_by_value(sandbox: Sandbox) {
 fn fails_when_the_path_is_a_directory(sandbox: Sandbox) {
     let path = sandbox.dir_at("folder");
 
-    assert_err_is!(FileMetadata::try_from(path.as_path()), Error::NotAFile(found) if *found == path);
+    assert_err_is!(FileMetadata::try_from(path.as_path()), Error::Io(error) if error.kind() == ErrorKind::IsADirectory);
 
     assert_err_is!(
         FileMetadata::try_from(path.as_path()),
-        Error::NotAFile(found) if *found == path
+        Error::Io(error) if error.kind() == ErrorKind::IsADirectory
     );
 }
 
@@ -77,19 +77,27 @@ fn fails_when_the_file_is_missing(sandbox: Sandbox) {
 
     assert_err_is!(
         FileMetadata::try_from(path.as_path()),
-        Error::Io(error) if error.kind() == std::io::ErrorKind::NotFound
+        Error::Io(error) if error.kind() == ErrorKind::NotFound
     );
 }
 
 #[rstest]
-fn fails_when_the_mtime_precedes_the_epoch(sandbox: Sandbox) {
+#[case::whole_seconds(Duration::from_secs(86_400), -86_400)]
+#[case::part_of_a_second(Duration::from_millis(500), -1)]
+fn reads_an_mtime_before_the_epoch(
+    sandbox: Sandbox,
+    #[case] before: Duration,
+    #[case] expected: i64,
+) {
     let path = sandbox.line_file();
 
-    if !set_pre_epoch_mtime(&path) {
+    if !set_pre_epoch_mtime(&path, before) {
         return;
     }
 
-    assert_err_is!(FileMetadata::try_from(path.as_path()), Error::Time(_));
+    let metadata = FileMetadata::try_from(path.as_path()).unwrap();
+
+    assert_eq!(metadata.mtime.timestamp(), expected);
 }
 
 #[rstest]

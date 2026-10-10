@@ -7,7 +7,7 @@ use chrono::Utc;
 use sha2::{Digest, Sha256};
 
 use crate::{
-    Error, Mismatch, PathError, Result, State, StateData,
+    Error, Mismatch, NameError, Result, State, StateData,
     constants::{STATE_FILE_EXTENSION, TMP_FILE_EXTENSION},
     macros::ensure,
     types::config::Config,
@@ -68,15 +68,13 @@ impl StateManager {
 
         ensure!(path.is_file(), Error::NotFound(name.to_owned()));
 
-        let data: StateData = serde_json::from_str(&fs::read_to_string(&path)?)?;
+        let data: StateData =
+            serde_json::from_slice(&fs::read(&path)?).map_err(|error| Error::Corrupt {
+                name: name.to_owned(),
+                error,
+            })?;
 
-        ensure!(
-            data.name == name,
-            Mismatch::Name {
-                saved: data.name,
-                current: name.to_owned()
-            }
-        );
+        ensure!(data.name == name, Mismatch::Name { saved: data.name });
 
         let state = self.state(data);
 
@@ -94,10 +92,7 @@ impl StateManager {
             path.add_extension(extension);
         }
 
-        ensure!(
-            resolves_in_place(&self.state_dir, &path),
-            PathError::Alias(name.to_owned())
-        );
+        ensure!(resolves_in_place(&self.state_dir, &path), NameError::Alias);
 
         Ok(path)
     }

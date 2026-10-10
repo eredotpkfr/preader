@@ -36,9 +36,8 @@ impl Chunk {
         while filled < max {
             match reader.read(&mut self.buffer[filled..max]) {
                 Ok(0) => break,
-                Ok(count) => filled += count,
-                Err(error) if error.kind() == ErrorKind::Interrupted => continue,
-                Err(error) => return Err(error.into()),
+                Err(error) if error.kind() == ErrorKind::Interrupted => {}
+                read => filled += read?,
             }
         }
 

@@ -14,12 +14,13 @@ EXPORTS = (
     "PReader",
     "State",
     "StateError",
+    "StateMismatchError",
     "StateIterator",
     "StateRegistry",
     "Timestamps",
 )
 
-SUBCLASSABLE = ("IteratorBase", "StateError")
+SUBCLASSABLE = ("IteratorBase", "StateError", "StateMismatchError")
 FINAL = tuple(name for name in EXPORTS if name not in SUBCLASSABLE)
 
 

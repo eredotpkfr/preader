@@ -1,11 +1,15 @@
-use std::{fs, path::MAIN_SEPARATOR};
+use std::{
+    io::{self, ErrorKind},
+    path::MAIN_SEPARATOR,
+};
 
 use regex::Regex;
 use walkdir::{IntoIter, WalkDir};
 
 use crate::{
-    Error, Result,
+    Result,
     constants::{NAME_SEPARATOR, STATE_FILE_EXTENSION},
+    macros::ensure,
     manager::StateManager,
 };
 
@@ -19,12 +23,17 @@ pub struct StateIterator {
 
 impl StateIterator {
     pub(crate) fn new(manager: &StateManager, pattern: Option<&str>) -> Result<Self> {
-        fs::create_dir_all(&manager.state_dir)?;
+        let root = &manager.state_dir;
+
+        ensure!(
+            !root.exists() || root.is_dir(),
+            io::Error::from(ErrorKind::NotADirectory)
+        );
 
         Ok(Self {
             manager: manager.clone(),
             pattern: pattern.map(Regex::new).transpose()?,
-            entries: WalkDir::new(&manager.state_dir).min_depth(1).into_iter(),
+            entries: WalkDir::new(root).min_depth(1).into_iter(),
         })
     }
 }
@@ -34,11 +43,15 @@ impl Iterator for StateIterator {
 
     fn next(&mut self) -> Option<Self::Item> {
         let (manager, pattern) = (&self.manager, self.pattern.as_ref());
+        let missing_root = |error: &walkdir::Error| {
+            error.depth() == 0 && error.io_error().map(io::Error::kind) == Some(ErrorKind::NotFound)
+        };
 
         self.entries.find_map(|entry| {
             let entry = match entry {
                 Ok(entry) => entry,
-                Err(error) => return Some(Err(Error::Io(error.into()))),
+                Err(error) if missing_root(&error) => return None,
+                Err(error) => return Some(Err(error.into())),
             };
             let path = entry.path();
             let file = path

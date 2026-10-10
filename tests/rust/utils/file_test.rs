@@ -13,6 +13,7 @@ use crate::common::{
         TEST_BLANK_LINE_CONTENT, TEST_EMPTY_FINGERPRINT, TEST_UNSEEKABLE_POSITION, TEST_WINDOW,
     },
     fixtures::sandbox,
+    macros::asserts::assert_err_is,
     sandbox::Sandbox,
 };
 
@@ -75,19 +76,19 @@ fn fingerprint_follows_a_symlink(sandbox: Sandbox) {
 #[rstest]
 fn fingerprint_fails_when_the_file_is_missing(sandbox: Sandbox) {
     let missing = sandbox.path().join("missing.bin");
-    let error = fingerprint(&missing, FINGERPRINT_SAMPLE_BYTES).unwrap_err();
 
-    assert_eq!(error.kind(), ErrorKind::NotFound);
+    assert_err_is!(
+        fingerprint(&missing, FINGERPRINT_SAMPLE_BYTES),
+        error if error.kind() == ErrorKind::NotFound
+    );
 }
 
 #[rstest]
 fn fingerprint_fails_when_the_path_is_a_directory(sandbox: Sandbox) {
-    let error = fingerprint(sandbox.path(), FINGERPRINT_SAMPLE_BYTES).unwrap_err();
-
-    assert!(matches!(
-        error.kind(),
-        ErrorKind::IsADirectory | ErrorKind::PermissionDenied
-    ));
+    assert_err_is!(
+        fingerprint(sandbox.path(), FINGERPRINT_SAMPLE_BYTES),
+        error if matches!(error.kind(), ErrorKind::IsADirectory | ErrorKind::PermissionDenied)
+    );
 }
 
 #[rstest]
@@ -124,16 +125,17 @@ fn starts_mid_item_restores_the_cursor(sandbox: Sandbox, #[case] position: u64) 
 #[case::reading_the_previous_byte(TEST_UNSEEKABLE_POSITION + 1)]
 fn starts_mid_item_fails_when_the_position_is_unseekable(sandbox: Sandbox, #[case] position: u64) {
     let file = File::open(sandbox.file(b"foo")).unwrap();
-    let error = starts_mid_item(&file, position, b'\n').unwrap_err();
 
-    assert!(error.raw_os_error().is_some());
+    assert_err_is!(starts_mid_item(&file, position, b'\n'), error if error.raw_os_error().is_some());
 }
 
 #[cfg(unix)]
 #[rstest]
 fn starts_mid_item_fails_when_the_file_is_a_directory(sandbox: Sandbox) {
     let directory = File::open(sandbox.path()).unwrap();
-    let error = starts_mid_item(&directory, 1, b'\n').unwrap_err();
 
-    assert_eq!(error.kind(), ErrorKind::IsADirectory);
+    assert_err_is!(
+        starts_mid_item(&directory, 1, b'\n'),
+        error if error.kind() == ErrorKind::IsADirectory
+    );
 }

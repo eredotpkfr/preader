@@ -34,7 +34,7 @@ from constants import (
     TEST_STATE_NAME,
     TEST_SUB_STATE_NAME,
 )
-from preader import Config, PReader, StateError, StateRegistry
+from preader import Config, PReader, StateError, StateMismatchError, StateRegistry
 
 
 def test_state_dir_matches_the_config(config: Config, registry: StateRegistry) -> None:
@@ -177,7 +177,7 @@ def test_lookup_raises_when_the_state_is_missing(
 def test_getitem_raises_when_the_name_is_invalid(
     registry: StateRegistry, name: str, message: str
 ) -> None:
-    with pytest.raises(StateError, match=message):
+    with pytest.raises(ValueError, match=message):
         registry[name]
 
 
@@ -355,9 +355,7 @@ def test_save_raises_when_the_name_escapes_through_a_symlink(
     config.state_dir.mkdir(parents=True, exist_ok=True)
     (config.state_dir / "link").symlink_to(outside, target_is_directory=True)
 
-    with pytest.raises(
-        StateError, match="path is a symlink or an alias of another entry"
-    ):
+    with pytest.raises(StateError, match="is an alias of another entry"):
         reader.bytes(tmp_file, state=f"link/{TEST_STATE_NAME}").state.save()
 
     assert not list(outside.iterdir())
@@ -376,9 +374,7 @@ def test_delitem_raises_when_the_name_escapes_through_a_symlink(
     victim = outside / TEST_STATE_FILE
     victim.write_text("{}", encoding="utf-8")
 
-    with pytest.raises(
-        StateError, match="path is a symlink or an alias of another entry"
-    ):
+    with pytest.raises(StateError, match="is an alias of another entry"):
         del registry[f"link/{TEST_STATE_NAME}"]
 
     assert victim.is_file()
@@ -394,9 +390,7 @@ def test_getitem_raises_when_the_state_is_a_symlink(
         config.state_dir / f"{TEST_OTHER_STATE_NAME}{TEST_STATE_FILE_EXTENSION}"
     ).symlink_to(real)
 
-    with pytest.raises(
-        StateError, match="path is a symlink or an alias of another entry"
-    ):
+    with pytest.raises(StateError, match="is an alias of another entry"):
         registry[TEST_OTHER_STATE_NAME]
 
 
@@ -539,7 +533,7 @@ def test_delitem_removes_the_saved_state(
 def test_delitem_raises_when_the_name_is_invalid(
     registry: StateRegistry, name: str, message: str
 ) -> None:
-    with pytest.raises(StateError, match=message):
+    with pytest.raises(ValueError, match=message):
         del registry[name]
 
 
@@ -555,7 +549,7 @@ def test_path_appends_the_extension_once(
 def test_path_raises_when_the_name_is_invalid(
     registry: StateRegistry, name: str, message: str
 ) -> None:
-    with pytest.raises(StateError, match=message):
+    with pytest.raises(ValueError, match=message):
         registry.path(name)
 
 
@@ -661,7 +655,7 @@ def test_getitem_raises_when_the_payload_names_another_state(
 
     state_path.write_text(json.dumps(payload), encoding="utf-8")
 
-    with pytest.raises(StateError, match="state name mismatch"):
+    with pytest.raises(StateMismatchError, match="state file belongs to"):
         reader.states[TEST_STATE_NAME]
 
 
@@ -678,6 +672,17 @@ def test_getitem_raises_when_a_field_has_the_wrong_type(
 
     with pytest.raises(StateError, match="invalid type"):
         reader.states[TEST_STATE_NAME]
+
+
+def test_getitem_raises_when_the_content_is_not_utf8(
+    reader: PReader, registry: StateRegistry, tmp_file: Path
+) -> None:
+    reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
+
+    registry.path(TEST_STATE_NAME).write_bytes(b'{"name": "\xff"}')
+
+    with pytest.raises(StateError, match="invalid unicode"):
+        registry[TEST_STATE_NAME]
 
 
 def test_len_counts_states_that_all_rejects(
@@ -747,26 +752,54 @@ def test_all_raises_when_any_state_is_corrupt(
     ("call", "expected"),
     [
         (lambda registry: list(registry.names()), []),
+        (lambda registry: len(registry), 0),  # noqa: PLW0108
         (lambda registry: list(registry), []),  # noqa: PLW0108
         (lambda registry: list(registry.all()), []),
         (lambda registry: list(registry.search(TEST_STATE_NAME)), []),
         (lambda registry: registry.clear(), None),
     ],
-    ids=["names", "iter", "all", "search", "clear"],
+    ids=["names", "len", "iter", "all", "search", "clear"],
 )
 def test_walk_yields_nothing_without_a_state_dir(
     registry: StateRegistry, config: Config, call: Callable[..., Any], expected: object
 ) -> None:
+    assert call(registry) == expected
     assert not config.state_dir.exists()
+
+
+@pytest.mark.parametrize(
+    ("call", "expected"),
+    [
+        (lambda registry: list(registry.names()), []),
+        (lambda registry: len(registry), 0),  # noqa: PLW0108
+        (lambda registry: list(registry.all()), []),
+        (lambda registry: registry.clear(), None),
+    ],
+    ids=["names", "len", "all", "clear"],
+)
+def test_walk_yields_nothing_when_the_state_dir_cannot_be_created(
+    make_reader: Callable[..., PReader],
+    tmp_path: Path,
+    revoke_permissions: Callable[..., Path],
+    call: Callable[..., Any],
+    expected: object,
+) -> None:
+    parent = tmp_path / "read-only"
+    parent.mkdir()
+
+    revoke_permissions(parent, 0o555)
+
+    registry = make_reader(state_dir=parent / "preader").states
+
     assert call(registry) == expected
 
 
-def test_names_creates_the_state_dir(registry: StateRegistry, config: Config) -> None:
-    assert not config.state_dir.exists()
-
+def test_names_does_not_create_the_state_dir(
+    registry: StateRegistry, config: Config
+) -> None:
     list(registry.names())
 
-    assert config.state_dir.is_dir()
+    assert not config.state_dir.exists()
 
 
 @pytest.mark.parametrize(
@@ -786,7 +819,7 @@ def test_walk_raises_when_the_state_dir_is_a_file(
 ) -> None:
     config.state_dir.write_bytes(b"not a directory")
 
-    with pytest.raises(FileExistsError):
+    with pytest.raises(NotADirectoryError):
         call(make_reader().states)
 
 
@@ -910,13 +943,13 @@ def test_lookup_raises_when_the_name_is_not_portable(
     assert registry.find(name) is None
     assert name not in registry
 
-    with pytest.raises(StateError, match="path is invalid"):
+    with pytest.raises(ValueError, match="is not valid"):
         registry[name]
 
-    with pytest.raises(StateError, match="path is invalid"):
+    with pytest.raises(ValueError, match="is not valid"):
         del registry[name]
 
-    with pytest.raises(StateError, match="path is invalid"):
+    with pytest.raises(ValueError, match="is not valid"):
         registry.path(name)
 
 
@@ -932,13 +965,13 @@ def test_lookup_raises_when_a_character_is_not_portable(
     assert registry.find(name) is None
     assert name not in registry
 
-    with pytest.raises(StateError, match="path is invalid"):
+    with pytest.raises(ValueError, match="is not valid"):
         registry[name]
 
-    with pytest.raises(StateError, match="path is invalid"):
+    with pytest.raises(ValueError, match="is not valid"):
         del registry[name]
 
-    with pytest.raises(StateError, match="path is invalid"):
+    with pytest.raises(ValueError, match="is not valid"):
         registry.path(name)
 
 
@@ -949,13 +982,13 @@ def test_lookup_raises_when_the_name_is_a_device(
     assert registry.find(name) is None
     assert name not in registry
 
-    with pytest.raises(StateError, match="path is invalid"):
+    with pytest.raises(ValueError, match="is not valid"):
         registry[name]
 
-    with pytest.raises(StateError, match="path is invalid"):
+    with pytest.raises(ValueError, match="is not valid"):
         del registry[name]
 
-    with pytest.raises(StateError, match="path is invalid"):
+    with pytest.raises(ValueError, match="is not valid"):
         registry.path(name)
 
 
@@ -1113,19 +1146,13 @@ def test_lookup_raises_when_the_name_is_a_directory_alias(
     assert "alias/job-1" not in registry
     assert list(registry.names()) == ["real/job-1"]
 
-    with pytest.raises(
-        StateError, match="path is a symlink or an alias of another entry"
-    ):
+    with pytest.raises(StateError, match="is an alias of another entry"):
         registry["alias/job-1"]
 
-    with pytest.raises(
-        StateError, match="path is a symlink or an alias of another entry"
-    ):
+    with pytest.raises(StateError, match="is an alias of another entry"):
         del registry["alias/job-1"]
 
-    with pytest.raises(
-        StateError, match="path is a symlink or an alias of another entry"
-    ):
+    with pytest.raises(StateError, match="is an alias of another entry"):
         reader.bytes(tmp_file, state="alias/job-1")
 
     assert saved.read_bytes() == before
@@ -1180,14 +1207,10 @@ def test_lookup_raises_when_the_name_is_a_short_name_alias(
     if short.lower() == saved.parent.name.lower():
         pytest.skip("8.3 short names are disabled on this volume")
 
-    with pytest.raises(
-        StateError, match="path is a symlink or an alias of another entry"
-    ):
+    with pytest.raises(StateError, match="is an alias of another entry"):
         registry[f"{short}/job-1"]
 
-    with pytest.raises(
-        StateError, match="path is a symlink or an alias of another entry"
-    ):
+    with pytest.raises(StateError, match="is an alias of another entry"):
         reader.bytes(tmp_file, state=f"{short}/job-1").state.save()
 
     assert list(registry.names()) == ["longdirectoryname/job-1"]
