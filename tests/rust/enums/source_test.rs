@@ -1,13 +1,11 @@
-use preader::{Error, IteratorBuild, IteratorRead, Mismatch, PathError, State, StateSource};
+use preader::{Error, IteratorBuild, IteratorRead, Mismatch, NameError, State, StateSource};
 use rstest::rstest;
 use rstest_reuse::apply;
 
 use crate::common::{
     constants::{TEST_LINE, TEST_OTHER_STATE_NAME, TEST_STATE_NAME},
     fixtures::sandbox,
-    funcs::canonical,
     macros::asserts::assert_err_is,
-    rule::Rule,
     sandbox::Sandbox,
     templates::name::{device_names, invalid_names, unportable_characters, windows_invalid_names},
 };
@@ -101,11 +99,9 @@ fn build_fails_when_the_existing_state_is_unsaved(sandbox: Sandbox) {
 
     drop(bytes);
 
-    let recorded = state.checksum.clone();
-
     assert_err_is!(
         sandbox.reader().bytes(&path).state(state).build(),
-        Error::Mismatch(Mismatch::Checksum { saved, .. }) if *saved == recorded
+        Error::Mismatch(Mismatch::Checksum)
     );
 }
 
@@ -148,7 +144,7 @@ fn auto_load_resumes_only_a_matching_file(sandbox: Sandbox) {
 
     assert_err_is!(
         reader.bytes(&other).state(TEST_STATE_NAME).build(),
-        Error::Mismatch(Mismatch::Path { .. })
+        Error::Mismatch(Mismatch::Path)
     );
 }
 
@@ -161,12 +157,16 @@ fn auto_load_starts_fresh_without_a_saved_state(sandbox: Sandbox) {
 }
 
 #[apply(invalid_names)]
-fn build_fails_when_the_name_is_invalid(sandbox: Sandbox, #[case] name: &str, #[case] rule: Rule) {
+fn build_fails_when_the_name_is_invalid(
+    sandbox: Sandbox,
+    #[case] name: &str,
+    #[case] expected: NameError,
+) {
     let path = sandbox.line_file();
 
     assert_err_is!(
         sandbox.reader().bytes(&path).state(name).build(),
-        Error::Path(error) if rule.matches(error, name)
+        Error::Name(error) if *error == expected
     );
 }
 
@@ -176,7 +176,7 @@ fn build_fails_when_the_name_is_not_portable(sandbox: Sandbox, #[case] name: &st
 
     assert_err_is!(
         sandbox.reader().bytes(&path).state(name).build(),
-        Error::Path(PathError::Invalid(found)) if found == name
+        Error::Name(NameError::Invalid)
     );
 }
 
@@ -191,7 +191,7 @@ fn build_fails_when_a_character_is_not_portable(
 
     assert_err_is!(
         sandbox.reader().bytes(&path).state(name.as_str()).build(),
-        Error::Path(PathError::Invalid(found)) if *found == name
+        Error::Name(NameError::Invalid)
     );
 }
 
@@ -201,12 +201,9 @@ fn build_fails_when_the_existing_state_tracks_another_file(sandbox: Sandbox) {
     let other = sandbox.write("other.bin", TEST_LINE);
     let state: State = sandbox.state(&path);
 
-    let recorded = state.file.path.clone();
-
     assert_err_is!(
         sandbox.reader().bytes(&other).state(state).build(),
-        Error::Mismatch(Mismatch::Path { saved, current })
-            if *saved == recorded && *current == canonical(&other)
+        Error::Mismatch(Mismatch::Path)
     );
 }
 
@@ -218,7 +215,7 @@ fn build_fails_when_the_existing_state_tracks_another_file_without_verification(
 
     assert_err_is!(
         sandbox.lenient().bytes(&other).state(state).build(),
-        Error::Mismatch(Mismatch::Path { .. })
+        Error::Mismatch(Mismatch::Path)
     );
 }
 
@@ -255,6 +252,6 @@ fn build_fails_when_the_name_is_a_device(sandbox: Sandbox, #[case] name: &str) {
 
     assert_err_is!(
         sandbox.reader().bytes(&path).state(name).build(),
-        Error::Path(PathError::Invalid(found)) if found == name
+        Error::Name(NameError::Invalid)
     );
 }

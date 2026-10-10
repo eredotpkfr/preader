@@ -1,6 +1,6 @@
-#[cfg(unix)]
-use std::fs;
 use std::{ffi::OsString, path::PathBuf};
+#[cfg(unix)]
+use std::{fs, io::ErrorKind};
 
 #[cfg(unix)]
 use preader::Error;
@@ -186,7 +186,7 @@ fn bytes_fails_when_the_path_is_a_socket(sandbox: Sandbox) {
 
     assert_err_is!(
         sandbox.reader().bytes(&socket).build(),
-        Error::NotAFile(found) if *found == canonical(&socket)
+        Error::Io(error) if error.kind() == ErrorKind::InvalidInput
     );
 }
 

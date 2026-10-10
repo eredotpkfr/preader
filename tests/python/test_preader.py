@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 
 from constants import TEST_ALPHABET, TEST_DEFAULT_DELIMITER, TEST_STATE_NAME
-from preader import Config, IteratorOptions, PReader, StateError
+from preader import Config, IteratorOptions, PReader
 
 
 def test_preader_defaults() -> None:
@@ -94,7 +94,7 @@ def test_bytes_raises_when_the_path_is_a_directory(
     directory = tmp_path / "elsewhere"
     directory.mkdir()
 
-    with pytest.raises(StateError, match="not a file"):
+    with pytest.raises(IsADirectoryError, match="is a directory"):
         reader.bytes(directory)
 
 
@@ -113,18 +113,20 @@ def test_bytes_raises_when_the_path_is_not_utf8(
 ) -> None:
     path = make_file(b"foo", name=os.fsdecode(b"data-\xff.bin"))
 
-    with pytest.raises(StateError, match="invalid UTF-8"):
+    with pytest.raises(ValueError, match="invalid UTF-8"):
         reader.bytes(path)
 
 
 @pytest.mark.usefixtures("requires_pre_epoch_mtime")
-def test_bytes_raises_when_mtime_precedes_the_epoch(
+def test_bytes_reads_a_file_with_an_mtime_before_the_epoch(
     reader: PReader, tmp_file: Path
 ) -> None:
     os.utime(tmp_file, (-86400, -86400))
 
-    with pytest.raises(StateError, match="second time provided"):
-        reader.bytes(tmp_file)
+    iterator = reader.bytes(tmp_file)
+
+    assert iterator.state.file.mtime.timestamp() == -86400
+    assert b"".join(iterator) == tmp_file.read_bytes()
 
 
 @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="a fifo cannot be created here")
@@ -133,7 +135,7 @@ def test_bytes_raises_when_the_path_is_a_fifo(reader: PReader, tmp_path: Path) -
 
     os.mkfifo(fifo)
 
-    with pytest.raises(StateError, match="not a file"):
+    with pytest.raises(OSError, match="not a regular file"):
         reader.bytes(fifo)
 
 
@@ -164,7 +166,7 @@ def test_bytes_yields_one_item_for_a_single_byte_file(
 def test_every_iterator_raises_when_the_start_exceeds_the_end(
     reader: PReader, tmp_file: Path, iterate: Callable[..., Any]
 ) -> None:
-    with pytest.raises(ValueError, match=r"start .* must be <= end"):
+    with pytest.raises(ValueError, match="start must not be greater than end"):
         iterate(reader, tmp_file, IteratorOptions(start=10, end=5))
 
 
@@ -523,7 +525,7 @@ def test_bytes_raises_when_the_maximum_start_exceeds_the_end(
 ) -> None:
     options = IteratorOptions(start=2**64 - 1, end=0)
 
-    with pytest.raises(ValueError, match=r"start .* must be <= end"):
+    with pytest.raises(ValueError, match="start must not be greater than end"):
         reader.bytes(tmp_file, options=options)
 
 

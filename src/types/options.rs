@@ -37,13 +37,7 @@ impl IteratorOptions {
     }
 
     pub(crate) fn validate(&self) -> Result<()> {
-        ensure!(
-            self.start <= self.end,
-            Error::InvalidRange {
-                start: self.start,
-                end: self.end
-            }
-        );
+        ensure!(self.start <= self.end, Error::InvalidRange);
 
         Ok(())
     }

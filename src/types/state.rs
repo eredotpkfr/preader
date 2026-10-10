@@ -65,15 +65,7 @@ impl State {
     }
 
     pub fn verify(&self) -> Result<()> {
-        let computed = self.checksum()?;
-
-        ensure!(
-            computed == self.checksum,
-            Mismatch::Checksum {
-                saved: self.checksum.clone(),
-                computed
-            }
-        );
+        ensure!(self.checksum()? == self.checksum, Mismatch::Checksum);
 
         let current = FileMetadata::try_from(self.file.path.as_path())?;
 
@@ -95,10 +87,7 @@ impl State {
 
         ensure!(
             !self.manager.verify_state || self.file.matches(&path)?,
-            Mismatch::Identity {
-                saved: self.file.path.clone(),
-                current: path
-            }
+            Mismatch::Identity
         );
 
         Ok(self.manager.state(data))
@@ -131,13 +120,7 @@ impl State {
     }
 
     pub(crate) fn for_file(self, file: &Path) -> Result<Self> {
-        ensure!(
-            self.file.path == file,
-            Mismatch::Path {
-                saved: self.file.path.clone(),
-                current: file.to_path_buf()
-            }
-        );
+        ensure!(self.file.path == file, Mismatch::Path);
 
         Ok(self)
     }

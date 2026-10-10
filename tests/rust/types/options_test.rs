@@ -67,16 +67,10 @@ fn build_accepts_an_ordered_range(sandbox: Sandbox, #[case] options: IteratorOpt
 fn build_fails_when_the_range_is_inverted(sandbox: Sandbox, #[case] options: IteratorOptions) {
     let path = sandbox.line_file();
     let reader = sandbox.reader();
-    let (start, end) = (options.start, options.end);
 
     assert_err_is!(
         reader.bytes(&path).options(options).build(),
-        Error::InvalidRange { start: from, end: to } if *from == start && *to == end
-    );
-
-    assert_err_is!(
-        reader.bytes(&path).options(options).build(),
-        Error::InvalidRange { start: s, end: e } if *s == start && *e == end
+        Error::InvalidRange
     );
 }
 

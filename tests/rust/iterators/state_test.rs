@@ -52,12 +52,10 @@ fn names_is_empty_without_a_state_dir(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn names_creates_the_state_dir(sandbox: Sandbox) {
-    assert!(!sandbox.state_dir().exists());
-
+fn names_does_not_create_the_state_dir(sandbox: Sandbox) {
     sandbox.states().names().unwrap();
 
-    assert!(sandbox.state_dir().is_dir());
+    assert!(!sandbox.state_dir().exists());
 }
 
 #[rstest]

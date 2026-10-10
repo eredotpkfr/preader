@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    PathError,
+    NameError,
     constants::{DEFAULT_STATE_DIR, NAME_SEPARATOR},
     validators::validate_name,
 };
@@ -13,7 +13,7 @@ pub fn default_state_dir() -> PathBuf {
     scoped_join(&dirs::cache_dir().unwrap_or_default(), DEFAULT_STATE_DIR).unwrap()
 }
 
-pub fn scoped_join(root: &Path, name: &str) -> Result<PathBuf, PathError> {
+pub fn scoped_join(root: &Path, name: &str) -> Result<PathBuf, NameError> {
     Ok(root.join(validate_name(name)?.split(NAME_SEPARATOR).collect::<PathBuf>()))
 }
 

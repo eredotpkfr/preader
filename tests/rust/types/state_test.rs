@@ -4,8 +4,8 @@ use std::{fs, io::ErrorKind, path::PathBuf, time::Duration};
 
 use chrono::{DateTime, Timelike, Utc};
 use preader::{
-    Config, Error, FINGERPRINT_SAMPLE_BYTES, IteratorBuild, IteratorRead, Mismatch, PReader,
-    PathError, StateManager, TMP_FILE_EXTENSION, fingerprint,
+    Config, Error, FINGERPRINT_SAMPLE_BYTES, IteratorBuild, IteratorRead, Mismatch, NameError,
+    PReader, StateManager, TMP_FILE_EXTENSION, fingerprint,
 };
 use rstest::rstest;
 use rstest_reuse::apply;
@@ -14,8 +14,8 @@ use rstest_reuse::apply;
 use crate::common::{constants::TEST_NON_UTF8_NAME, guards::Blocked};
 use crate::common::{
     constants::{
-        TEST_FILE_NAME, TEST_FILE_PATH, TEST_LARGE_COPIES, TEST_LINE, TEST_STATE_NAME,
-        TEST_TRACKED_NAME, TEST_WINDOW,
+        TEST_FILE_PATH, TEST_LARGE_COPIES, TEST_LINE, TEST_STATE_NAME, TEST_TRACKED_NAME,
+        TEST_WINDOW,
     },
     fixtures::sandbox,
     funcs::{canonical, consume, drain, names, state_data, state_file, tamper},
@@ -183,10 +183,7 @@ fn verify_fails_when_the_payload_is_tampered(sandbox: Sandbox) {
 
     let loaded = sandbox.lenient().states().load(TEST_STATE_NAME).unwrap();
 
-    assert_err_is!(
-        loaded.verify(),
-        Error::Mismatch(Mismatch::Checksum { saved, .. }) if *saved == loaded.checksum
-    );
+    assert_err_is!(loaded.verify(), Error::Mismatch(Mismatch::Checksum));
 }
 
 #[rstest]
@@ -200,10 +197,7 @@ fn verify_reports_the_checksum_first(sandbox: Sandbox) {
 
     fs::remove_file(&path).unwrap();
 
-    assert_err_is!(
-        loaded.verify(),
-        Error::Mismatch(Mismatch::Checksum { saved, .. }) if *saved == loaded.checksum
-    );
+    assert_err_is!(loaded.verify(), Error::Mismatch(Mismatch::Checksum));
 }
 
 #[rstest]
@@ -215,10 +209,7 @@ fn verify_fails_when_the_size_changed(sandbox: Sandbox) {
     sandbox.truncate(&path, 4500);
     set_mtime(&path, stamp);
 
-    assert_err_is!(
-        state.verify(),
-        Error::Mismatch(Mismatch::Size { saved, current: 4500 }) if *saved == state.file.size
-    );
+    assert_err_is!(state.verify(), Error::Mismatch(Mismatch::Size));
 }
 
 #[rstest]
@@ -228,10 +219,22 @@ fn verify_fails_when_the_mtime_changed(sandbox: Sandbox) {
 
     set_mtime(&path, mtime(&path) + Duration::from_secs(3600));
 
-    assert_err_is!(
-        state.verify(),
-        Error::Mismatch(Mismatch::Mtime { saved, current }) if current - saved == 3600
-    );
+    assert_err_is!(state.verify(), Error::Mismatch(Mismatch::Mtime));
+}
+
+#[rstest]
+fn verify_fails_when_an_mtime_before_the_epoch_changed(sandbox: Sandbox) {
+    let path = sandbox.large_file();
+
+    if !set_pre_epoch_mtime(&path, Duration::from_secs(86_400)) {
+        return;
+    }
+
+    let state = sandbox.stored(&path, TEST_STATE_NAME);
+
+    set_pre_epoch_mtime(&path, Duration::from_secs(172_800));
+
+    assert_err_is!(state.verify(), Error::Mismatch(Mismatch::Mtime));
 }
 
 #[rstest]
@@ -243,13 +246,7 @@ fn verify_fails_when_the_fingerprint_window_changed(sandbox: Sandbox) {
     sandbox.overwrite(&path, 10, b"\xff");
     set_mtime(&path, stamp);
 
-    let current = fingerprint(&path, FINGERPRINT_SAMPLE_BYTES).unwrap();
-
-    assert_err_is!(
-        state.verify(),
-        Error::Mismatch(Mismatch::Fingerprint { saved, current: found })
-            if *saved == state.file.fingerprint && *found == current
-    );
+    assert_err_is!(state.verify(), Error::Mismatch(Mismatch::Fingerprint));
 }
 
 #[rstest]
@@ -285,8 +282,7 @@ fn verify_fails_when_the_path_is_a_directory(sandbox: Sandbox) {
     fs::remove_file(&path).unwrap();
     fs::create_dir(&path).unwrap();
 
-    assert_err_is!(state.verify(), Error::NotAFile(found) if *found == canonical(&path));
-    assert_err_is!(state.verify(), Error::NotAFile(found) if found.ends_with(TEST_FILE_NAME));
+    assert_err_is!(state.verify(), Error::Io(error) if error.kind() == ErrorKind::IsADirectory);
 }
 
 #[rstest]
@@ -296,10 +292,7 @@ fn verify_fails_when_the_file_grew(sandbox: Sandbox) {
 
     sandbox.append(&path, b"more");
 
-    assert_err_is!(
-        state.verify(),
-        Error::Mismatch(Mismatch::Size { saved, current }) if *current == saved + 4
-    );
+    assert_err_is!(state.verify(), Error::Mismatch(Mismatch::Size));
 }
 
 #[cfg(unix)]
@@ -372,11 +365,7 @@ fn resync_fails_when_the_prefix_is_gone(
     let saved = sandbox.recorded(&before.repeat(copies), 5);
     let path = sandbox.write(TEST_TRACKED_NAME, &after.repeat(remaining));
 
-    assert_err_is!(
-        saved.resync(&path),
-        Error::Mismatch(Mismatch::Identity { saved: from, current })
-            if *from == saved.file.path && *current == canonical(&path)
-    );
+    assert_err_is!(saved.resync(&path), Error::Mismatch(Mismatch::Identity));
 }
 
 #[rstest]
@@ -502,7 +491,7 @@ fn resync_fails_when_the_path_is_not_a_file_without_verification(
         sandbox.path().join(name)
     };
 
-    assert_err_is!(saved.resync(&target), Error::Io(_) | Error::NotAFile(_));
+    assert_err_is!(saved.resync(&target), Error::Io(_));
 }
 
 #[rstest]
@@ -538,11 +527,7 @@ fn resync_moves_the_identity_forward(sandbox: Sandbox) {
 
     assert_eq!(once.file.size, 120);
 
-    assert_err_is!(
-        once.resync(&original),
-        Error::Mismatch(Mismatch::Identity { saved, current })
-            if *saved == once.file.path && *current == canonical(&original)
-    );
+    assert_err_is!(once.resync(&original), Error::Mismatch(Mismatch::Identity));
 }
 
 #[rstest]
@@ -554,10 +539,7 @@ fn resync_reseals_a_tampered_state(sandbox: Sandbox) {
 
     let reloaded = sandbox.lenient().states().load(TEST_STATE_NAME).unwrap();
 
-    assert_err_is!(
-        reloaded.verify(),
-        Error::Mismatch(Mismatch::Checksum { .. })
-    );
+    assert_err_is!(reloaded.verify(), Error::Mismatch(Mismatch::Checksum));
 
     let resynced = reloaded.resync(&path).unwrap();
 
@@ -578,10 +560,7 @@ fn resync_keeps_an_unsafe_name_for_the_save(sandbox: Sandbox) {
 
     assert_eq!(resynced.name, "../../etc/passwd");
 
-    assert_err_is!(
-        resynced.save(),
-        Error::Path(PathError::Escapes(found)) if found == "../../etc/passwd"
-    );
+    assert_err_is!(resynced.save(), Error::Name(NameError::Escapes));
 }
 
 #[rstest]
@@ -600,16 +579,19 @@ fn resync_keeps_the_state_dir_for_the_save(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn resync_fails_when_the_mtime_precedes_the_epoch(sandbox: Sandbox) {
+fn resync_accepts_an_mtime_before_the_epoch(sandbox: Sandbox) {
     let content = TEST_LINE.repeat(25);
     let saved = sandbox.recorded(&content, 5);
     let path = sandbox.path().join(TEST_TRACKED_NAME);
 
-    if !set_pre_epoch_mtime(&path) {
+    if !set_pre_epoch_mtime(&path, Duration::from_secs(86_400)) {
         return;
     }
 
-    assert_err_is!(saved.resync(&path), Error::Time(_));
+    let resynced = saved.resync(&path).unwrap();
+
+    assert_eq!(resynced.position, 5);
+    assert_eq!(resynced.file.mtime.timestamp(), -86_400);
 }
 
 #[rstest]
@@ -638,12 +620,9 @@ fn build_fails_when_a_resynced_state_tracks_another_file(sandbox: Sandbox) {
     let second = sandbox.write("b.bin", &b"b".repeat(10));
     let resynced = sandbox.state(&first).resync(&first).unwrap();
 
-    let recorded = resynced.file.path.clone();
-
     assert_err_is!(
         sandbox.reader().bytes(&second).state(resynced).build(),
-        Error::Mismatch(Mismatch::Path { saved, current })
-            if *saved == recorded && *current == canonical(&second)
+        Error::Mismatch(Mismatch::Path)
     );
 }
 
@@ -656,7 +635,6 @@ fn resync_fails_when_the_path_is_a_directory(sandbox: Sandbox, #[case] linked: b
 
     let state = sandbox.state(&sandbox.line_file());
     let directory = sandbox.dir_at("elsewhere");
-    let expected = canonical(&directory);
     let target = if linked {
         let alias = sandbox.path().join("alias");
 
@@ -667,7 +645,7 @@ fn resync_fails_when_the_path_is_a_directory(sandbox: Sandbox, #[case] linked: b
         directory
     };
 
-    assert_err_is!(state.resync(&target), Error::NotAFile(found) if *found == expected);
+    assert_err_is!(state.resync(&target), Error::Io(error) if error.kind() == ErrorKind::IsADirectory);
 }
 
 #[rstest]
@@ -868,7 +846,7 @@ fn build_fails_when_the_name_has_a_nul_byte(sandbox: Sandbox) {
 
     assert_err_is!(
         sandbox.reader().bytes(&path).state("job\0").build(),
-        Error::Path(PathError::Invalid(found)) if found == "job\0"
+        Error::Name(NameError::Invalid)
     );
 }
 
@@ -878,7 +856,7 @@ fn build_fails_when_the_name_is_too_long(sandbox: Sandbox, #[case] name: String)
 
     assert_err_is!(
         sandbox.reader().bytes(&path).state(name.as_str()).build(),
-        Error::Path(PathError::Invalid(found)) if *found == name
+        Error::Name(NameError::Invalid)
     );
 }
 
@@ -915,7 +893,7 @@ fn save_leaves_the_state_untouched_when_it_fails(sandbox: Sandbox, #[case] name:
 
     sandbox.block_states();
 
-    assert_err_is!(state.save(), Error::Io(_) | Error::Path(_));
+    assert_err_is!(state.save(), Error::Io(_) | Error::Name(_));
 
     assert_eq!(state.timestamps.updated_at, before);
 }

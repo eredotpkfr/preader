@@ -1,13 +1,12 @@
 use std::{fs, io::ErrorKind};
 
-use preader::{Error, IteratorBuild, IteratorRead, Mismatch, PathError};
+use preader::{Error, IteratorBuild, IteratorRead, Mismatch, NameError};
 use rstest::rstest;
 
 use crate::common::{
     constants::{TEST_INVALID_UTF8, TEST_MISSING_STATE_NAME, TEST_STATE_NAME},
     fixtures::sandbox,
-    funcs::{canonical, state_data},
-    guards::set_pre_epoch_mtime,
+    funcs::state_data,
     macros::asserts::{assert_err_eq, assert_err_is},
     sandbox::Sandbox,
 };
@@ -23,7 +22,7 @@ fn io_errors_are_transparent(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn serde_errors_are_transparent(sandbox: Sandbox) {
+fn corrupt_state_names_the_state(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let state = sandbox.saved(&path, TEST_STATE_NAME);
 
@@ -31,10 +30,12 @@ fn serde_errors_are_transparent(sandbox: Sandbox) {
 
     assert_err_eq!(
         sandbox.states().load(TEST_STATE_NAME),
-        "key must be a string at line 1 column 3"
+        "state 'job-1' is corrupt: key must be a string at line 1 column 3"
     );
-
-    assert_err_is!(sandbox.states().load(TEST_STATE_NAME), Error::Serde(_));
+    assert_err_is!(
+        sandbox.states().load(TEST_STATE_NAME),
+        Error::Corrupt { name, .. } if name == TEST_STATE_NAME
+    );
 }
 
 #[rstest]
@@ -58,18 +59,7 @@ fn utf8_errors_are_transparent(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn time_errors_are_transparent(sandbox: Sandbox) {
-    let path = sandbox.line_file();
-
-    if !set_pre_epoch_mtime(&path) {
-        return;
-    }
-
-    assert_err_is!(sandbox.reader().bytes(&path).build(), Error::Time(_));
-}
-
-#[rstest]
-fn path_errors_are_transparent(sandbox: Sandbox) {
+fn name_errors_are_transparent(sandbox: Sandbox) {
     let mut data = state_data(sandbox.line_file());
 
     data.name = "../escape".to_owned();
@@ -77,12 +67,9 @@ fn path_errors_are_transparent(sandbox: Sandbox) {
     let mut state = sandbox.manager().state(data);
     let error = state.save().unwrap_err();
 
-    assert!(
-        matches!(error, Error::Path(PathError::Escapes(_))),
-        "{error}"
-    );
+    assert!(matches!(error, Error::Name(NameError::Escapes)), "{error}");
 
-    assert_eq!(error.to_string(), "path escapes root: ../escape");
+    assert_eq!(error.to_string(), "state name escapes the state directory");
 }
 
 #[rstest]
@@ -92,14 +79,14 @@ fn mismatch_errors_are_transparent(sandbox: Sandbox) {
 
     sandbox.append(&path, b"more");
 
-    assert_err_is!(state.verify(), Error::Mismatch(Mismatch::Size { .. }));
+    assert_err_is!(state.verify(), Error::Mismatch(Mismatch::Size));
 }
 
 #[rstest]
 fn missing_state_names_itself(sandbox: Sandbox) {
     assert_err_eq!(
         sandbox.states().load(TEST_MISSING_STATE_NAME),
-        format!("state not found: {TEST_MISSING_STATE_NAME}")
+        format!("state '{TEST_MISSING_STATE_NAME}' not found")
     );
 
     assert_err_is!(
@@ -109,35 +96,33 @@ fn missing_state_names_itself(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn inverted_range_reports_both_bounds(sandbox: Sandbox) {
+fn inverted_range_describes_itself(sandbox: Sandbox) {
     let path = sandbox.line_file();
     let reader = sandbox.reader();
 
     assert_err_eq!(
         reader.bytes(&path).start(9).end(4).build(),
-        "start (9) must be <= end (4)"
+        "start must not be greater than end"
     );
 
     assert_err_is!(
         reader.bytes(&path).start(9).end(4).build(),
-        Error::InvalidRange { start: 9, end: 4 }
+        Error::InvalidRange
     );
 }
 
 #[rstest]
-fn not_a_file_names_the_path(sandbox: Sandbox) {
-    let directory = canonical(&sandbox.dir_at("folder"));
-    let reader = sandbox.reader();
+fn a_directory_is_reported_as_one(sandbox: Sandbox) {
+    let directory = sandbox.dir_at("folder");
 
-    assert_err_eq!(
-        reader.bytes(&directory).build(),
-        format!("not a file: {}", directory.display())
-    );
+    assert_err_eq!(sandbox.reader().bytes(&directory).build(), "is a directory");
+}
 
-    assert_err_is!(
-        reader.bytes(&directory).build(),
-        Error::NotAFile(found) if *found == directory
-    );
+#[rstest]
+fn a_file_state_dir_is_reported_as_not_a_directory(sandbox: Sandbox) {
+    sandbox.block_states();
+
+    assert_err_eq!(sandbox.states().names(), "not a directory");
 }
 
 #[rstest]

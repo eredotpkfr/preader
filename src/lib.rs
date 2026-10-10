@@ -22,7 +22,7 @@ pub use constants::{
     DEFAULT_STATE_DIR, DEFAULT_VERIFY_STATE, FINGERPRINT_SAMPLE_BYTES, STATE_FILE_EXTENSION,
 };
 pub use enums::{
-    error::{core::Error, mismatch::Mismatch, path::PathError},
+    error::{core::Error, mismatch::Mismatch, name::NameError},
     source::StateSource,
 };
 pub use interfaces::{builder::IteratorBuild, iterator::IteratorRead};

@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 use regex::Regex;
 
 use crate::{
-    PathError,
+    NameError,
     constants::{NAME_SEPARATOR, STATE_FILE_EXTENSION, TMP_FILE_EXTENSION},
     macros::ensure,
 };
@@ -42,10 +42,10 @@ static DEVICE_NAME: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(&format!(r"(?i)^(?:{names}) *(?:\..*)?$")).unwrap()
 });
 
-pub fn validate_name(name: &str) -> Result<&str, PathError> {
-    ensure!(!name.is_empty(), PathError::Empty);
-    ensure!(!escapes(name), PathError::Escapes(name.to_owned()));
-    ensure!(is_portable(name), PathError::Invalid(name.to_owned()));
+pub fn validate_name(name: &str) -> Result<&str, NameError> {
+    ensure!(!name.is_empty(), NameError::Empty);
+    ensure!(!escapes(name), NameError::Escapes);
+    ensure!(is_portable(name), NameError::Invalid);
 
     Ok(name)
 }

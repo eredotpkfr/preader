@@ -103,9 +103,9 @@ ESCAPING_STATE_NAMES = [
     pytest.param("//server/share/job-1", id="forward_slash_share"),
 ]
 STATE_NAME_ERRORS = {
-    "path must not be empty": [pytest.param("", id="empty")],
-    "path is invalid": NON_CANONICAL_STATE_NAMES,
-    "path escapes root": ESCAPING_STATE_NAMES,
+    "state name must not be empty": [pytest.param("", id="empty")],
+    "is not valid": NON_CANONICAL_STATE_NAMES,
+    "escapes the state directory": ESCAPING_STATE_NAMES,
 }
 INVALID_STATE_NAMES = [case for cases in STATE_NAME_ERRORS.values() for case in cases]
 INVALID_STATE_NAME_ERRORS = [

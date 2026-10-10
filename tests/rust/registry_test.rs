@@ -1,6 +1,6 @@
-use std::fs;
+use std::{fs, io::ErrorKind};
 
-use preader::{Error, IteratorBuild, Mismatch, PathError};
+use preader::{Error, IteratorBuild, Mismatch, NameError};
 use rstest::rstest;
 use rstest_reuse::apply;
 
@@ -13,7 +13,6 @@ use crate::common::{
     fixtures::sandbox,
     funcs::{names, state_file},
     macros::asserts::assert_err_is,
-    rule::Rule,
     sandbox::Sandbox,
     templates::name::{device_names, invalid_names, unportable_characters, windows_invalid_names},
 };
@@ -77,21 +76,24 @@ fn load_fails_when_the_payload_names_another_state(sandbox: Sandbox) {
 
     assert_err_is!(
         sandbox.lenient().states().load(TEST_STATE_NAME),
-        Error::Mismatch(Mismatch::Name { saved, current })
-            if saved == TEST_OTHER_STATE_NAME && current == TEST_STATE_NAME
+        Error::Mismatch(Mismatch::Name { saved }) if saved == TEST_OTHER_STATE_NAME
     );
 }
 
 #[apply(invalid_names)]
-fn every_lookup_rejects_an_invalid_name(sandbox: Sandbox, #[case] name: &str, #[case] rule: Rule) {
+fn every_lookup_rejects_an_invalid_name(
+    sandbox: Sandbox,
+    #[case] name: &str,
+    #[case] expected: NameError,
+) {
     let registry = sandbox.states();
 
     assert!(registry.find(name).is_none());
     assert!(!registry.exists(name));
 
-    assert_err_is!(registry.load(name), Error::Path(error) if rule.matches(error, name));
-    assert_err_is!(registry.delete(name), Error::Path(error) if rule.matches(error, name));
-    assert_err_is!(registry.path(name), Error::Path(error) if rule.matches(error, name));
+    assert_err_is!(registry.load(name), Error::Name(error) if *error == expected);
+    assert_err_is!(registry.delete(name), Error::Name(error) if *error == expected);
+    assert_err_is!(registry.path(name), Error::Name(error) if *error == expected);
 }
 
 #[apply(windows_invalid_names)]
@@ -101,9 +103,9 @@ fn every_lookup_rejects_an_unportable_name(sandbox: Sandbox, #[case] name: &str)
     assert!(registry.find(name).is_none());
     assert!(!registry.exists(name));
 
-    assert_err_is!(registry.load(name), Error::Path(PathError::Invalid(found)) if found == name);
-    assert_err_is!(registry.delete(name), Error::Path(PathError::Invalid(found)) if found == name);
-    assert_err_is!(registry.path(name), Error::Path(PathError::Invalid(found)) if found == name);
+    assert_err_is!(registry.load(name), Error::Name(NameError::Invalid));
+    assert_err_is!(registry.delete(name), Error::Name(NameError::Invalid));
+    assert_err_is!(registry.path(name), Error::Name(NameError::Invalid));
 }
 
 #[apply(unportable_characters)]
@@ -118,9 +120,9 @@ fn every_lookup_rejects_an_unportable_character(
     assert!(registry.find(&name).is_none());
     assert!(!registry.exists(&name));
 
-    assert_err_is!(registry.load(&name), Error::Path(PathError::Invalid(found)) if *found == name);
-    assert_err_is!(registry.delete(&name), Error::Path(PathError::Invalid(found)) if *found == name);
-    assert_err_is!(registry.path(&name), Error::Path(PathError::Invalid(found)) if *found == name);
+    assert_err_is!(registry.load(&name), Error::Name(NameError::Invalid));
+    assert_err_is!(registry.delete(&name), Error::Name(NameError::Invalid));
+    assert_err_is!(registry.path(&name), Error::Name(NameError::Invalid));
 }
 
 #[rstest]
@@ -177,7 +179,7 @@ fn count_includes_states_that_all_rejects(sandbox: Sandbox) {
 
     assert_eq!(sandbox.states().count().unwrap(), 2);
 
-    assert_err_is!(sandbox.states().all(), Error::Serde(_));
+    assert_err_is!(sandbox.states().all(), Error::Corrupt { name, .. } if name == TEST_OTHER_STATE_NAME);
 }
 
 #[rstest]
@@ -272,11 +274,11 @@ fn walk_fails_when_the_state_dir_is_a_file(sandbox: Sandbox) {
 
     let registry = sandbox.states();
 
-    assert_err_is!(registry.names(), Error::Io(_));
-    assert_err_is!(registry.count(), Error::Io(_));
-    assert_err_is!(registry.all(), Error::Io(_));
-    assert_err_is!(registry.clear(), Error::Io(_));
-    assert_err_is!(registry.search("job"), Error::Io(_));
+    assert_err_is!(registry.names(), Error::Io(error) if error.kind() == ErrorKind::NotADirectory);
+    assert_err_is!(registry.count(), Error::Io(error) if error.kind() == ErrorKind::NotADirectory);
+    assert_err_is!(registry.all(), Error::Io(error) if error.kind() == ErrorKind::NotADirectory);
+    assert_err_is!(registry.clear(), Error::Io(error) if error.kind() == ErrorKind::NotADirectory);
+    assert_err_is!(registry.search("job"), Error::Io(error) if error.kind() == ErrorKind::NotADirectory);
 }
 
 #[rstest]
@@ -312,6 +314,27 @@ fn walk_fails_when_a_subdirectory_is_unreadable(sandbox: Sandbox) {
     assert_err_is!(registry.count(), Error::Io(_));
     assert_err_is!(registry.all(), Error::Io(_));
     assert_err_is!(registry.clear(), Error::Io(_));
+}
+
+#[cfg(unix)]
+#[rstest]
+fn walk_is_empty_when_the_state_dir_cannot_be_created(sandbox: Sandbox) {
+    let mut blocked = Blocked::default();
+
+    if !Blocked::enforced(&sandbox.path().join("probe")) {
+        return;
+    }
+
+    blocked.read_only(sandbox.path());
+
+    let registry = sandbox.states();
+
+    assert!(registry.clear().is_ok());
+    assert!(!sandbox.state_dir().exists());
+
+    assert_eq!(registry.names().unwrap().count(), 0);
+    assert_eq!(registry.count().unwrap(), 0);
+    assert_eq!(registry.all().unwrap().len(), 0);
 }
 
 #[rstest]
@@ -426,15 +449,12 @@ fn every_lookup_rejects_a_directory_alias(sandbox: Sandbox) {
     assert_eq!(names(&registry), ["real/job-1"]);
     assert_eq!(fs::read(&saved).unwrap(), before);
 
-    assert_err_is!(
-        registry.load("alias/job-1"),
-        Error::Path(PathError::Alias(found)) if found == "alias/job-1"
-    );
+    assert_err_is!(registry.load("alias/job-1"), Error::Name(NameError::Alias));
     assert_err_is!(
         registry.delete("alias/job-1"),
-        Error::Path(PathError::Alias(found)) if found == "alias/job-1"
+        Error::Name(NameError::Alias)
     );
-    assert_err_is!(built, Error::Path(PathError::Alias(found)) if found == "alias/job-1");
+    assert_err_is!(built, Error::Name(NameError::Alias));
 }
 
 #[apply(device_names)]
@@ -444,7 +464,7 @@ fn every_lookup_rejects_a_device_name(sandbox: Sandbox, #[case] name: &str) {
     assert!(registry.find(name).is_none());
     assert!(!registry.exists(name));
 
-    assert_err_is!(registry.load(name), Error::Path(PathError::Invalid(found)) if found == name);
-    assert_err_is!(registry.delete(name), Error::Path(PathError::Invalid(found)) if found == name);
-    assert_err_is!(registry.path(name), Error::Path(PathError::Invalid(found)) if found == name);
+    assert_err_is!(registry.load(name), Error::Name(NameError::Invalid));
+    assert_err_is!(registry.delete(name), Error::Name(NameError::Invalid));
+    assert_err_is!(registry.path(name), Error::Name(NameError::Invalid));
 }

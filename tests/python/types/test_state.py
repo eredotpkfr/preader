@@ -25,7 +25,14 @@ from constants import (
     TEST_STATE_NAME,
     TEST_WINDOW,
 )
-from preader import Config, PReader, State, StateError, StateRegistry
+from preader import (
+    Config,
+    PReader,
+    State,
+    StateError,
+    StateMismatchError,
+    StateRegistry,
+)
 
 
 def _get_unverified_state(make_reader: Callable[..., PReader], name: str) -> State:
@@ -56,7 +63,7 @@ def test_state_fields(config: Config, reader: PReader, tmp_file: Path) -> None:
 def test_state_raises_when_the_name_is_invalid(
     reader: PReader, tmp_file: Path, name: str, message: str
 ) -> None:
-    with pytest.raises(StateError, match=message):
+    with pytest.raises(ValueError, match=message):
         reader.bytes(tmp_file, state=name)
 
 
@@ -76,7 +83,7 @@ def test_state_raises_when_the_name_is_a_path(reader: PReader, tmp_file: Path) -
 def test_state_raises_when_the_name_is_not_portable(
     reader: PReader, tmp_file: Path, name: str
 ) -> None:
-    with pytest.raises(StateError, match="path is invalid"):
+    with pytest.raises(ValueError, match="is not valid"):
         reader.bytes(tmp_file, state=name)
 
 
@@ -98,7 +105,7 @@ def test_state_raises_when_a_character_is_not_portable(
 ) -> None:
     name = shape.format(character)
 
-    with pytest.raises(StateError, match="path is invalid"):
+    with pytest.raises(ValueError, match="is not valid"):
         reader.bytes(tmp_file, state=name)
 
 
@@ -106,7 +113,7 @@ def test_state_raises_when_a_character_is_not_portable(
 def test_state_raises_when_the_name_is_a_device(
     reader: PReader, tmp_file: Path, name: str
 ) -> None:
-    with pytest.raises(StateError, match="path is invalid"):
+    with pytest.raises(ValueError, match="is not valid"):
         reader.bytes(tmp_file, state=name)
 
 
@@ -214,7 +221,7 @@ def test_verify_raises_when_the_payload_is_tampered(
 
     tampered = _get_unverified_state(make_reader, state.name)
 
-    with pytest.raises(StateError, match="checksum mismatch"):
+    with pytest.raises(StateMismatchError, match="modified outside preader"):
         tampered.verify()
 
 
@@ -230,19 +237,33 @@ def test_verify_raises_when_the_size_changed(
 
     os.utime(tmp_large_file, (original_mtime, original_mtime))
 
-    with pytest.raises(StateError, match="file size mismatch"):
+    with pytest.raises(StateMismatchError, match="file size changed"):
         state.verify()
 
 
 @pytest.mark.usefixtures("requires_pre_epoch_mtime")
-def test_verify_raises_when_mtime_precedes_the_epoch(
+def test_verify_raises_when_the_mtime_moves_before_the_epoch(
     make_reader: Callable[..., PReader], tmp_large_file: Path
 ) -> None:
     state = _new_unverified_state(make_reader, tmp_large_file)
 
     os.utime(tmp_large_file, (-86400, -86400))
 
-    with pytest.raises(StateError, match="second time provided"):
+    with pytest.raises(StateMismatchError, match="file mtime changed"):
+        state.verify()
+
+
+@pytest.mark.usefixtures("requires_pre_epoch_mtime")
+def test_verify_raises_when_an_mtime_before_the_epoch_changed(
+    make_reader: Callable[..., PReader], tmp_large_file: Path
+) -> None:
+    os.utime(tmp_large_file, (-86400, -86400))
+
+    state = _new_unverified_state(make_reader, tmp_large_file)
+
+    os.utime(tmp_large_file, (-172800, -172800))
+
+    with pytest.raises(StateMismatchError, match="file mtime changed"):
         state.verify()
 
 
@@ -254,7 +275,7 @@ def test_verify_raises_when_the_mtime_changed(
 
     os.utime(tmp_large_file, (original_mtime + 3600, original_mtime + 3600))
 
-    with pytest.raises(StateError, match="file mtime mismatch"):
+    with pytest.raises(StateMismatchError, match="file mtime changed"):
         state.verify()
 
 
@@ -270,7 +291,7 @@ def test_verify_raises_when_the_fingerprint_window_changed(
 
     os.utime(tmp_large_file, (original_mtime, original_mtime))
 
-    with pytest.raises(StateError, match="file fingerprint mismatch"):
+    with pytest.raises(StateMismatchError, match="file content changed"):
         state.verify()
 
 
@@ -429,7 +450,7 @@ def test_verify_suggests_resync_when_the_file_changed(
 
     append(tmp_large_file, b"more")
 
-    with pytest.raises(StateError, match=r"call state\.resync\(file\)"):
+    with pytest.raises(StateMismatchError, match=r"call state\.resync\(file\)"):
         state.verify()
 
 
@@ -466,7 +487,7 @@ def test_resync_raises_when_the_prefix_is_gone(
 
     make_file(after, name="tracked.bin")
 
-    with pytest.raises(StateError, match="file content differs from the tracked file"):
+    with pytest.raises(StateMismatchError, match="file is not the tracked file"):
         state.resync(path)
 
 
@@ -603,15 +624,16 @@ def test_resync_accepts_at_the_fingerprint_window(
 
 
 @pytest.mark.usefixtures("requires_pre_epoch_mtime")
-def test_resync_raises_when_mtime_precedes_the_epoch(
+def test_resync_accepts_an_mtime_before_the_epoch(
     reader: PReader, tmp_large_file: Path
 ) -> None:
     state = reader.bytes(tmp_large_file, state=TEST_STATE_NAME).state
 
     os.utime(tmp_large_file, (-86400, -86400))
 
-    with pytest.raises(StateError, match="second time provided"):
-        state.resync(tmp_large_file)
+    resynced = state.resync(tmp_large_file)
+
+    assert resynced.file.mtime.timestamp() == -86400
 
 
 @pytest.mark.usefixtures("requires_symlinks")
@@ -669,7 +691,7 @@ def test_resync_keeps_the_state_dir_for_the_save(
 
 @pytest.mark.parametrize(
     ("name", "error"),
-    [("missing.bin", FileNotFoundError), ("elsewhere", StateError)],
+    [("missing.bin", FileNotFoundError), ("elsewhere", IsADirectoryError)],
     ids=["missing", "a_directory"],
 )
 def test_resync_raises_when_the_path_is_not_a_file_without_verification(
@@ -710,10 +732,10 @@ def test_resync_moves_the_identity_forward(
 
     assert once.file.size == 120
 
-    with pytest.raises(StateError, match="file content differs from the tracked file"):
+    with pytest.raises(StateMismatchError, match="file is not the tracked file"):
         once.resync(original)
 
-    with pytest.raises(StateError, match=r"grown\.bin.*tracked\.bin"):
+    with pytest.raises(StateMismatchError, match="file is not the tracked file"):
         once.resync(original)
 
 
@@ -738,7 +760,7 @@ def test_resync_raises_when_the_path_is_not_utf8(
     state = reader.bytes(tmp_file, state=TEST_STATE_NAME).state
     odd = make_file(tmp_file.read_bytes(), name=os.fsdecode(b"data-\xff.bin"))
 
-    with pytest.raises(StateError, match="invalid UTF-8"):
+    with pytest.raises(ValueError, match="invalid UTF-8"):
         state.resync(odd)
 
 
@@ -756,7 +778,7 @@ def test_resync_reseals_a_tampered_state(
 
     tampered = reader.states[TEST_STATE_NAME]
 
-    with pytest.raises(StateError, match="checksum mismatch"):
+    with pytest.raises(StateMismatchError, match="modified outside preader"):
         tampered.verify()
 
     resynced = tampered.resync(path)
@@ -774,7 +796,8 @@ def test_bytes_raises_when_a_resynced_state_tracks_another_file(
     resynced = reader.bytes(first, state=TEST_STATE_NAME).state.resync(first)
 
     with pytest.raises(
-        StateError, match=r"file path mismatch .*call state\.resync\(file\)"
+        StateMismatchError,
+        match=r"state tracks a different file .*call state\.resync\(file\)",
     ):
         reader.bytes(second, state=resynced)
 
@@ -794,7 +817,7 @@ def test_resync_raises_when_the_path_is_a_directory(
         target = tmp_path / "alias"
         target.symlink_to(directory, target_is_directory=True)
 
-    with pytest.raises(StateError, match="not a file"):
+    with pytest.raises(IsADirectoryError, match="is a directory"):
         state.resync(target)
 
 
@@ -832,7 +855,9 @@ def test_resync_allows_resuming_a_moved_file(
 
     moved = tmp_file.rename(tmp_path / "moved.bin")
 
-    with pytest.raises(StateError, match=r"file path mismatch .*resync"):
+    with pytest.raises(
+        StateMismatchError, match=r"state tracks a different file .*resync"
+    ):
         reader.bytes(moved, state=state)
 
     resynced = state.resync(moved)
@@ -853,7 +878,7 @@ def test_resync_allows_resuming_a_grown_file(
 
     append(tmp_file, b"more")
 
-    with pytest.raises(StateError, match="file size mismatch"):
+    with pytest.raises(StateMismatchError, match="file size changed"):
         reader.bytes(tmp_file, state=state)
 
     resynced = state.resync(tmp_file)
@@ -948,7 +973,7 @@ def test_percent_treats_a_zero_size_as_one_byte(
 def test_state_raises_when_the_name_has_a_nul_byte(
     reader: PReader, tmp_file: Path
 ) -> None:
-    with pytest.raises(StateError, match="path is invalid"):
+    with pytest.raises(ValueError, match="is not valid"):
         reader.bytes(tmp_file, state="job\0")
 
 
@@ -956,7 +981,7 @@ def test_state_raises_when_the_name_has_a_nul_byte(
 def test_state_raises_when_the_name_is_too_long(
     reader: PReader, tmp_file: Path, name: str
 ) -> None:
-    with pytest.raises(StateError, match="path is invalid"):
+    with pytest.raises(ValueError, match="is not valid"):
         reader.bytes(tmp_file, state=name)
 
 
@@ -1077,7 +1102,7 @@ def test_verify_reports_the_checksum_first(
 
     os.utime(tmp_large_file, (original_mtime, original_mtime))
 
-    with pytest.raises(StateError, match="checksum mismatch"):
+    with pytest.raises(StateMismatchError, match="modified outside preader"):
         _get_unverified_state(make_reader, state.name).verify()
 
 
@@ -1144,7 +1169,5 @@ def test_path_raises_when_the_state_file_is_a_symlink(
     config.state_dir.mkdir(parents=True, exist_ok=True)
     (config.state_dir / TEST_STATE_FILE).symlink_to(outside)
 
-    with pytest.raises(
-        StateError, match="path is a symlink or an alias of another entry"
-    ):
+    with pytest.raises(StateError, match="is an alias of another entry"):
         state.path()

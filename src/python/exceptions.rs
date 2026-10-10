@@ -11,3 +11,15 @@ impl StateError {
         Self
     }
 }
+
+#[pyclass(module = "preader", extends = StateError, subclass)]
+pub struct StateMismatchError;
+
+#[pymethods]
+impl StateMismatchError {
+    #[new]
+    #[pyo3(signature = (*_args: "object"))]
+    fn py_new(_args: &Bound<'_, PyTuple>) -> PyClassInitializer<Self> {
+        PyClassInitializer::from(StateError).add_subclass(Self)
+    }
+}
