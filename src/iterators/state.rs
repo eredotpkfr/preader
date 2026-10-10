@@ -1,65 +1,70 @@
 use std::{
-    fs,
-    path::{Path, PathBuf},
+    io::{self, ErrorKind},
+    path::MAIN_SEPARATOR,
 };
 
-use pyo3::prelude::*;
 use regex::Regex;
 use walkdir::{IntoIter, WalkDir};
 
-use crate::{Error, utils::path::has_no_symlinks};
+use crate::{
+    Result,
+    constants::{NAME_SEPARATOR, STATE_FILE_EXTENSION},
+    macros::ensure,
+    manager::StateManager,
+};
 
-pub(crate) const STATE_FILE_EXT: &str = ".state.json";
-
-#[pyclass(module = "preader")]
+#[cfg_attr(feature = "python", pyo3::pyclass(module = "preader"))]
+#[derive(Debug)]
 pub struct StateIterator {
-    root: PathBuf,
-    entries: IntoIter,
-    pattern: Option<Regex>,
+    pub(crate) manager: StateManager,
+    pub(crate) pattern: Option<Regex>,
+    pub(crate) entries: IntoIter,
 }
 
 impl StateIterator {
-    pub(crate) fn new(dir: &Path, pattern: Option<&str>) -> Result<Self, Error> {
-        fs::create_dir_all(dir)?;
+    pub(crate) fn new(manager: &StateManager, pattern: Option<&str>) -> Result<Self> {
+        let root = &manager.state_dir;
+
+        ensure!(
+            !root.exists() || root.is_dir(),
+            io::Error::from(ErrorKind::NotADirectory)
+        );
 
         Ok(Self {
-            root: dir.to_path_buf(),
-            entries: WalkDir::new(dir).min_depth(1).into_iter(),
+            manager: manager.clone(),
             pattern: pattern.map(Regex::new).transpose()?,
+            entries: WalkDir::new(root).min_depth(1).into_iter(),
         })
     }
 }
 
 impl Iterator for StateIterator {
-    type Item = Result<String, Error>;
+    type Item = Result<String>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (root, pattern) = (&self.root, self.pattern.as_ref());
+        let (manager, pattern) = (&self.manager, self.pattern.as_ref());
+        let missing_root = |error: &walkdir::Error| {
+            error.depth() == 0 && error.io_error().map(io::Error::kind) == Some(ErrorKind::NotFound)
+        };
 
         self.entries.find_map(|entry| {
             let entry = match entry {
-                Err(error) => return Some(Err(Error::Io(error.into()))),
                 Ok(entry) => entry,
+                Err(error) if missing_root(&error) => return None,
+                Err(error) => return Some(Err(error.into())),
             };
             let path = entry.path();
-            let name =
-                path.strip_prefix(root).ok()?.to_str()?.strip_suffix(STATE_FILE_EXT)?.to_owned();
+            let file = path
+                .strip_prefix(&manager.state_dir)
+                .ok()?
+                .to_str()?
+                .replace(MAIN_SEPARATOR, NAME_SEPARATOR);
+            let name = file.strip_suffix(STATE_FILE_EXTENSION)?;
 
-            (path.is_file()
-                && has_no_symlinks(root, path)
-                && pattern.is_none_or(|regex| regex.is_match(&name)))
-            .then_some(Ok(name))
+            (entry.file_type().is_file()
+                && pattern.is_none_or(|regex| regex.is_match(name))
+                && manager.path(name).is_ok_and(|located| located == path))
+            .then(|| Ok(name.to_owned()))
         })
-    }
-}
-
-#[pymethods]
-impl StateIterator {
-    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
-        slf
-    }
-
-    fn __next__(mut slf: PyRefMut<'_, Self>) -> Result<Option<String>, Error> {
-        slf.next().transpose()
     }
 }

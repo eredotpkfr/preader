@@ -1,28 +1,15 @@
 import string
 
 TEST_STATE_NAME = "job-1"
+TEST_OTHER_STATE_NAME = "job-2"
+TEST_SUB_STATE_NAME = "sub"
+TEST_MISSING_STATE_NAME = "job-missing"
+TEST_NESTED_STATE_NAME = "sub-1/sub-2/job-1"
+TEST_DEEP_STATE_NAME = "sub-1/sub-2/sub-3/sub-4/job-1"
+TEST_EVERY_DEPTH = (TEST_STATE_NAME, TEST_NESTED_STATE_NAME, TEST_DEEP_STATE_NAME)
+TEST_STATE_FILE_EXTENSION = ".state.json"
+TEST_STATE_FILE = f"{TEST_STATE_NAME}{TEST_STATE_FILE_EXTENSION}"
 TEST_DEFAULT_DELIMITER = ","
-TEST_UNSAFE_STATE_NAMES = {
-    "../../etc/passwd": "path escapes root",
-    "/tmp": "path escapes root",
-    "": "path must not be empty",
-    ".": "path must not be empty",
-}
-TEST_UNSAFE_STATE_NAME_IDS = ("traversal", "absolute", "empty", "current_dir")
-TEST_WINDOWS_UNSAFE_STATE_NAMES = (
-    "C:\\job-1",
-    "C:job-1",
-    "\\job-1",
-    "\\\\server\\share\\job-1",
-    "\\\\?\\C:\\job-1",
-    "..\\..\\etc\\passwd",
-)
-TEST_WINDOWS_UNSAFE_STATE_NAME_IDS = (
-    "drive_absolute",
-    "drive_relative",
-    "root_relative",
-    "unc_share",
-    "verbatim_drive",
-    "backslash_traversal",
-)
 TEST_ALPHABET = string.ascii_lowercase.encode()
+TEST_WINDOW = 4096
+TEST_LARGE_COPIES = 2560

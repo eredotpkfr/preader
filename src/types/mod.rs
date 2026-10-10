@@ -1,8 +1,9 @@
-pub(crate) mod checksum;
+pub mod checksum;
 pub mod config;
-pub(crate) mod core;
+pub mod core;
 pub mod file;
 pub mod options;
+pub mod progress;
 pub mod state;
 pub mod time;
 pub mod window;

@@ -1,33 +1,33 @@
 use std::{
-    fs, io,
+    fs,
     path::{Path, PathBuf},
-    time::UNIX_EPOCH,
 };
 
-use anyhow::anyhow;
-use derive_more::{Deref, DerefMut};
-use pyo3::prelude::*;
+use chrono::Utc;
+use derive_more::{Deref, Eq, PartialEq};
 use serde::{Deserialize, Serialize};
 use serde_json::to_string_pretty;
 
 use crate::{
-    Config, Error, StateManager,
+    Mismatch, Result,
+    macros::ensure,
+    manager::StateManager,
     types::{checksum::ChecksumBody, file::FileMetadata, time::Timestamps},
-    utils::file::fingerprint,
 };
 
-pub(crate) const RESYNC_HINT: &str = "(call state.resync(file) if this is expected)";
-
-#[pyclass(module = "preader", from_py_object)]
-#[derive(Clone, Deref, DerefMut)]
+#[cfg_attr(
+    feature = "python",
+    pyo3::pyclass(module = "preader", eq, from_py_object)
+)]
+#[derive(Clone, Debug, Deref, Eq, PartialEq)]
 pub struct State {
     #[deref]
-    #[deref_mut]
     pub(crate) data: StateData,
-    pub manager: StateManager,
+    #[partial_eq(skip)]
+    pub(crate) manager: StateManager,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct StateData {
     pub name: String,
     pub file: FileMetadata,
@@ -37,169 +37,103 @@ pub struct StateData {
     pub checksum: String,
 }
 
-impl From<(StateData, StateManager)> for State {
-    fn from((data, manager): (StateData, StateManager)) -> Self {
-        Self { data, manager }
-    }
-}
-
 impl State {
-    pub(crate) fn new(config: &Config, path: &Path, name: String) -> Result<Self, Error> {
-        let file = FileMetadata::try_from(path)?;
-        let position = 0;
-        let timestamps = Timestamps::now();
-        let manager = StateManager::from(config);
-        let checksum = ChecksumBody {
-            name: &name,
-            file: &file,
-            position,
-            timestamps: &timestamps,
-        }
-        .compute()?;
-        let data = StateData {
+    pub(crate) fn new(manager: StateManager, path: &Path, name: String) -> Result<Self> {
+        let mut data = StateData {
             name,
-            file,
-            position,
-            timestamps,
-            checksum,
+            file: FileMetadata::try_from(path)?,
+            position: 0,
+            timestamps: Timestamps::now(),
+            checksum: String::new(),
         };
+
+        data.checksum = ChecksumBody::from(&data).compute()?;
 
         Ok(Self { data, manager })
     }
 
-    pub(crate) fn advance(&mut self, bytes: u64) {
-        self.position += bytes
-    }
-
-    pub(crate) fn refresh(mut self) -> Result<Self, Error> {
-        self.timestamps.updated_at = chrono::Utc::now();
-        self.checksum = self.checksum()?;
-
-        Ok(self)
-    }
-
-    fn commit(&self, tmp: &Path, path: &Path, serialized: &str) -> Result<(), Error> {
-        fs::write(tmp, serialized)
-            .and_then(|()| fs::rename(tmp, path))
-            .inspect_err(|_| drop(fs::remove_file(tmp)))?;
-
-        Ok(())
-    }
-}
-
-#[pymethods]
-impl State {
-    #[getter]
-    fn name(&self) -> String {
-        self.name.clone()
-    }
-
-    #[getter]
-    fn file(&self) -> FileMetadata {
-        self.file.clone()
-    }
-
-    #[getter]
-    fn position(&self) -> u64 {
-        self.position
-    }
-
-    #[getter]
-    fn timestamps(&self) -> Timestamps {
-        self.timestamps.clone()
-    }
-
-    fn path(&self) -> Result<PathBuf, Error> {
+    pub fn path(&self) -> Result<PathBuf> {
         self.manager.path(&self.name)
     }
 
-    fn checksum(&self) -> Result<String, Error> {
-        ChecksumBody::from(self).compute()
+    pub fn checksum(&self) -> Result<String> {
+        ChecksumBody::from(&self.data).compute()
     }
 
     pub fn percent(&self) -> f64 {
         self.position as f64 * 100.0 / self.file.size.max(1) as f64
     }
 
-    pub fn save(&mut self) -> Result<PathBuf, Error> {
-        let path = self.path()?;
-        let tmp = self.manager.tmp(&self.name)?;
+    pub fn verify(&self) -> Result<()> {
+        ensure!(self.checksum()? == self.checksum, Mismatch::Checksum);
 
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
-        }
+        let current = FileMetadata::try_from(self.file.path.as_path())?;
 
-        let refreshed = self.clone().refresh()?;
-        let serialized = to_string_pretty(&refreshed.data)?;
+        self.file.compare(&current)
+    }
 
-        self.commit(&tmp, &path, &serialized)?;
+    pub fn save(&mut self) -> Result<PathBuf> {
+        let refreshed = self.refresh(None)?;
+        let path = self.commit(&refreshed)?;
 
-        self.manager.last_saved_position = refreshed.position;
-        self.data = refreshed.data;
+        self.data = refreshed;
 
         Ok(path)
     }
 
-    pub fn verify(&self) -> Result<(), Error> {
-        let computed = self.checksum()?;
-        let metadata = fs::metadata(&self.file.path)?;
-        let current_mtime = metadata
-            .modified()
-            .and_then(|time| time.duration_since(UNIX_EPOCH).map_err(io::Error::other))?
-            .as_secs() as i64;
-        let saved_mtime = self.file.mtime.timestamp();
-        let current_fingerprint = fingerprint(&self.file.path)?;
+    pub fn resync(&self, path: impl AsRef<Path>) -> Result<Self> {
+        let path = dunce::canonicalize(path)?;
+        let data = self.refresh(Some(&path))?;
 
-        if computed != self.checksum {
-            return Err(Error::Message(anyhow!(
-                "state checksum mismatch (saved: {}, computed: {})",
-                self.checksum,
-                computed
-            )));
-        }
+        ensure!(
+            !self.manager.verify_state || self.file.matches(&path)?,
+            Mismatch::Identity
+        );
 
-        if self.file.size != metadata.len() {
-            return Err(Error::Message(anyhow!(
-                "file size mismatch (saved: {}, current: {}) {RESYNC_HINT}",
-                self.file.size,
-                metadata.len(),
-            )));
-        }
-
-        if saved_mtime != current_mtime {
-            return Err(Error::Message(anyhow!(
-                "file mtime mismatch (saved: {}, current: {}) {RESYNC_HINT}",
-                saved_mtime,
-                current_mtime,
-            )));
-        }
-
-        if self.file.fingerprint != current_fingerprint {
-            return Err(Error::Message(anyhow!(
-                "file fingerprint mismatch (saved: {}, current: {}) {RESYNC_HINT}",
-                self.file.fingerprint,
-                current_fingerprint,
-            )));
-        }
-
-        Ok(())
+        Ok(self.manager.state(data))
     }
 
-    pub fn resync(&self, path: PathBuf) -> Result<Self, Error> {
-        let path = path.canonicalize()?;
-        let file = FileMetadata::try_from(path.as_path())?;
-        let mut resynced = self.clone();
+    fn refresh(&self, file: Option<&Path>) -> Result<StateData> {
+        let mut data = self.data.clone();
 
-        resynced.file = file;
-        resynced.refresh()
+        if let Some(path) = file {
+            data.file = FileMetadata::try_from(path)?;
+
+            if self.manager.verify_state {
+                data.position = data.position.min(data.file.size);
+            }
+        }
+
+        data.timestamps.updated_at = Utc::now();
+        data.checksum = ChecksumBody::from(&data).compute()?;
+
+        Ok(data)
     }
 
-    pub fn __repr__(&self) -> String {
-        crate::macros::pyrepr!("State" {
-            name = format!("'{}'", self.name),
-            file = self.file.__repr__(),
-            position = self.position,
-            timestamps = self.timestamps.__repr__(),
-        })
+    pub(crate) fn advance(&mut self, bytes: u64) {
+        self.data.position += bytes;
+    }
+
+    pub(crate) fn seek(mut self, position: u64) -> Self {
+        self.data.position = position;
+        self
+    }
+
+    pub(crate) fn for_file(self, file: &Path) -> Result<Self> {
+        ensure!(self.file.path == file, Mismatch::Path);
+
+        Ok(self)
+    }
+
+    fn commit(&self, data: &StateData) -> Result<PathBuf> {
+        let (path, tmp) = (self.path()?, self.manager.tmp(&self.name)?);
+
+        path.parent().map(fs::create_dir_all).transpose()?;
+
+        fs::write(&tmp, to_string_pretty(data)?)
+            .and_then(|()| fs::rename(&tmp, &path))
+            .inspect_err(|_| drop(fs::remove_file(&tmp)))?;
+
+        Ok(path)
     }
 }

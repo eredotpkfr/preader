@@ -40,12 +40,12 @@ jobs:
         run: uv sync --locked
 
       - name: Generate code coverage
-        run: make coverage-lcov
+        run: make coverage-codecov
 
       - name: Upload coverage report to Codecov
         uses: codecov/codecov-action@v7
         if: ${{ !startsWith(github.head_ref, 'dependabot') }}
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: lcov.info
+          files: codecov.json
           fail_ci_if_error: true

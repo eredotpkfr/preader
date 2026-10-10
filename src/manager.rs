@@ -3,78 +3,97 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::anyhow;
 use chrono::Utc;
 use sha2::{Digest, Sha256};
 
 use crate::{
-    Error, State,
-    types::{
-        config::{manager::StateManagerConfig, reader::Config},
-        state::StateData,
-    },
-    utils::path::{has_no_symlinks, path_stem, scoped_join},
+    Error, Mismatch, NameError, Result, State, StateData,
+    constants::{STATE_FILE_EXTENSION, TMP_FILE_EXTENSION},
+    macros::ensure,
+    types::config::Config,
+    utils::path::{resolves_in_place, scoped_join},
 };
 
-pub const STATE_FILE_SUFFIX: &str = "state.json";
-pub const TMP_STATE_FILE_SUFFIX: &str = "tmp";
+// STATE_FILE_EXTENSION past its leading dot, since add_extension inserts the dot itself
+const STATE_FILE_EXTENSION_WITHOUT_DOT: &str = STATE_FILE_EXTENSION.split_at(1).1;
 
-#[derive(Clone, Default)]
+#[derive(Clone, Debug)]
 pub struct StateManager {
-    pub config: StateManagerConfig,
-    pub last_saved_position: u64,
+    pub(crate) state_dir: PathBuf,
+    pub(crate) verify_state: bool,
+    pub(crate) auto_load_state: bool,
+}
+
+impl Default for StateManager {
+    fn default() -> Self {
+        Self::from(&Config::default())
+    }
 }
 
 impl From<&Config> for StateManager {
     fn from(config: &Config) -> Self {
         Self {
-            config: config.into(),
-            last_saved_position: 0,
+            state_dir: config.state_dir.clone(),
+            verify_state: config.verify_state,
+            auto_load_state: config.auto_load_state,
         }
     }
 }
 
 impl StateManager {
-    pub fn name(&self, file: &Path) -> String {
+    pub fn autoname(&self, file: &Path) -> String {
         hex::encode(Sha256::digest(file.as_os_str().as_encoded_bytes()))
     }
 
-    pub fn path(&self, name: &str) -> Result<PathBuf, Error> {
-        let path = scoped_join(&self.config.state_dir, &path_stem(name, STATE_FILE_SUFFIX))?
-            .with_added_extension(STATE_FILE_SUFFIX);
-
-        has_no_symlinks(&self.config.state_dir, &path)
-            .then_some(path)
-            .ok_or_else(|| Error::Message(anyhow!("path escapes root: {name}")))
+    pub fn path(&self, name: &str) -> Result<PathBuf> {
+        self.locate(name, &[STATE_FILE_EXTENSION_WITHOUT_DOT])
     }
 
-    pub fn tmp(&self, name: &str) -> Result<PathBuf, Error> {
-        let stamp = Utc::now().timestamp_nanos_opt().unwrap_or(0);
-        let path = scoped_join(&self.config.state_dir, &path_stem(name, STATE_FILE_SUFFIX))?
-            .with_added_extension(stamp.to_string())
-            .with_added_extension(STATE_FILE_SUFFIX)
-            .with_added_extension(TMP_STATE_FILE_SUFFIX);
+    pub fn tmp(&self, name: &str) -> Result<PathBuf> {
+        let stamp = Utc::now().timestamp_nanos_opt().unwrap_or(0).to_string();
+        let extensions = &[&stamp, STATE_FILE_EXTENSION_WITHOUT_DOT, TMP_FILE_EXTENSION];
 
-        has_no_symlinks(&self.config.state_dir, &path)
-            .then_some(path)
-            .ok_or_else(|| Error::Message(anyhow!("path escapes root: {name}")))
+        self.locate(name, extensions)
     }
 
-    pub fn load(&self, name: &str) -> Result<State, Error> {
+    pub fn state(&self, data: StateData) -> State {
+        State {
+            data,
+            manager: self.clone(),
+        }
+    }
+
+    pub fn load(&self, name: &str) -> Result<State> {
         let path = self.path(name)?;
 
-        if !path.is_file() {
-            return Err(Error::Message(anyhow!("state not found: {name}")));
-        }
+        ensure!(path.is_file(), Error::NotFound(name.to_owned()));
 
-        let content = fs::read_to_string(&path)?;
-        let data: StateData = serde_json::from_str(&content)?;
-        let state = State::from((data, self.clone()));
+        let data: StateData =
+            serde_json::from_slice(&fs::read(&path)?).map_err(|error| Error::Corrupt {
+                name: name.to_owned(),
+                error,
+            })?;
 
-        if self.config.verify_state {
+        ensure!(data.name == name, Mismatch::Name { saved: data.name });
+
+        let state = self.state(data);
+
+        if self.verify_state {
             state.verify()?;
         }
 
         Ok(state)
+    }
+
+    fn locate(&self, name: &str, extensions: &[&str]) -> Result<PathBuf> {
+        let mut path = scoped_join(&self.state_dir, name)?;
+
+        for extension in extensions {
+            path.add_extension(extension);
+        }
+
+        ensure!(resolves_in_place(&self.state_dir, &path), NameError::Alias);
+
+        Ok(path)
     }
 }

@@ -1,24 +1,75 @@
+import contextlib
+import ctypes
 import json
 import os
+import re
+import sys
+
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
 
 import pytest
-from constants import (
-    TEST_STATE_NAME,
-    TEST_UNSAFE_STATE_NAME_IDS,
-    TEST_UNSAFE_STATE_NAMES,
-    TEST_WINDOWS_UNSAFE_STATE_NAME_IDS,
-    TEST_WINDOWS_UNSAFE_STATE_NAMES,
+
+from cases import (
+    DEVICE_STATE_NAMES,
+    FOREIGN_STATE_FILES,
+    INVALID_STATE_NAME_ERRORS,
+    INVALID_STATE_NAMES,
+    NON_STATE_FILES,
+    UNADDRESSABLE_FILES,
+    UNPORTABLE_CHARACTERS,
+    UNREPRESENTABLE_FILES,
+    VALID_STATE_NAMES,
+    WINDOWS_INVALID_STATE_NAMES,
 )
-from preader import Config, PReader, StateError
+from constants import (
+    TEST_DEEP_STATE_NAME,
+    TEST_EVERY_DEPTH,
+    TEST_MISSING_STATE_NAME,
+    TEST_NESTED_STATE_NAME,
+    TEST_OTHER_STATE_NAME,
+    TEST_STATE_FILE,
+    TEST_STATE_FILE_EXTENSION,
+    TEST_STATE_NAME,
+    TEST_SUB_STATE_NAME,
+)
+from preader import Config, PReader, StateError, StateMismatchError, StateRegistry
 
-MISSING_STATE_NAME = "job-missing"
-OTHER_STATE_NAME = "job-2"
-NESTED_STATE_NAME = os.path.join("sub-1", "sub-2", "job-1")
-DEEP_STATE_NAME = os.path.join("sub-1", "sub-2", "sub-3", "sub-4", "job-1")
-EVERY_DEPTH = (TEST_STATE_NAME, NESTED_STATE_NAME, DEEP_STATE_NAME)
+
+def test_state_dir_matches_the_config(config: Config, registry: StateRegistry) -> None:
+    assert registry.state_dir == config.state_dir
 
 
-def test_len(reader, registry, tmp_file):
+def test_state_registry_repr(
+    registry: StateRegistry, expected_repr: Callable[..., str]
+) -> None:
+    assert repr(registry) == expected_repr(
+        "StateRegistry", state_dir=f"'{registry.state_dir}'"
+    )
+
+
+@pytest.mark.parametrize(
+    ("pattern", "expected_pattern"),
+    [(None, "None"), (TEST_STATE_NAME, f"'{TEST_STATE_NAME}'")],
+    ids=["without_a_pattern", "with_a_pattern"],
+)
+def test_state_iterator_repr(
+    registry: StateRegistry,
+    expected_repr: Callable[..., str],
+    pattern: str | None,
+    expected_pattern: str,
+) -> None:
+    iterator = registry.search(pattern) if pattern else registry.names()
+
+    assert repr(iterator) == expected_repr(
+        "StateIterator", state_dir=f"'{registry.state_dir}'", pattern=expected_pattern
+    )
+
+
+def test_len_counts_the_saved_states(
+    reader: PReader, registry: StateRegistry, tmp_file: Path
+) -> None:
     assert len(registry) == 0
 
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
@@ -26,7 +77,9 @@ def test_len(reader, registry, tmp_file):
     assert len(registry) == 1
 
 
-def test_contains(reader, registry, tmp_file):
+def test_contains_reports_only_saved_states(
+    reader: PReader, registry: StateRegistry, tmp_file: Path
+) -> None:
     assert TEST_STATE_NAME not in registry
 
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
@@ -34,34 +87,38 @@ def test_contains(reader, registry, tmp_file):
     assert TEST_STATE_NAME in registry
 
 
-@pytest.mark.parametrize(
-    "name", TEST_UNSAFE_STATE_NAMES, ids=TEST_UNSAFE_STATE_NAME_IDS
-)
-def test_contains_returns_false_when_name_is_unsafe(registry, name):
+@pytest.mark.parametrize("name", INVALID_STATE_NAMES)
+def test_contains_excludes_an_invalid_name(registry: StateRegistry, name: str) -> None:
     assert name not in registry
 
 
-def test_names(reader, registry, tmp_file):
+def test_names_lists_every_saved_state(
+    reader: PReader, registry: StateRegistry, tmp_file: Path
+) -> None:
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
-    reader.bytes(tmp_file, state=OTHER_STATE_NAME).state.save()
+    reader.bytes(tmp_file, state=TEST_OTHER_STATE_NAME).state.save()
 
-    assert set(registry.names()) == {TEST_STATE_NAME, OTHER_STATE_NAME}
+    assert set(registry.names()) == {TEST_STATE_NAME, TEST_OTHER_STATE_NAME}
 
 
-def test_iter(reader, registry, tmp_file):
+def test_iter_yields_every_saved_state(
+    reader: PReader, registry: StateRegistry, tmp_file: Path
+) -> None:
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
-    reader.bytes(tmp_file, state=OTHER_STATE_NAME).state.save()
+    reader.bytes(tmp_file, state=TEST_OTHER_STATE_NAME).state.save()
 
-    assert set(registry) == {TEST_STATE_NAME, OTHER_STATE_NAME}
+    assert set(registry) == {TEST_STATE_NAME, TEST_OTHER_STATE_NAME}
 
 
-def test_iter_survives_a_midway_delete(reader, registry, tmp_file):
+def test_iter_survives_a_midway_delete(
+    reader: PReader, registry: StateRegistry, tmp_file: Path
+) -> None:
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
-    reader.bytes(tmp_file, state=OTHER_STATE_NAME).state.save()
+    reader.bytes(tmp_file, state=TEST_OTHER_STATE_NAME).state.save()
 
     iterator = iter(registry)
     first = next(iterator)
-    deleted = OTHER_STATE_NAME if first == TEST_STATE_NAME else TEST_STATE_NAME
+    deleted = TEST_OTHER_STATE_NAME if first == TEST_STATE_NAME else TEST_STATE_NAME
 
     registry.delete(deleted)
 
@@ -78,7 +135,9 @@ def test_iter_survives_a_midway_delete(reader, registry, tmp_file):
     ],
     ids=["getitem", "load", "find"],
 )
-def test_lookups_return_the_saved_state(reader, registry, tmp_file, lookup):
+def test_lookup_returns_the_saved_state(
+    reader: PReader, registry: StateRegistry, tmp_file: Path, lookup: Callable[..., Any]
+) -> None:
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
 
     state = lookup(registry)
@@ -88,62 +147,68 @@ def test_lookups_return_the_saved_state(reader, registry, tmp_file, lookup):
     assert state.file.path == tmp_file
 
 
-def test_getitem_accepts_an_already_suffixed_name(reader, registry, tmp_file):
+def test_getitem_raises_when_the_name_is_suffixed(
+    reader: PReader, registry: StateRegistry, tmp_file: Path
+) -> None:
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
 
-    state = registry[f"{TEST_STATE_NAME}.state.json"]
-
-    assert state.name == TEST_STATE_NAME
-    assert state.file.path == tmp_file
+    with pytest.raises(KeyError, match=TEST_STATE_FILE):
+        registry[TEST_STATE_FILE]
 
 
 @pytest.mark.parametrize(
     "lookup",
     [
-        lambda registry: registry[MISSING_STATE_NAME],
-        lambda registry: registry.load(MISSING_STATE_NAME),
-        lambda registry: registry.__delitem__(MISSING_STATE_NAME),
-        lambda registry: registry.delete(MISSING_STATE_NAME),
+        lambda registry: registry[TEST_MISSING_STATE_NAME],
+        lambda registry: registry.load(TEST_MISSING_STATE_NAME),
+        lambda registry: registry.__delitem__(TEST_MISSING_STATE_NAME),
+        lambda registry: registry.delete(TEST_MISSING_STATE_NAME),
     ],
     ids=["getitem", "load", "delitem", "delete"],
 )
-def test_lookups_raise_when_missing(registry, lookup):
+def test_lookup_raises_when_the_state_is_missing(
+    registry: StateRegistry, lookup: Callable[..., Any]
+) -> None:
     with pytest.raises(KeyError):
         lookup(registry)
 
 
-@pytest.mark.parametrize(
-    "name", TEST_UNSAFE_STATE_NAMES, ids=TEST_UNSAFE_STATE_NAME_IDS
-)
-def test_getitem_raises_when_name_is_unsafe(registry, name):
-    with pytest.raises(KeyError):
+@pytest.mark.parametrize(("name", "message"), INVALID_STATE_NAME_ERRORS)
+def test_getitem_raises_when_the_name_is_invalid(
+    registry: StateRegistry, name: str, message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
         registry[name]
 
 
-def test_getitem_raises_when_state_is_a_directory(registry):
+def test_getitem_raises_when_the_state_is_a_directory(registry: StateRegistry) -> None:
     registry.path(TEST_STATE_NAME).mkdir(parents=True)
 
-    with pytest.raises(StateError, match="state not found"):
+    with pytest.raises(KeyError, match=TEST_STATE_NAME):
         registry[TEST_STATE_NAME]
 
 
-def test_delete_raises_when_state_is_a_directory(registry, config):
+def test_delitem_raises_when_the_state_is_a_directory(
+    registry: StateRegistry, config: Config
+) -> None:
     config.state_dir.mkdir(parents=True, exist_ok=True)
-    (config.state_dir / f"{TEST_STATE_NAME}.state.json").mkdir()
+    (config.state_dir / TEST_STATE_FILE).mkdir()
 
-    with pytest.raises(StateError, match="io failed"):
+    with pytest.raises((IsADirectoryError, PermissionError)):
         del registry[TEST_STATE_NAME]
 
 
-def test_getitem_ignores_unknown_fields(make_reader, tmp_file):
+def test_getitem_ignores_unknown_fields(
+    make_reader: Callable[..., PReader], tmp_file: Path
+) -> None:
     reader = make_reader(verify_state=False)
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
 
     path = reader.states.path(TEST_STATE_NAME)
-    payload = json.loads(path.read_text())
+    payload = json.loads(path.read_text(encoding="utf-8"))
 
     payload["foo"] = 42
-    path.write_text(json.dumps(payload))
+    path.write_text(json.dumps(payload), encoding="utf-8")
 
     state = reader.states[TEST_STATE_NAME]
 
@@ -151,33 +216,40 @@ def test_getitem_ignores_unknown_fields(make_reader, tmp_file):
     assert state.file.path == tmp_file
 
 
-@pytest.mark.parametrize(
-    "name",
-    ["README.md", f"{TEST_STATE_NAME}.state.json.tmp"],
-    ids=["unrelated_file", "temp_state_file"],
-)
-def test_names_ignores_non_state_files(reader, registry, tmp_file, name):
+@pytest.mark.parametrize("name", NON_STATE_FILES)
+def test_names_ignores_a_non_state_file(
+    reader: PReader, registry: StateRegistry, tmp_file: Path, name: str
+) -> None:
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
-    registry.path(TEST_STATE_NAME).parent.joinpath(name).write_text("not a state")
+    registry.path(TEST_STATE_NAME).parent.joinpath(name).write_text(
+        "not a state", encoding="utf-8"
+    )
 
     assert set(registry.names()) == {TEST_STATE_NAME}
     assert len(registry) == 1
 
 
 @pytest.mark.usefixtures("requires_non_utf8_names")
-def test_names_ignores_a_non_utf8_state(reader, registry, config, tmp_file):
+def test_names_ignores_a_non_utf8_state(
+    reader: PReader, registry: StateRegistry, config: Config, tmp_file: Path
+) -> None:
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
 
-    (config.state_dir / os.fsdecode(b"ghost-\xff.state.json")).write_text("{}")
+    (config.state_dir / os.fsdecode(b"ghost-\xff.state.json")).write_text(
+        "{}", encoding="utf-8"
+    )
 
     assert list(registry.names()) == [TEST_STATE_NAME]
 
 
-def test_clear_keeps_non_state_files(reader, registry, tmp_file):
+@pytest.mark.parametrize("name", NON_STATE_FILES)
+def test_clear_keeps_a_non_state_file(
+    reader: PReader, registry: StateRegistry, tmp_file: Path, name: str
+) -> None:
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
 
-    unrelated = registry.path(TEST_STATE_NAME).parent / "README.md"
-    unrelated.write_text("not a state")
+    unrelated = registry.path(TEST_STATE_NAME).parent / name
+    unrelated.write_text("not a state", encoding="utf-8")
 
     registry.clear()
 
@@ -185,20 +257,32 @@ def test_clear_keeps_non_state_files(reader, registry, tmp_file):
     assert unrelated.exists()
 
 
-@pytest.mark.parametrize("state", EVERY_DEPTH, ids=["flat", "nested", "deep"])
-def test_save_creates_the_state_file_under_its_name(reader, config, tmp_file, state):
-    path = reader.bytes(tmp_file, state=state).state.save()
+@pytest.mark.parametrize("state", TEST_EVERY_DEPTH, ids=["flat", "nested", "deep"])
+def test_save_creates_the_state_file_under_its_name(
+    reader: PReader,
+    config: Config,
+    tmp_file: Path,
+    state: str,
+    read_state: Callable[..., Any],
+) -> None:
+    saved = reader.bytes(tmp_file, state=state).state
+    path = saved.save()
 
-    assert path == config.state_dir / f"{state}.state.json"
+    assert path == config.state_dir / f"{state}{TEST_STATE_FILE_EXTENSION}"
     assert path.is_file()
+    assert read_state(saved)
 
 
-def test_forward_slashes_resolve_to_the_native_name(reader, registry, tmp_file):
-    saved = reader.bytes(tmp_file, state="sub-1/sub-2/job-1").state
-    saved.save()
+def test_lookup_raises_when_the_name_is_a_path(
+    reader: PReader, registry: StateRegistry, tmp_file: Path
+) -> None:
+    name = Path(TEST_NESTED_STATE_NAME)
 
-    assert saved.name == NESTED_STATE_NAME
-    assert list(registry.names()) == [NESTED_STATE_NAME]
+    with pytest.raises(TypeError, match="state must be None"):
+        reader.bytes(tmp_file, state=name)  # type: ignore[arg-type]
+
+    with pytest.raises(TypeError, match="not an instance of 'str'"):
+        registry[name]  # type: ignore[index]
 
 
 @pytest.mark.parametrize(
@@ -206,38 +290,36 @@ def test_forward_slashes_resolve_to_the_native_name(reader, registry, tmp_file):
     ["job-1/.state.json", "sub/.state.json", "job-1/.state.json/.state.json"],
     ids=["flat", "nested", "repeated"],
 )
-def test_save_raises_when_the_name_reduces_to_nothing(reader, tmp_file, state):
-    with pytest.raises(StateError, match="path must not be empty"):
-        reader.bytes(tmp_file, state=state).state.save()
+def test_suffix_shaped_component_round_trips_through_names(
+    reader: PReader, registry: StateRegistry, config: Config, tmp_file: Path, state: str
+) -> None:
+    path = reader.bytes(tmp_file, state=state).state.save()
 
-
-def test_save_keeps_a_suffix_shaped_directory_in_the_name(
-    reader, registry, config, tmp_file
-):
-    name = os.path.join("sub-1", ".state.json", "sub-2", "job-1")
-
-    path = reader.bytes(tmp_file, state=f"{name}.state.json").state.save()
-
-    assert path == config.state_dir / f"{name}.state.json"
-    assert list(registry.names()) == [name]
-    assert registry[name].name == name
+    assert path == config.state_dir / f"{state}{TEST_STATE_FILE_EXTENSION}"
+    assert list(registry.names()) == [state]
 
 
 @pytest.mark.usefixtures("requires_symlinks")
-def test_names_ignores_a_symlinked_state(reader, registry, config, tmp_file):
+def test_names_ignores_a_symlinked_state(
+    reader: PReader, registry: StateRegistry, config: Config, tmp_file: Path
+) -> None:
     real = reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
 
-    (config.state_dir / f"{OTHER_STATE_NAME}.state.json").symlink_to(real)
+    (
+        config.state_dir / f"{TEST_OTHER_STATE_NAME}{TEST_STATE_FILE_EXTENSION}"
+    ).symlink_to(real)
 
     assert list(registry.names()) == [TEST_STATE_NAME]
 
 
 @pytest.mark.usefixtures("requires_symlinks")
-def test_names_ignores_a_broken_symlink(reader, registry, config, tmp_file):
+def test_names_ignores_a_broken_symlink(
+    reader: PReader, registry: StateRegistry, config: Config, tmp_file: Path
+) -> None:
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
 
     (config.state_dir / "broken.state.json").symlink_to(
-        config.state_dir / "gone.state.json"
+        config.state_dir / "missing.state.json"
     )
 
     assert list(registry.names()) == [TEST_STATE_NAME]
@@ -246,124 +328,150 @@ def test_names_ignores_a_broken_symlink(reader, registry, config, tmp_file):
 
 @pytest.mark.usefixtures("requires_symlinks")
 def test_names_does_not_descend_into_a_symlinked_directory(
-    reader, registry, config, tmp_file
-):
+    make_reader: Callable[..., PReader],
+    registry: StateRegistry,
+    config: Config,
+    tmp_file: Path,
+) -> None:
     outside = config.state_dir.parent / "outside"
     outside.mkdir(parents=True)
 
-    reader = PReader(config=Config(state_dir=outside))
-    reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
+    make_reader(state_dir=outside).bytes(tmp_file, state=TEST_STATE_NAME).state.save()
 
     config.state_dir.mkdir(parents=True, exist_ok=True)
     (config.state_dir / "link").symlink_to(outside, target_is_directory=True)
 
     assert list(registry.names()) == []
-    assert os.path.join("link", TEST_STATE_NAME) not in registry
+    assert f"link/{TEST_STATE_NAME}" not in registry
 
 
 @pytest.mark.usefixtures("requires_symlinks")
 def test_save_raises_when_the_name_escapes_through_a_symlink(
-    reader, config, tmp_path, tmp_file
-):
+    reader: PReader, config: Config, tmp_path: Path, tmp_file: Path
+) -> None:
     outside = tmp_path / "outside"
     outside.mkdir(parents=True)
 
     config.state_dir.mkdir(parents=True, exist_ok=True)
     (config.state_dir / "link").symlink_to(outside, target_is_directory=True)
 
-    with pytest.raises(StateError, match="path escapes root"):
-        reader.bytes(tmp_file, state=os.path.join("link", TEST_STATE_NAME)).state.save()
+    with pytest.raises(StateError, match="is an alias of another entry"):
+        reader.bytes(tmp_file, state=f"link/{TEST_STATE_NAME}").state.save()
 
     assert not list(outside.iterdir())
 
 
 @pytest.mark.usefixtures("requires_symlinks")
-def test_delete_raises_when_the_name_escapes_through_a_symlink(
-    registry, config, tmp_path
-):
+def test_delitem_raises_when_the_name_escapes_through_a_symlink(
+    registry: StateRegistry, config: Config, tmp_path: Path
+) -> None:
     outside = tmp_path / "outside"
     outside.mkdir(parents=True)
 
     config.state_dir.mkdir(parents=True, exist_ok=True)
     (config.state_dir / "link").symlink_to(outside, target_is_directory=True)
 
-    victim = outside / f"{TEST_STATE_NAME}.state.json"
-    victim.write_text("{}")
+    victim = outside / TEST_STATE_FILE
+    victim.write_text("{}", encoding="utf-8")
 
-    with pytest.raises(KeyError):
-        del registry[os.path.join("link", TEST_STATE_NAME)]
+    with pytest.raises(StateError, match="is an alias of another entry"):
+        del registry[f"link/{TEST_STATE_NAME}"]
 
     assert victim.is_file()
 
 
 @pytest.mark.usefixtures("requires_symlinks")
-def test_getitem_raises_when_the_state_is_a_symlink(reader, registry, config, tmp_file):
+def test_getitem_raises_when_the_state_is_a_symlink(
+    reader: PReader, registry: StateRegistry, config: Config, tmp_file: Path
+) -> None:
     real = reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
 
-    (config.state_dir / f"{OTHER_STATE_NAME}.state.json").symlink_to(real)
+    (
+        config.state_dir / f"{TEST_OTHER_STATE_NAME}{TEST_STATE_FILE_EXTENSION}"
+    ).symlink_to(real)
 
-    with pytest.raises(KeyError):
-        registry[OTHER_STATE_NAME]
+    with pytest.raises(StateError, match="is an alias of another entry"):
+        registry[TEST_OTHER_STATE_NAME]
 
 
 @pytest.mark.usefixtures("requires_symlinks")
 def test_names_ignores_a_symlink_that_leaves_the_state_dir(
-    reader, registry, config, tmp_path, tmp_file
-):
+    reader: PReader,
+    make_reader: Callable[..., PReader],
+    registry: StateRegistry,
+    config: Config,
+    tmp_path: Path,
+    tmp_file: Path,
+) -> None:
     outside = tmp_path / "outside"
     outside.mkdir(parents=True)
 
     target = (
-        PReader(config=Config(state_dir=outside))
+        make_reader(state_dir=outside)
         .bytes(tmp_file, state=TEST_STATE_NAME)
         .state.save()
     )
 
-    reader.bytes(tmp_file, state=OTHER_STATE_NAME).state.save()
+    reader.bytes(tmp_file, state=TEST_OTHER_STATE_NAME).state.save()
     (config.state_dir / "evil.state.json").symlink_to(target)
 
-    assert list(registry.names()) == [OTHER_STATE_NAME]
+    assert list(registry.names()) == [TEST_OTHER_STATE_NAME]
     assert "evil" not in registry
 
 
-def test_names_lists_states_at_every_depth(reader, registry, tmp_file):
-    for state in EVERY_DEPTH:
+def test_names_lists_states_at_every_depth(
+    reader: PReader, registry: StateRegistry, tmp_file: Path
+) -> None:
+    for state in TEST_EVERY_DEPTH:
         reader.bytes(tmp_file, state=state).state.save()
 
-    assert sorted(registry.names()) == sorted(EVERY_DEPTH)
-    assert len(registry) == len(EVERY_DEPTH)
+    assert sorted(registry.names()) == sorted(TEST_EVERY_DEPTH)
+    assert len(registry) == len(TEST_EVERY_DEPTH)
 
 
-def test_search_matches_states_at_every_depth(reader, registry, tmp_file):
-    for state in EVERY_DEPTH:
+def test_search_matches_states_at_every_depth(
+    reader: PReader, registry: StateRegistry, tmp_file: Path
+) -> None:
+    for state in TEST_EVERY_DEPTH:
         reader.bytes(tmp_file, state=state).state.save()
 
-    assert sorted(registry.search(TEST_STATE_NAME)) == sorted(EVERY_DEPTH)
+    assert sorted(registry.search(TEST_STATE_NAME)) == sorted(TEST_EVERY_DEPTH)
 
 
 @pytest.mark.parametrize(
-    "suffix", [".state.json", ".state.json.state.json"], ids=["once", "twice"]
+    "suffix",
+    [TEST_STATE_FILE_EXTENSION, TEST_STATE_FILE_EXTENSION * 2],
+    ids=["once", "twice"],
 )
-def test_getitem_finds_a_state_saved_with_a_suffix(reader, registry, tmp_file, suffix):
+def test_getitem_finds_a_state_saved_with_a_suffix(
+    reader: PReader, registry: StateRegistry, tmp_file: Path, suffix: str
+) -> None:
     reader.bytes(tmp_file, state=f"{TEST_STATE_NAME}{suffix}").state.save()
 
-    assert registry[f"{TEST_STATE_NAME}{suffix}"].name == TEST_STATE_NAME
+    assert registry[f"{TEST_STATE_NAME}{suffix}"].name == f"{TEST_STATE_NAME}{suffix}"
 
 
-def test_names_match_the_state_names(reader, registry, tmp_file):
-    reader.bytes(tmp_file, state=f"{TEST_STATE_NAME}.state.json").state.save()
-    reader.bytes(tmp_file, state=f"{NESTED_STATE_NAME}.state.json").state.save()
-    reader.bytes(tmp_file, state=f"{DEEP_STATE_NAME}.state.json").state.save()
+def test_names_matches_the_state_names(
+    reader: PReader, registry: StateRegistry, tmp_file: Path
+) -> None:
+    nested = f"{TEST_NESTED_STATE_NAME}{TEST_STATE_FILE_EXTENSION}"
+    deep = f"{TEST_DEEP_STATE_NAME}{TEST_STATE_FILE_EXTENSION}"
+
+    reader.bytes(tmp_file, state=TEST_STATE_FILE).state.save()
+    reader.bytes(tmp_file, state=nested).state.save()
+    reader.bytes(tmp_file, state=deep).state.save()
 
     assert {name: registry[name].name for name in registry.names()} == {
-        TEST_STATE_NAME: TEST_STATE_NAME,
-        NESTED_STATE_NAME: NESTED_STATE_NAME,
-        DEEP_STATE_NAME: DEEP_STATE_NAME,
+        TEST_STATE_FILE: TEST_STATE_FILE,
+        nested: nested,
+        deep: deep,
     }
 
 
-def test_clear_removes_states_at_every_depth(reader, registry, config, tmp_file):
-    for state in EVERY_DEPTH:
+def test_clear_removes_states_at_every_depth(
+    reader: PReader, registry: StateRegistry, config: Config, tmp_file: Path
+) -> None:
+    for state in TEST_EVERY_DEPTH:
         reader.bytes(tmp_file, state=state).state.save()
 
     registry.clear()
@@ -372,32 +480,38 @@ def test_clear_removes_states_at_every_depth(reader, registry, config, tmp_file)
     assert not list(config.state_dir.rglob("*.state.json"))
 
 
-def test_search_returns_nothing_without_a_match(reader, registry, tmp_file):
+def test_search_returns_nothing_without_a_match(
+    reader: PReader, registry: StateRegistry, tmp_file: Path
+) -> None:
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
 
     assert list(registry.search("no-such-name")) == []
 
 
-def test_find_returns_none_when_missing(registry):
-    assert registry.find("missing") is None
+def test_find_returns_none_when_the_state_is_missing(registry: StateRegistry) -> None:
+    assert registry.find(TEST_MISSING_STATE_NAME) is None
 
 
-@pytest.mark.parametrize(
-    "name", TEST_UNSAFE_STATE_NAMES, ids=TEST_UNSAFE_STATE_NAME_IDS
-)
-def test_find_returns_none_when_name_is_unsafe(registry, name):
+@pytest.mark.parametrize("name", INVALID_STATE_NAMES)
+def test_find_returns_none_when_the_name_is_invalid(
+    registry: StateRegistry, name: str
+) -> None:
     assert registry.find(name) is None
 
 
-def test_find_raises_when_state_is_corrupted(registry, reader, tmp_file):
+def test_find_returns_none_when_the_state_is_corrupt(
+    registry: StateRegistry, reader: PReader, tmp_file: Path
+) -> None:
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
-    registry.path(TEST_STATE_NAME).write_text("not valid json")
+    registry.path(TEST_STATE_NAME).write_text("not valid json", encoding="utf-8")
 
-    with pytest.raises(StateError, match="line 1 column"):
-        registry.find(TEST_STATE_NAME)
+    assert registry.exists(TEST_STATE_NAME)
+    assert registry.find(TEST_STATE_NAME) is None
 
 
-def test_search_filters_by_pattern(reader, registry, tmp_file):
+def test_search_filters_by_pattern(
+    reader: PReader, registry: StateRegistry, tmp_file: Path
+) -> None:
     reader.bytes(tmp_file, state="foo-1").state.save()
     reader.bytes(tmp_file, state="foo-2").state.save()
     reader.bytes(tmp_file, state="bar-1").state.save()
@@ -405,7 +519,9 @@ def test_search_filters_by_pattern(reader, registry, tmp_file):
     assert set(registry.search("^foo")) == {"foo-1", "foo-2"}
 
 
-def test_delitem_removes_saved_state(reader, registry, tmp_file):
+def test_delitem_removes_the_saved_state(
+    reader: PReader, registry: StateRegistry, tmp_file: Path
+) -> None:
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
 
     del registry[TEST_STATE_NAME]
@@ -413,54 +529,49 @@ def test_delitem_removes_saved_state(reader, registry, tmp_file):
     assert TEST_STATE_NAME not in registry
 
 
-@pytest.mark.parametrize(
-    "name", TEST_UNSAFE_STATE_NAMES, ids=TEST_UNSAFE_STATE_NAME_IDS
-)
-def test_delitem_raises_when_name_is_unsafe(registry, name):
-    with pytest.raises(KeyError):
+@pytest.mark.parametrize(("name", "message"), INVALID_STATE_NAME_ERRORS)
+def test_delitem_raises_when_the_name_is_invalid(
+    registry: StateRegistry, name: str, message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
         del registry[name]
 
 
-def test_path_accepts_an_already_suffixed_name(registry):
-    assert registry.path(f"{TEST_STATE_NAME}.state.json") == registry.path(
-        TEST_STATE_NAME
+def test_path_appends_the_extension_once(
+    registry: StateRegistry, config: Config
+) -> None:
+    assert registry.path(TEST_STATE_FILE) == (
+        config.state_dir / f"{TEST_STATE_FILE}{TEST_STATE_FILE_EXTENSION}"
     )
 
 
-@pytest.mark.parametrize(
-    ("name", "message"), TEST_UNSAFE_STATE_NAMES.items(), ids=TEST_UNSAFE_STATE_NAME_IDS
-)
-def test_path_raises_when_name_is_unsafe(registry, name, message):
-    with pytest.raises(StateError, match=message):
+@pytest.mark.parametrize(("name", "message"), INVALID_STATE_NAME_ERRORS)
+def test_path_raises_when_the_name_is_invalid(
+    registry: StateRegistry, name: str, message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
         registry.path(name)
 
 
-@pytest.mark.skipif(
-    os.name != "nt", reason="Windows path syntax is only unsafe on Windows"
-)
-@pytest.mark.parametrize(
-    "name", TEST_WINDOWS_UNSAFE_STATE_NAMES, ids=TEST_WINDOWS_UNSAFE_STATE_NAME_IDS
-)
-def test_path_raises_when_a_windows_name_is_unsafe(registry, name):
-    with pytest.raises(StateError, match="path escapes root"):
-        registry.path(name)
-
-
-def test_all_returns_every_saved_state(reader, registry, tmp_file):
+def test_all_returns_every_saved_state(
+    reader: PReader, registry: StateRegistry, tmp_file: Path
+) -> None:
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
-    reader.bytes(tmp_file, state=OTHER_STATE_NAME).state.save()
+    reader.bytes(tmp_file, state=TEST_OTHER_STATE_NAME).state.save()
 
     states = {(state.name, state.position, state.file.path) for state in registry.all()}
 
     assert states == {
         (TEST_STATE_NAME, 0, tmp_file),
-        (OTHER_STATE_NAME, 0, tmp_file),
+        (TEST_OTHER_STATE_NAME, 0, tmp_file),
     }
 
 
-def test_clear_removes_saved_states(reader, registry, tmp_file):
+def test_clear_removes_every_saved_state(
+    reader: PReader, registry: StateRegistry, tmp_file: Path
+) -> None:
     state1 = reader.bytes(tmp_file, state=TEST_STATE_NAME).state
-    state2 = reader.bytes(tmp_file, state=OTHER_STATE_NAME).state
+    state2 = reader.bytes(tmp_file, state=TEST_OTHER_STATE_NAME).state
 
     state1.save()
     state2.save()
@@ -472,16 +583,20 @@ def test_clear_removes_saved_states(reader, registry, tmp_file):
     assert not state2.path().exists()
 
 
-def test_clear_removes_corrupted_states(reader, registry, tmp_file):
+def test_clear_removes_a_corrupt_state(
+    reader: PReader, registry: StateRegistry, tmp_file: Path
+) -> None:
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
-    registry.path(OTHER_STATE_NAME).write_text("not valid json")
+    registry.path(TEST_OTHER_STATE_NAME).write_text("not valid json", encoding="utf-8")
 
     registry.clear()
 
     assert len(registry) == 0
 
 
-def test_names_ignores_a_state_shaped_directory(reader, registry, tmp_file, config):
+def test_names_ignores_a_state_shaped_directory(
+    reader: PReader, registry: StateRegistry, tmp_file: Path, config: Config
+) -> None:
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
 
     (config.state_dir / "archive.state.json").mkdir()
@@ -491,7 +606,9 @@ def test_names_ignores_a_state_shaped_directory(reader, registry, tmp_file, conf
     assert [state.name for state in registry.all()] == [TEST_STATE_NAME]
 
 
-def test_clear_keeps_a_state_shaped_directory(reader, registry, tmp_file, config):
+def test_clear_keeps_a_state_shaped_directory(
+    reader: PReader, registry: StateRegistry, tmp_file: Path, config: Config
+) -> None:
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
 
     directory = config.state_dir / "archive.state.json"
@@ -503,10 +620,12 @@ def test_clear_keeps_a_state_shaped_directory(reader, registry, tmp_file, config
     assert directory.is_dir()
 
 
-def test_a_state_shaped_parent_does_not_hide_its_states(reader, registry, tmp_file):
+def test_state_shaped_parent_does_not_hide_its_states(
+    reader: PReader, registry: StateRegistry, tmp_file: Path
+) -> None:
     nested = reader.bytes(tmp_file, state="archive.state.json/job-1").state.save()
 
-    assert list(registry.names()) == ["archive.state.json/job-1".replace("/", os.sep)]
+    assert list(registry.names()) == ["archive.state.json/job-1"]
     assert len(registry) == 1
 
     registry.clear()
@@ -514,7 +633,9 @@ def test_a_state_shaped_parent_does_not_hide_its_states(reader, registry, tmp_fi
     assert not nested.exists()
 
 
-def test_registries_sharing_a_state_dir_see_each_other(reader, make_reader, tmp_file):
+def test_registries_sharing_a_state_dir_see_each_other(
+    reader: PReader, make_reader: Callable[..., PReader], tmp_file: Path
+) -> None:
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
     other = make_reader()
 
@@ -523,75 +644,107 @@ def test_registries_sharing_a_state_dir_see_each_other(reader, make_reader, tmp_
     assert TEST_STATE_NAME not in reader.states
 
 
-def test_getitem_returns_the_payload_name(make_reader, tmp_file):
+def test_getitem_raises_when_the_payload_names_another_state(
+    make_reader: Callable[..., PReader], tmp_file: Path
+) -> None:
     reader = make_reader(verify_state=False)
     state_path = reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
 
-    payload = json.loads(state_path.read_text())
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
     payload["name"] = "a-different-name"
 
-    state_path.write_text(json.dumps(payload))
+    state_path.write_text(json.dumps(payload), encoding="utf-8")
 
-    assert reader.states[TEST_STATE_NAME].name == "a-different-name"
+    with pytest.raises(StateMismatchError, match="state file belongs to"):
+        reader.states[TEST_STATE_NAME]
 
 
-def test_getitem_raises_when_a_field_has_the_wrong_type(make_reader, tmp_file):
+def test_getitem_raises_when_a_field_has_the_wrong_type(
+    make_reader: Callable[..., PReader], tmp_file: Path
+) -> None:
     reader = make_reader(verify_state=False)
     state_path = reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
 
-    payload = json.loads(state_path.read_text())
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
     payload["position"] = "abc"
 
-    state_path.write_text(json.dumps(payload))
+    state_path.write_text(json.dumps(payload), encoding="utf-8")
 
     with pytest.raises(StateError, match="invalid type"):
         reader.states[TEST_STATE_NAME]
 
 
-def test_len_counts_states_that_all_rejects(reader, registry, tmp_file, config):
+def test_getitem_raises_when_the_content_is_not_utf8(
+    reader: PReader, registry: StateRegistry, tmp_file: Path
+) -> None:
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
 
-    (config.state_dir / "broken.state.json").write_text("not valid json")
+    registry.path(TEST_STATE_NAME).write_bytes(b'{"name": "\xff"}')
+
+    with pytest.raises(StateError, match="invalid unicode"):
+        registry[TEST_STATE_NAME]
+
+
+def test_len_counts_states_that_all_rejects(
+    reader: PReader, registry: StateRegistry, tmp_file: Path, config: Config
+) -> None:
+    reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
+
+    (config.state_dir / "broken.state.json").write_text(
+        "not valid json", encoding="utf-8"
+    )
 
     assert len(registry) == 2
 
-    with pytest.raises(StateError, match="line 1 column"):
+    with pytest.raises(StateError, match="expected ident"):
         registry.all()
 
 
-def test_search_matches_everything_with_an_empty_pattern(reader, registry, tmp_file):
+def test_search_matches_everything_with_an_empty_pattern(
+    reader: PReader, registry: StateRegistry, tmp_file: Path
+) -> None:
     for name in ("foo-1", "bar-1"):
         reader.bytes(tmp_file, state=name).state.save()
 
     assert set(registry.search("")) == {"foo-1", "bar-1"}
 
 
-def test_search_matches_anywhere_in_the_name(reader, registry, tmp_file):
+def test_search_matches_anywhere_in_the_name(
+    reader: PReader, registry: StateRegistry, tmp_file: Path
+) -> None:
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
     reader.bytes(tmp_file, state="myjob-2").state.save()
 
     assert set(registry.search("ob")) == {TEST_STATE_NAME, "myjob-2"}
 
 
-def test_search_treats_the_pattern_as_a_regex(reader, registry, tmp_file):
-    for name in ("foo-1", "foo.1", "fooX1"):
+def test_search_treats_the_pattern_as_a_regex(
+    reader: PReader, registry: StateRegistry, tmp_file: Path
+) -> None:
+    for name in ("foo-1", "foo.1", "foox1"):
         reader.bytes(tmp_file, state=name).state.save()
 
-    assert set(registry.search("foo.1")) == {"foo-1", "foo.1", "fooX1"}
+    assert set(registry.search("foo.1")) == {"foo-1", "foo.1", "foox1"}
 
 
 @pytest.mark.parametrize(
     "corrupted", ["foo-1", "foo-2", "foo-3"], ids=["first", "middle", "last"]
 )
 def test_all_raises_when_any_state_is_corrupt(
-    reader, registry, tmp_file, config, corrupted
-):
+    reader: PReader,
+    registry: StateRegistry,
+    tmp_file: Path,
+    config: Config,
+    corrupted: str,
+) -> None:
     for name in ("foo-1", "foo-2", "foo-3"):
         reader.bytes(tmp_file, state=name).state.save()
 
-    (config.state_dir / f"{corrupted}.state.json").write_text("not valid json")
+    (config.state_dir / f"{corrupted}{TEST_STATE_FILE_EXTENSION}").write_text(
+        "not valid json", encoding="utf-8"
+    )
 
-    with pytest.raises(StateError, match="line 1 column"):
+    with pytest.raises(StateError, match="expected ident"):
         registry.all()
 
 
@@ -599,41 +752,74 @@ def test_all_raises_when_any_state_is_corrupt(
     ("call", "expected"),
     [
         (lambda registry: list(registry.names()), []),
-        (lambda registry: list(registry), []),
+        (lambda registry: len(registry), 0),  # noqa: PLW0108
+        (lambda registry: list(registry), []),  # noqa: PLW0108
         (lambda registry: list(registry.all()), []),
         (lambda registry: list(registry.search(TEST_STATE_NAME)), []),
         (lambda registry: registry.clear(), None),
     ],
-    ids=["names", "iter", "all", "search", "clear"],
+    ids=["names", "len", "iter", "all", "search", "clear"],
 )
-def test_missing_state_dir_yields_empty_results(registry, config, call, expected):
+def test_walk_yields_nothing_without_a_state_dir(
+    registry: StateRegistry, config: Config, call: Callable[..., Any], expected: object
+) -> None:
+    assert call(registry) == expected
     assert not config.state_dir.exists()
+
+
+@pytest.mark.parametrize(
+    ("call", "expected"),
+    [
+        (lambda registry: list(registry.names()), []),
+        (lambda registry: len(registry), 0),  # noqa: PLW0108
+        (lambda registry: list(registry.all()), []),
+        (lambda registry: registry.clear(), None),
+    ],
+    ids=["names", "len", "all", "clear"],
+)
+def test_walk_yields_nothing_when_the_state_dir_cannot_be_created(
+    make_reader: Callable[..., PReader],
+    tmp_path: Path,
+    revoke_permissions: Callable[..., Path],
+    call: Callable[..., Any],
+    expected: object,
+) -> None:
+    parent = tmp_path / "read-only"
+    parent.mkdir()
+
+    revoke_permissions(parent, 0o555)
+
+    registry = make_reader(state_dir=parent / "preader").states
+
     assert call(registry) == expected
 
 
-def test_names_creates_the_state_dir(registry, config):
-    assert not config.state_dir.exists()
-
+def test_names_does_not_create_the_state_dir(
+    registry: StateRegistry, config: Config
+) -> None:
     list(registry.names())
 
-    assert config.state_dir.is_dir()
+    assert not config.state_dir.exists()
 
 
 @pytest.mark.parametrize(
     "call",
     [
         lambda registry: list(registry.names()),
-        lambda registry: len(registry),
+        lambda registry: len(registry),  # noqa: PLW0108
         lambda registry: registry.all(),
         lambda registry: registry.clear(),
         lambda registry: list(registry.search(TEST_STATE_NAME)),
+        lambda registry: list(registry),  # noqa: PLW0108
     ],
-    ids=["names", "len", "all", "clear", "search"],
+    ids=["names", "len", "all", "clear", "search", "iter"],
 )
-def test_registry_raises_when_the_state_dir_is_a_file(config, make_reader, call):
-    config.state_dir.write_text("not a directory")
+def test_walk_raises_when_the_state_dir_is_a_file(
+    config: Config, make_reader: Callable[..., PReader], call: Callable[..., Any]
+) -> None:
+    config.state_dir.write_bytes(b"not a directory")
 
-    with pytest.raises(StateError, match="AlreadyExists"):
+    with pytest.raises(NotADirectoryError):
         call(make_reader().states)
 
 
@@ -646,8 +832,13 @@ def test_registry_raises_when_the_state_dir_is_a_file(config, make_reader, call)
     ],
     ids=["exists", "find", "contains"],
 )
-def test_blocked_state_dir_yields_empty_lookups(config, make_reader, call, expected):
-    config.state_dir.write_text("not a directory")
+def test_lookups_answer_when_the_state_dir_is_a_file(
+    config: Config,
+    make_reader: Callable[..., PReader],
+    call: Callable[..., Any],
+    expected: object,
+) -> None:
+    config.state_dir.write_bytes(b"not a directory")
 
     assert call(make_reader().states) == expected
 
@@ -656,29 +847,38 @@ def test_blocked_state_dir_yields_empty_lookups(config, make_reader, call, expec
     "call",
     [
         lambda registry: list(registry.names()),
-        lambda registry: len(registry),
+        lambda registry: len(registry),  # noqa: PLW0108
         lambda registry: registry.all(),
         lambda registry: registry.clear(),
     ],
     ids=["names", "len", "all", "clear"],
 )
-def test_registry_raises_when_a_subdirectory_is_unreadable(
-    reader, registry, config, tmp_file, revoke_permissions, call
-):
+def test_walk_raises_when_a_subdirectory_is_unreadable(
+    reader: PReader,
+    registry: StateRegistry,
+    config: Config,
+    tmp_file: Path,
+    revoke_permissions: Callable[[Path], Path],
+    call: Callable[..., Any],
+) -> None:
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
 
     blocked = config.state_dir / "sub"
     blocked.mkdir()
 
-    (blocked / f"{OTHER_STATE_NAME}.state.json").write_text("{}")
+    (blocked / f"{TEST_OTHER_STATE_NAME}{TEST_STATE_FILE_EXTENSION}").write_text(
+        "{}", encoding="utf-8"
+    )
 
     revoke_permissions(blocked)
 
-    with pytest.raises(StateError, match="io failed"):
+    with pytest.raises(PermissionError):
         call(registry)
 
 
-def test_exists(reader, registry, tmp_file):
+def test_exists_reports_only_saved_states(
+    reader: PReader, registry: StateRegistry, tmp_file: Path
+) -> None:
     assert not registry.exists(TEST_STATE_NAME)
 
     reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
@@ -686,10 +886,350 @@ def test_exists(reader, registry, tmp_file):
     assert registry.exists(TEST_STATE_NAME)
 
 
-def test_delete_removes_saved_state(reader, registry, tmp_file):
+def test_delete_removes_the_saved_state(
+    reader: PReader, registry: StateRegistry, tmp_file: Path
+) -> None:
     state_path = reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
 
     registry.delete(TEST_STATE_NAME)
 
     assert not registry.exists(TEST_STATE_NAME)
     assert not state_path.exists()
+
+
+@pytest.mark.parametrize("name", VALID_STATE_NAMES)
+def test_saved_name_round_trips_through_names(
+    reader: PReader, registry: StateRegistry, config: Config, tmp_file: Path, name: str
+) -> None:
+    path = reader.bytes(tmp_file, state=name).state.save()
+
+    assert path == config.state_dir / f"{name}{TEST_STATE_FILE_EXTENSION}"
+    assert json.loads(path.read_text(encoding="utf-8"))["name"] == name
+    assert list(registry.names()) == [name]
+    assert list(registry.search(f"^{re.escape(name)}$")) == [name]
+    assert registry[name].name == name
+    assert registry.path(name) == path
+
+    del registry[name]
+
+    assert not path.exists()
+
+    reader.bytes(tmp_file, state=name).state.save()
+    registry.clear()
+
+    assert not path.exists()
+
+
+def test_lookup_raises_when_the_name_is_not_utf8(registry: StateRegistry) -> None:
+    name = "job-\udcff"
+
+    with pytest.raises(UnicodeEncodeError):
+        registry.find(name)
+
+    with pytest.raises(UnicodeEncodeError):
+        registry[name]
+
+    with pytest.raises(UnicodeEncodeError):
+        del registry[name]
+
+    with pytest.raises(UnicodeEncodeError):
+        registry.path(name)
+
+
+@pytest.mark.parametrize("name", WINDOWS_INVALID_STATE_NAMES)
+def test_lookup_raises_when_the_name_is_not_portable(
+    registry: StateRegistry, name: str
+) -> None:
+    assert registry.find(name) is None
+    assert name not in registry
+
+    with pytest.raises(ValueError, match="is not valid"):
+        registry[name]
+
+    with pytest.raises(ValueError, match="is not valid"):
+        del registry[name]
+
+    with pytest.raises(ValueError, match="is not valid"):
+        registry.path(name)
+
+
+@pytest.mark.parametrize(
+    "shape", ["job{}1", "sub{}/job-1"], ids=["inside_the_name", "inside_a_directory"]
+)
+@pytest.mark.parametrize("character", UNPORTABLE_CHARACTERS)
+def test_lookup_raises_when_a_character_is_not_portable(
+    registry: StateRegistry, character: str, shape: str
+) -> None:
+    name = shape.format(character)
+
+    assert registry.find(name) is None
+    assert name not in registry
+
+    with pytest.raises(ValueError, match="is not valid"):
+        registry[name]
+
+    with pytest.raises(ValueError, match="is not valid"):
+        del registry[name]
+
+    with pytest.raises(ValueError, match="is not valid"):
+        registry.path(name)
+
+
+@pytest.mark.parametrize("name", DEVICE_STATE_NAMES)
+def test_lookup_raises_when_the_name_is_a_device(
+    registry: StateRegistry, name: str
+) -> None:
+    assert registry.find(name) is None
+    assert name not in registry
+
+    with pytest.raises(ValueError, match="is not valid"):
+        registry[name]
+
+    with pytest.raises(ValueError, match="is not valid"):
+        del registry[name]
+
+    with pytest.raises(ValueError, match="is not valid"):
+        registry.path(name)
+
+
+@pytest.mark.parametrize(
+    ("name", "alias"),
+    [("job-1", "JOB-1"), ("café", "cafe\u0301"), ("sub/job-1", "SUB/job-1")],
+    ids=["uppercase", "decomposed", "uppercase_directory"],
+)
+def test_alias_never_touches_the_saved_state(
+    reader: PReader, registry: StateRegistry, tmp_file: Path, name: str, alias: str
+) -> None:
+    saved = reader.bytes(tmp_file, state=name).state.save()
+    before = saved.read_bytes()
+
+    with contextlib.suppress(KeyError, StateError):
+        del registry[alias]
+
+    with contextlib.suppress(StateError, OSError):
+        reader.bytes(tmp_file, state=alias).state.save()
+
+    assert name in registry.names()
+    assert saved.read_bytes() == before
+
+
+@pytest.mark.parametrize(("file", "name"), FOREIGN_STATE_FILES)
+def test_foreign_state_file_is_listed_under_its_own_name(
+    reader: PReader,
+    registry: StateRegistry,
+    config: Config,
+    tmp_file: Path,
+    file: str,
+    name: str,
+) -> None:
+    saved = reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
+    sub = reader.bytes(tmp_file, state=TEST_SUB_STATE_NAME).state.save()
+
+    foreign = config.state_dir / file
+    foreign.parent.mkdir(parents=True, exist_ok=True)
+    foreign.write_text("{}", encoding="utf-8")
+
+    assert sorted(registry.names()) == sorted(
+        [TEST_STATE_NAME, TEST_SUB_STATE_NAME, name]
+    )
+    assert registry.path(name) == foreign
+
+    del registry[name]
+
+    assert not foreign.exists()
+    assert saved.exists()
+    assert sub.exists()
+
+
+@pytest.mark.parametrize("file", UNADDRESSABLE_FILES)
+def test_walk_skips_a_file_it_cannot_address(
+    reader: PReader, registry: StateRegistry, config: Config, tmp_file: Path, file: str
+) -> None:
+    reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
+    reader.bytes(tmp_file, state=TEST_SUB_STATE_NAME).state.save()
+
+    stray = config.state_dir / file
+    stray.parent.mkdir(parents=True, exist_ok=True)
+    stray.write_text("{}", encoding="utf-8")
+
+    assert sorted(registry.names()) == [TEST_STATE_NAME, TEST_SUB_STATE_NAME]
+    assert len(registry) == 2
+    assert sorted(state.name for state in registry.all()) == [
+        TEST_STATE_NAME,
+        TEST_SUB_STATE_NAME,
+    ]
+
+
+@pytest.mark.parametrize("file", UNADDRESSABLE_FILES)
+def test_clear_keeps_a_file_it_cannot_address(
+    reader: PReader, registry: StateRegistry, config: Config, tmp_file: Path, file: str
+) -> None:
+    saved = reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
+
+    stray = config.state_dir / file
+    stray.parent.mkdir(parents=True, exist_ok=True)
+    stray.write_text("{}", encoding="utf-8")
+
+    registry.clear()
+
+    assert not saved.exists()
+    assert stray.exists()
+
+
+def test_path_uses_the_native_separator(
+    registry: StateRegistry, config: Config
+) -> None:
+    path = registry.path(TEST_NESTED_STATE_NAME)
+
+    assert str(path) == str(config.state_dir / "sub-1" / "sub-2" / TEST_STATE_FILE)
+
+
+def test_delitem_removes_only_the_hard_link(
+    registry: StateRegistry, config: Config, tmp_path: Path
+) -> None:
+    outside = tmp_path / "outside.txt"
+    outside.write_text("foo", encoding="utf-8")
+
+    link = config.state_dir / TEST_STATE_FILE
+    link.parent.mkdir(parents=True, exist_ok=True)
+    link.hardlink_to(outside)
+
+    del registry[TEST_STATE_NAME]
+
+    assert not link.exists()
+    assert outside.read_text(encoding="utf-8") == "foo"
+
+
+@pytest.mark.usefixtures("requires_symlinks")
+def test_symlinked_state_dir_is_used_as_the_root(
+    make_reader: Callable[..., PReader], tmp_file: Path, tmp_path: Path
+) -> None:
+    real = tmp_path / "real"
+    real.mkdir()
+
+    linked = tmp_path / "linked"
+    linked.symlink_to(real, target_is_directory=True)
+
+    reader = make_reader(state_dir=linked)
+    reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
+
+    assert (real / TEST_STATE_FILE).is_file()
+    assert list(reader.states.names()) == [TEST_STATE_NAME]
+    assert reader.states[TEST_STATE_NAME].name == TEST_STATE_NAME
+
+    del reader.states[TEST_STATE_NAME]
+
+    assert list(real.iterdir()) == []
+
+
+def test_delitem_raises_when_the_name_is_suffixed(
+    reader: PReader, registry: StateRegistry, tmp_file: Path
+) -> None:
+    saved = reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
+
+    with pytest.raises(KeyError):
+        del registry[TEST_STATE_FILE]
+
+    assert saved.exists()
+
+
+@pytest.mark.usefixtures("requires_symlinks")
+def test_lookup_raises_when_the_name_is_a_directory_alias(
+    reader: PReader, registry: StateRegistry, config: Config, tmp_file: Path
+) -> None:
+    saved = reader.bytes(tmp_file, state="real/job-1").state.save()
+    before = saved.read_bytes()
+
+    (config.state_dir / "alias").symlink_to(saved.parent, target_is_directory=True)
+
+    assert registry.find("alias/job-1") is None
+    assert "alias/job-1" not in registry
+    assert list(registry.names()) == ["real/job-1"]
+
+    with pytest.raises(StateError, match="is an alias of another entry"):
+        registry["alias/job-1"]
+
+    with pytest.raises(StateError, match="is an alias of another entry"):
+        del registry["alias/job-1"]
+
+    with pytest.raises(StateError, match="is an alias of another entry"):
+        reader.bytes(tmp_file, state="alias/job-1")
+
+    assert saved.read_bytes() == before
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows cannot create these files")
+@pytest.mark.parametrize("file", UNREPRESENTABLE_FILES)
+def test_walk_skips_a_file_it_cannot_represent(
+    reader: PReader, registry: StateRegistry, config: Config, tmp_file: Path, file: str
+) -> None:
+    reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
+
+    stray = config.state_dir / file
+    stray.parent.mkdir(parents=True, exist_ok=True)
+    stray.write_text("{}", encoding="utf-8")
+
+    assert list(registry.names()) == [TEST_STATE_NAME]
+    assert len(registry) == 1
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows cannot create these files")
+@pytest.mark.parametrize("file", UNREPRESENTABLE_FILES)
+def test_clear_keeps_a_file_it_cannot_represent(
+    reader: PReader, registry: StateRegistry, config: Config, tmp_file: Path, file: str
+) -> None:
+    saved = reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
+
+    stray = config.state_dir / file
+    stray.parent.mkdir(parents=True, exist_ok=True)
+    stray.write_text("{}", encoding="utf-8")
+
+    registry.clear()
+
+    assert not saved.exists()
+    assert stray.exists()
+
+
+def test_lookup_raises_when_the_name_is_a_short_name_alias(
+    reader: PReader, registry: StateRegistry, tmp_file: Path
+) -> None:
+    if sys.platform != "win32":
+        pytest.skip("8.3 short names exist only on Windows")
+
+    saved = reader.bytes(tmp_file, state="longdirectoryname/job-1").state.save()
+    before = saved.read_bytes()
+    buffer = ctypes.create_unicode_buffer(32768)
+
+    ctypes.windll.kernel32.GetShortPathNameW(str(saved.parent), buffer, len(buffer))
+
+    short = Path(buffer.value).name
+
+    if short.lower() == saved.parent.name.lower():
+        pytest.skip("8.3 short names are disabled on this volume")
+
+    with pytest.raises(StateError, match="is an alias of another entry"):
+        registry[f"{short}/job-1"]
+
+    with pytest.raises(StateError, match="is an alias of another entry"):
+        reader.bytes(tmp_file, state=f"{short}/job-1").state.save()
+
+    assert list(registry.names()) == ["longdirectoryname/job-1"]
+    assert saved.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    "name",
+    [f"job{chr(0xD800)}", f"job{chr(0xDFFF)}"],
+    ids=["high_surrogate", "low_surrogate"],
+)
+def test_lookup_raises_when_the_name_has_a_lone_surrogate(
+    reader: PReader, registry: StateRegistry, tmp_file: Path, name: str
+) -> None:
+    with pytest.raises(UnicodeEncodeError, match="surrogates not allowed"):
+        registry[name]
+
+    with pytest.raises(UnicodeEncodeError, match="surrogates not allowed"):
+        registry.path(name)
+
+    with pytest.raises(TypeError, match="state must be None"):
+        reader.bytes(tmp_file, state=name)
