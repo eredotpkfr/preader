@@ -16,7 +16,7 @@ def test_config_defaults() -> None:
     assert config.verify_state is True
 
 
-def test_config_raises_when_positional() -> None:
+def test_config_raises_when_an_argument_is_positional() -> None:
     with pytest.raises(TypeError):
         Config(65536)  # type: ignore[call-arg]
 

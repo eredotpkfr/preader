@@ -30,7 +30,7 @@ fn open_reads_from_the_position(sandbox: Sandbox, #[case] position: u64, #[case]
 }
 
 #[rstest]
-#[case::zero_is_raised_to_one(0, 1)]
+#[case::zero_bytes(0, 1)]
 #[case::single_byte(1, 1)]
 #[case::larger_than_the_file(64, 64)]
 fn open_applies_the_buffer_capacity(

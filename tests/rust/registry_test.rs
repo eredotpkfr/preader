@@ -26,7 +26,7 @@ fn corrupt(sandbox: &Sandbox, name: &str) {
 }
 
 #[rstest]
-fn state_dir_points_at_configured_directory(sandbox: Sandbox) {
+fn state_dir_points_at_the_configured_directory(sandbox: Sandbox) {
     assert_eq!(sandbox.states().state_dir(), sandbox.config().state_dir);
 }
 
@@ -52,12 +52,12 @@ fn load_returns_the_saved_state(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn load_reports_a_missing_state(sandbox: Sandbox) {
+fn load_fails_when_the_state_is_missing(sandbox: Sandbox) {
     assert_err_is!(sandbox.states().load(TEST_MISSING_STATE_NAME), Error::NotFound(name) if name == TEST_MISSING_STATE_NAME);
 }
 
 #[rstest]
-fn load_reports_state_shaped_directory_as_missing(sandbox: Sandbox) {
+fn load_fails_when_the_state_is_a_directory(sandbox: Sandbox) {
     fs::create_dir_all(sandbox.states().path(TEST_STATE_NAME).unwrap()).unwrap();
 
     assert_err_is!(sandbox.states().load(TEST_STATE_NAME), Error::NotFound(_));
@@ -70,7 +70,7 @@ fn load_fails_when_the_payload_names_another_state(sandbox: Sandbox) {
     let payload = state.path().unwrap();
     let patched = fs::read_to_string(&payload).unwrap().replace(
         &format!("\"name\": \"{TEST_STATE_NAME}\""),
-        "\"name\": \"a-different-name\"",
+        &format!("\"name\": \"{TEST_OTHER_STATE_NAME}\""),
     );
 
     fs::write(&payload, patched).unwrap();
@@ -78,7 +78,7 @@ fn load_fails_when_the_payload_names_another_state(sandbox: Sandbox) {
     assert_err_is!(
         sandbox.lenient().states().load(TEST_STATE_NAME),
         Error::Mismatch(Mismatch::Name { saved, current })
-            if saved == "a-different-name" && current == TEST_STATE_NAME
+            if saved == TEST_OTHER_STATE_NAME && current == TEST_STATE_NAME
     );
 }
 
@@ -97,6 +97,7 @@ fn every_lookup_rejects_an_invalid_name(sandbox: Sandbox, #[case] name: &str, #[
 #[apply(windows_invalid_names)]
 fn every_lookup_rejects_an_unportable_name(sandbox: Sandbox, #[case] name: &str) {
     let registry = sandbox.states();
+
     assert!(registry.find(name).is_none());
     assert!(!registry.exists(name));
 
@@ -153,7 +154,7 @@ fn exists_reports_only_saved_states(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn exists_is_false_for_state_shaped_directory(sandbox: Sandbox) {
+fn exists_ignores_a_state_shaped_directory(sandbox: Sandbox) {
     fs::create_dir_all(sandbox.states().path(TEST_STATE_NAME).unwrap()).unwrap();
 
     assert!(!sandbox.states().exists(TEST_STATE_NAME));
@@ -172,7 +173,7 @@ fn count_counts_the_saved_states(sandbox: Sandbox) {
 #[rstest]
 fn count_includes_states_that_all_rejects(sandbox: Sandbox) {
     sandbox.save(TEST_STATE_NAME);
-    corrupt(&sandbox, "broken");
+    corrupt(&sandbox, TEST_OTHER_STATE_NAME);
 
     assert_eq!(sandbox.states().count().unwrap(), 2);
 
@@ -258,7 +259,7 @@ fn clear_removes_states_at_every_depth(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn registries_sharing_state_dir_see_each_other(sandbox: Sandbox) {
+fn registries_sharing_a_state_dir_see_each_other(sandbox: Sandbox) {
     sandbox.save(TEST_STATE_NAME);
     sandbox.reader().states().delete(TEST_STATE_NAME).unwrap();
 
@@ -279,7 +280,7 @@ fn walk_fails_when_the_state_dir_is_a_file(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn state_dir_that_is_file_still_answers_lookups(sandbox: Sandbox) {
+fn lookups_answer_when_the_state_dir_is_a_file(sandbox: Sandbox) {
     sandbox.block_states();
 
     let registry = sandbox.states();
@@ -398,7 +399,7 @@ fn symlinked_state_dir_is_used_as_the_root(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn delete_treats_a_suffixed_name_as_another_state(sandbox: Sandbox) {
+fn delete_fails_when_the_name_is_suffixed(sandbox: Sandbox) {
     let saved = sandbox.save(TEST_STATE_NAME).path().unwrap();
     let outcome = sandbox.states().delete(&state_file(TEST_STATE_NAME));
 

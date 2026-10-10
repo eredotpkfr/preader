@@ -8,8 +8,8 @@ use crate::common::{
 #[rstest]
 #[case::disabled(false, 0, AutoSave::Never)]
 #[case::disabled_with_a_threshold(false, 222, AutoSave::Never)]
-#[case::only_at_the_end(true, 0, AutoSave::AtEnd)]
-#[case::every_threshold(true, 222, AutoSave::EveryBytes(222))]
+#[case::enabled_without_a_threshold(true, 0, AutoSave::AtEnd)]
+#[case::enabled_with_a_threshold(true, 222, AutoSave::EveryBytes(222))]
 fn from_config_reads_both_knobs(
     #[case] auto_save_state: bool,
     #[case] auto_save_state_bytes: u64,

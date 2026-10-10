@@ -172,9 +172,9 @@ def test_skipped_content_is_not_validated(
 @pytest.mark.parametrize(
     ("keepends", "expected"),
     [(False, ["foo", "bar"]), (True, ["foo\r\r\n", "bar\r\r\r\n"])],
-    ids=["stripped", "keepends"],
+    ids=["stripped", "kept"],
 )
-def test_repeated_carriage_returns_are_stripped_together(
+def test_repeated_carriage_returns_belong_to_the_terminator(
     reader: PReader, make_file: Callable[..., Path], keepends: bool, expected: list[str]
 ) -> None:
     path = make_file(b"foo\r\r\nbar\r\r\r\n")
@@ -206,7 +206,7 @@ def test_lone_carriage_return_is_not_a_line_separator(
     assert list(reader.lines(path)) == ["foo\rbar\rbaz"]
 
 
-def test_resume_with_different_keepends(
+def test_resume_applies_a_different_keepends(
     reader: PReader, make_file: Callable[..., Path]
 ) -> None:
     path = make_file(b"foo\nbar\nbaz\n")
@@ -305,9 +305,7 @@ def test_drop_saves_partial_progress(
     assert reader.states[TEST_STATE_NAME].position == 7
 
 
-def test_drop_does_not_save_when_auto_save_disabled(
-    reader: PReader, tmp_file: Path
-) -> None:
+def test_drop_does_not_save_by_default(reader: PReader, tmp_file: Path) -> None:
     iterator = reader.lines(tmp_file, state=TEST_STATE_NAME)
 
     next(iterator)
@@ -363,7 +361,7 @@ def test_a_failing_threshold_save_stops_the_read(
         next(iterator)
 
 
-def test_a_failed_save_exhausts_the_iterator(
+def test_a_failing_save_exhausts_the_iterator(
     config: Config, make_reader: Callable[..., PReader], data_file: Path
 ) -> None:
     config.state_dir.write_bytes(b"not a directory")
@@ -525,7 +523,7 @@ def test_auto_load_state_resumes_stale_state_without_verification(
     assert reader.lines(data_file).state.position == 7
 
 
-def test_auto_load_state_disabled_ignores_existing_state(
+def test_auto_load_state_ignores_an_existing_state_by_default(
     reader: PReader, tmp_file: Path, consume: Callable[..., Any]
 ) -> None:
     consume(reader.lines(tmp_file)).state.save()
@@ -586,11 +584,11 @@ def test_raises_when_a_state_name_character_is_not_portable(
         reader.lines(tmp_file, state=name)
 
 
-def test_raises_when_state_object_file_argument_mismatches(
+def test_raises_when_the_state_tracks_another_file(
     reader: PReader, make_file: Callable[..., Path]
 ) -> None:
-    tracked = make_file(LINE_CONTENT, name="tracked.bin")
-    untracked = make_file(LINE_CONTENT, name="untracked.bin")
+    tracked = make_file(b"foo", name="tracked.bin")
+    untracked = make_file(b"foo", name="untracked.bin")
 
     state = reader.lines(tracked, state=TEST_STATE_NAME).state
     state.save()
@@ -599,12 +597,12 @@ def test_raises_when_state_object_file_argument_mismatches(
         reader.lines(untracked, state=state)
 
 
-def test_raises_when_file_differs_without_verification(
+def test_raises_when_the_file_differs_without_verification(
     make_file: Callable[..., Path], make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(verify_state=False)
-    tracked = make_file(LINE_CONTENT, name="tracked.bin")
-    untracked = make_file(LINE_CONTENT.upper(), name="untracked.bin")
+    tracked = make_file(b"foo", name="tracked.bin")
+    untracked = make_file(b"bar", name="untracked.bin")
 
     state = reader.lines(tracked, state=TEST_STATE_NAME).state
     state.save()
@@ -613,7 +611,7 @@ def test_raises_when_file_differs_without_verification(
         reader.lines(untracked, state=state)
 
 
-def test_verify_state_disabled_skips_verification(
+def test_resumes_a_grown_file_without_verification(
     data_file: Path,
     make_reader: Callable[..., PReader],
     append: Callable[[Path, bytes], None],
@@ -634,7 +632,7 @@ def test_verify_state_disabled_skips_verification(
     assert resumed.state.position == state.position
 
 
-def test_raises_when_file_deleted_without_verification(
+def test_raises_when_the_file_is_deleted_without_verification(
     data_file: Path, make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(verify_state=False)
@@ -652,7 +650,7 @@ def test_raises_when_the_tracked_file_is_deleted(
     make_file: Callable[..., Path], make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(verify_state=False)
-    tracked = make_file(LINE_CONTENT, name="tracked.bin")
+    tracked = make_file(b"foo", name="tracked.bin")
 
     state = reader.lines(tracked, state=TEST_STATE_NAME).state
 
@@ -707,8 +705,8 @@ def test_auto_load_state_raises_when_the_name_tracks_another_file(
 ) -> None:
     reader = make_reader(auto_load_state=True)
 
-    file_a = make_file(b"foo\n", name="data-1.bin")
-    file_b = make_file(b"bar\n", name="data-2.bin")
+    file_a = make_file(b"foo", name="data-1.bin")
+    file_b = make_file(b"bar", name="data-2.bin")
 
     reader.lines(file_a, state="shared-name").state.save()
 
@@ -739,7 +737,7 @@ def test_raises_when_resumed_after_file_grows(
     state = consume(reader.lines(data_file, state=TEST_STATE_NAME)).state
     state.save()
 
-    append(data_file, b"more\n")
+    append(data_file, b"more")
 
     with pytest.raises(StateError, match="file size mismatch"):
         reader.lines(data_file, state=state)
@@ -756,7 +754,7 @@ def test_recorded_file_size_never_refreshes_after_file_grows(
     state = consume(reader.lines(data_file, state=TEST_STATE_NAME)).state
     state.save()
 
-    append(data_file, b"more\n")
+    append(data_file, b"more")
 
     options = IteratorOptions(end=100)
     resumed = reader.lines(data_file, state=state, options=options)
@@ -781,7 +779,7 @@ def test_clear_does_not_affect_live_iterator(reader: PReader, data_file: Path) -
     assert reader.lines(data_file, state=TEST_STATE_NAME).state.position == 0
 
 
-def test_raises_when_reading_a_directory(
+def test_raises_when_reading_a_directory_without_verification(
     data_file: Path, make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(verify_state=False)
@@ -795,7 +793,7 @@ def test_raises_when_reading_a_directory(
         list(reader.lines(data_file, state=state))
 
 
-def test_raises_when_aligning_on_a_directory(
+def test_raises_when_aligning_on_a_directory_without_verification(
     data_file: Path, make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(verify_state=False)
@@ -811,7 +809,7 @@ def test_raises_when_aligning_on_a_directory(
         )
 
 
-def test_raises_when_resumed_file_replaced_by_directory(
+def test_raises_when_the_resumed_file_is_replaced_by_a_directory(
     reader: PReader, data_file: Path
 ) -> None:
     state = reader.lines(data_file, state=TEST_STATE_NAME).state

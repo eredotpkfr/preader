@@ -64,7 +64,7 @@ def test_read_yields_invalid_bytes(
     [(IteratorOptions(end=5, limit=100), 5), (IteratorOptions(end=100, limit=2), 2)],
     ids=["end_is_tighter", "limit_is_tighter"],
 )
-def test_options_end_and_limit_whichever_is_tighter_wins(
+def test_tighter_of_end_and_limit_wins(
     reader: PReader, data_file: Path, options: IteratorOptions, expected_length: int
 ) -> None:
     assert (
@@ -163,7 +163,7 @@ def test_drop_saves_partial_progress(
         IteratorOptions(limit=0),
         IteratorOptions(skip=1000),
     ],
-    ids=["start_beyond_size", "end_zero", "limit_zero", "skip_beyond_end"],
+    ids=["start_past_the_end", "end_zero", "limit_zero", "skip_past_the_end"],
 )
 def test_boundary_options_yield_nothing(
     reader: PReader, tmp_file: Path, options: IteratorOptions
@@ -185,7 +185,7 @@ def test_resume_on_fully_consumed_file_yields_nothing(
     assert resumed.percent() == 100.0
 
 
-def test_verify_state_disabled_skips_verification(
+def test_resumes_a_grown_file_without_verification(
     data_file: Path,
     make_reader: Callable[..., PReader],
     append: Callable[[Path, bytes], None],
@@ -206,7 +206,7 @@ def test_verify_state_disabled_skips_verification(
     assert resumed.state.position == state.position
 
 
-def test_raises_when_file_deleted_without_verification(
+def test_raises_when_the_file_is_deleted_without_verification(
     data_file: Path, make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(verify_state=False)
@@ -235,7 +235,7 @@ def test_raises_when_the_tracked_file_is_deleted(
         reader.bytes(tracked, state=state)
 
 
-def test_raises_when_state_object_file_argument_mismatches(
+def test_raises_when_the_state_tracks_another_file(
     reader: PReader, make_file: Callable[..., Path]
 ) -> None:
     tracked = make_file(b"foo", name="tracked.bin")
@@ -248,7 +248,7 @@ def test_raises_when_state_object_file_argument_mismatches(
         reader.bytes(untracked, state=state)
 
 
-def test_raises_when_file_differs_without_verification(
+def test_raises_when_the_file_differs_without_verification(
     make_file: Callable[..., Path], make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(verify_state=False)
@@ -297,11 +297,11 @@ def test_resync_allows_resuming_grown_file(
     resynced = state.resync(data_file)
     resumed = reader.bytes(data_file, state=resynced)
 
-    assert resynced.file.size == len(TEST_ALPHABET) + 4
+    assert resynced.file.size == len(TEST_ALPHABET) + len(b"more")
     assert b"".join(resumed) == b"more"
 
 
-def test_auto_load_state_disabled_ignores_existing_state(
+def test_auto_load_state_ignores_an_existing_state_by_default(
     reader: PReader, tmp_file: Path, consume: Callable[..., Any]
 ) -> None:
     consume(reader.bytes(tmp_file)).state.save()
@@ -351,9 +351,7 @@ def test_raises_when_a_state_name_character_is_not_portable(
         reader.bytes(tmp_file, state=name)
 
 
-def test_drop_does_not_save_when_auto_save_disabled(
-    reader: PReader, tmp_file: Path
-) -> None:
+def test_drop_does_not_save_by_default(reader: PReader, tmp_file: Path) -> None:
     iterator = reader.bytes(tmp_file, state=TEST_STATE_NAME)
 
     next(iterator)
@@ -393,7 +391,7 @@ def test_a_failing_threshold_save_stops_the_read(
         next(iterator)
 
 
-def test_a_failed_save_exhausts_the_iterator(
+def test_a_failing_save_exhausts_the_iterator(
     config: Config, make_reader: Callable[..., PReader], data_file: Path
 ) -> None:
     config.state_dir.write_bytes(b"not a directory")
@@ -577,8 +575,8 @@ def test_recorded_file_size_never_refreshes_after_file_grows(
     assert resumed.state.file.size == len(TEST_ALPHABET)
 
 
-def test_clear_does_not_affect_live_iterator(reader: PReader, tmp_file: Path) -> None:
-    iterator = reader.bytes(tmp_file, state=TEST_STATE_NAME)
+def test_clear_does_not_affect_live_iterator(reader: PReader, data_file: Path) -> None:
+    iterator = reader.bytes(data_file, state=TEST_STATE_NAME)
 
     next(iterator)
 
@@ -590,7 +588,7 @@ def test_clear_does_not_affect_live_iterator(reader: PReader, tmp_file: Path) ->
     next(iterator)
 
     assert iterator.state.position == 2
-    assert reader.bytes(tmp_file, state=TEST_STATE_NAME).state.position == 0
+    assert reader.bytes(data_file, state=TEST_STATE_NAME).state.position == 0
 
 
 def test_resume_with_smaller_threshold_saves_early(
@@ -606,7 +604,7 @@ def test_resume_with_smaller_threshold_saves_early(
     assert second_reader.states[TEST_STATE_NAME].position == 9
 
 
-def test_raises_when_reading_a_directory(
+def test_raises_when_reading_a_directory_without_verification(
     data_file: Path, make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(verify_state=False)
@@ -620,7 +618,7 @@ def test_raises_when_reading_a_directory(
         list(reader.bytes(data_file, state=state))
 
 
-def test_raises_when_resumed_file_replaced_by_directory(
+def test_raises_when_the_resumed_file_is_replaced_by_a_directory(
     reader: PReader, data_file: Path
 ) -> None:
     state = reader.bytes(data_file, state=TEST_STATE_NAME).state
@@ -752,14 +750,14 @@ def test_file_growth_during_iteration_is_ignored(
     make_file: Callable[..., Path],
     append: Callable[[Path, bytes], None],
 ) -> None:
-    path = make_file(b"abc")
+    path = make_file(TEST_ALPHABET[:3])
     iterator = reader.bytes(path)
 
     next(iterator)
 
     append(path, b"more")
 
-    assert list(iterator) == [b"b", b"c"]
+    assert list(iterator) == [TEST_ALPHABET[1:2], TEST_ALPHABET[2:3]]
 
 
 def test_yields_every_byte_value(

@@ -64,7 +64,7 @@ fn build_accepts_an_ordered_range(sandbox: Sandbox, #[case] options: IteratorOpt
 #[case::one_apart(range(1, 0))]
 #[case::far_apart(range(100, 10))]
 #[case::maximum_start(range(u64::MAX, 0))]
-fn build_rejects_an_inverted_range(sandbox: Sandbox, #[case] options: IteratorOptions) {
+fn build_fails_when_the_range_is_inverted(sandbox: Sandbox, #[case] options: IteratorOptions) {
     let path = sandbox.line_file();
     let reader = sandbox.reader();
     let (start, end) = (options.start, options.end);
@@ -82,7 +82,7 @@ fn build_rejects_an_inverted_range(sandbox: Sandbox, #[case] options: IteratorOp
 
 #[rstest]
 #[case::unread_file(IteratorOptions::default(), 0, 0, true)]
-#[case::start_moves_the_position(IteratorOptions { start: 10, ..IteratorOptions::default() }, 0, 10, true)]
+#[case::start_inside_the_file(IteratorOptions { start: 10, ..IteratorOptions::default() }, 0, 10, true)]
 #[case::resume_at_the_start(IteratorOptions { start: 10, ..IteratorOptions::default() }, 10, 10, true)]
 #[case::resume_past_the_start(IteratorOptions { start: 10, ..IteratorOptions::default() }, 40, 40, false)]
 #[case::resume_before_the_start(IteratorOptions { start: 40, ..IteratorOptions::default() }, 10, 40, true)]
@@ -123,10 +123,10 @@ fn window_clamps_the_end_to_the_size(#[case] end: u64, #[case] expected: u64) {
 
 #[rstest]
 #[case::no_skip(0, 10)]
-#[case::moves_the_position(15, 25)]
+#[case::inside_the_file(15, 25)]
 #[case::at_the_end(90, FILE_SIZE)]
 #[case::past_the_end(FILE_SIZE, FILE_SIZE)]
-#[case::saturates(u64::MAX, FILE_SIZE)]
+#[case::maximum_skip(u64::MAX, FILE_SIZE)]
 fn window_folds_skipped_bytes_into_the_start(#[case] bytes: u64, #[case] expected: u64) {
     let options = IteratorOptions {
         start: 10,

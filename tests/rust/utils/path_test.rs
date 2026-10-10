@@ -107,7 +107,7 @@ fn resolves_in_place_rejects_a_symlinked_file(sandbox: Sandbox) {
 
 #[cfg(unix)]
 #[rstest]
-fn resolves_in_place_rejects_escaping_symlink(sandbox: Sandbox) {
+fn resolves_in_place_rejects_an_escaping_symlink(sandbox: Sandbox) {
     let root = sandbox.path().join("root");
     let outside = sandbox.path().join("outside");
 

@@ -42,7 +42,7 @@ def test_options_narrow_the_output(
     assert b"".join(reader.chunks(data_file, options=options, chunk_size=3)) == expected
 
 
-def test_read_keeps_invalid_bytes(
+def test_read_yields_invalid_bytes(
     reader: PReader, make_file: Callable[..., Path]
 ) -> None:
     invalid = b"foo" + bytes([0xFF, 0xFE]) + b"bar"
@@ -66,7 +66,7 @@ def test_zero_chunk_size_yields_nothing(reader: PReader, tmp_file: Path) -> None
     assert list(reader.chunks(tmp_file, chunk_size=0)) == []
 
 
-def test_drop_partial_discards_chunk_cut_short_by_end(
+def test_drop_partial_discards_a_chunk_cut_short_by_end(
     reader: PReader, data_file: Path
 ) -> None:
     options = IteratorOptions(end=12)
@@ -78,7 +78,7 @@ def test_drop_partial_discards_chunk_cut_short_by_end(
     assert iterator.state.position == 10
 
 
-def test_keeps_partial_chunk_cut_by_end(reader: PReader, data_file: Path) -> None:
+def test_keeps_partial_chunk_by_default(reader: PReader, data_file: Path) -> None:
     options = IteratorOptions(end=12)
 
     chunks = list(reader.chunks(data_file, options=options, chunk_size=5))
@@ -86,7 +86,7 @@ def test_keeps_partial_chunk_cut_by_end(reader: PReader, data_file: Path) -> Non
     assert chunks == [TEST_ALPHABET[0:5], TEST_ALPHABET[5:10], TEST_ALPHABET[10:12]]
 
 
-def test_resume_with_different_chunk_size(
+def test_resume_applies_a_different_chunk_size(
     reader: PReader, data_file: Path, consume: Callable[..., Any]
 ) -> None:
     state = consume(
@@ -180,9 +180,7 @@ def test_drop_saves_partial_progress(
     assert reader.states[TEST_STATE_NAME].position == 3
 
 
-def test_drop_does_not_save_when_auto_save_disabled(
-    reader: PReader, tmp_file: Path
-) -> None:
+def test_drop_does_not_save_by_default(reader: PReader, tmp_file: Path) -> None:
     iterator = reader.chunks(tmp_file, state=TEST_STATE_NAME, chunk_size=3)
 
     next(iterator)
@@ -238,7 +236,7 @@ def test_a_failing_threshold_save_stops_the_read(
         next(iterator)
 
 
-def test_a_failed_save_exhausts_the_iterator(
+def test_a_failing_save_exhausts_the_iterator(
     config: Config, make_reader: Callable[..., PReader], data_file: Path
 ) -> None:
     config.state_dir.write_bytes(b"not a directory")
@@ -340,7 +338,7 @@ def test_chunk_iterator_repr(
     reindent: Callable[[str, int], str],
     expected_repr: Callable[..., str],
 ) -> None:
-    iterator = reader.chunks(tmp_file, chunk_size=1024, drop_partial=True)
+    iterator = reader.chunks(tmp_file, chunk_size=3, drop_partial=True)
 
     assert repr(iterator) == expected_repr(
         "ChunkIterator",
@@ -398,7 +396,7 @@ def test_auto_load_state_resumes_stale_state_without_verification(
     assert reader.chunks(data_file, chunk_size=5).state.position == 5
 
 
-def test_auto_load_state_disabled_ignores_existing_state(
+def test_auto_load_state_ignores_an_existing_state_by_default(
     reader: PReader, tmp_file: Path, consume: Callable[..., Any]
 ) -> None:
     consume(reader.chunks(tmp_file, chunk_size=3)).state.save()
@@ -459,11 +457,11 @@ def test_raises_when_a_state_name_character_is_not_portable(
         reader.chunks(tmp_file, state=name)
 
 
-def test_raises_when_state_object_file_argument_mismatches(
+def test_raises_when_the_state_tracks_another_file(
     reader: PReader, make_file: Callable[..., Path]
 ) -> None:
-    tracked = make_file(TEST_ALPHABET, name="tracked.bin")
-    untracked = make_file(TEST_ALPHABET, name="untracked.bin")
+    tracked = make_file(b"foo", name="tracked.bin")
+    untracked = make_file(b"foo", name="untracked.bin")
 
     state = reader.chunks(tracked, state=TEST_STATE_NAME).state
     state.save()
@@ -472,12 +470,12 @@ def test_raises_when_state_object_file_argument_mismatches(
         reader.chunks(untracked, state=state)
 
 
-def test_raises_when_file_differs_without_verification(
+def test_raises_when_the_file_differs_without_verification(
     make_file: Callable[..., Path], make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(verify_state=False)
-    tracked = make_file(TEST_ALPHABET, name="tracked.bin")
-    untracked = make_file(TEST_ALPHABET.upper(), name="untracked.bin")
+    tracked = make_file(b"foo", name="tracked.bin")
+    untracked = make_file(b"bar", name="untracked.bin")
 
     state = reader.chunks(tracked, state=TEST_STATE_NAME).state
     state.save()
@@ -486,7 +484,7 @@ def test_raises_when_file_differs_without_verification(
         reader.chunks(untracked, state=state)
 
 
-def test_verify_state_disabled_skips_verification(
+def test_resumes_a_grown_file_without_verification(
     data_file: Path,
     make_reader: Callable[..., PReader],
     append: Callable[[Path, bytes], None],
@@ -507,7 +505,7 @@ def test_verify_state_disabled_skips_verification(
     assert resumed.state.position == state.position
 
 
-def test_raises_when_file_deleted_without_verification(
+def test_raises_when_the_file_is_deleted_without_verification(
     data_file: Path, make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(verify_state=False)
@@ -525,7 +523,7 @@ def test_raises_when_the_tracked_file_is_deleted(
     make_file: Callable[..., Path], make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(verify_state=False)
-    tracked = make_file(TEST_ALPHABET, name="tracked.bin")
+    tracked = make_file(b"foo", name="tracked.bin")
 
     state = reader.chunks(tracked, state=TEST_STATE_NAME).state
 
@@ -659,7 +657,7 @@ def test_clear_does_not_affect_live_iterator(reader: PReader, data_file: Path) -
     )
 
 
-def test_raises_when_reading_a_directory(
+def test_raises_when_reading_a_directory_without_verification(
     data_file: Path, make_reader: Callable[..., PReader]
 ) -> None:
     reader = make_reader(verify_state=False)
@@ -673,7 +671,7 @@ def test_raises_when_reading_a_directory(
         list(reader.chunks(data_file, state=state))
 
 
-def test_raises_when_resumed_file_replaced_by_directory(
+def test_raises_when_the_resumed_file_is_replaced_by_a_directory(
     reader: PReader, data_file: Path
 ) -> None:
     state = reader.chunks(data_file, state=TEST_STATE_NAME).state
@@ -872,14 +870,14 @@ def test_file_growth_during_iteration_is_ignored(
     make_file: Callable[..., Path],
     append: Callable[[Path, bytes], None],
 ) -> None:
-    path = make_file(b"abcdef")
+    path = make_file(TEST_ALPHABET[:6])
     iterator = reader.chunks(path, chunk_size=3)
 
     next(iterator)
 
     append(path, b"more")
 
-    assert list(iterator) == [b"def"]
+    assert list(iterator) == [TEST_ALPHABET[3:6]]
 
 
 def test_resume_applies_the_limit_again(

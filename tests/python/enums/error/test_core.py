@@ -5,8 +5,6 @@ import pytest
 from constants import TEST_STATE_NAME
 from preader import IteratorOptions, PReader, StateError, StateRegistry
 
-UNSAFE_STATE_NAME = "../../etc/passwd"
-
 
 def test_io_errors_map_to_os_errors(reader: PReader, tmp_file: Path) -> None:
     state = reader.bytes(tmp_file, state=TEST_STATE_NAME).state
@@ -45,6 +43,6 @@ def test_regex_errors_map_to_state_error(registry: StateRegistry) -> None:
 
 def test_path_errors_carry_the_bare_message(registry: StateRegistry) -> None:
     with pytest.raises(StateError) as exc_info:
-        registry.path(UNSAFE_STATE_NAME)
+        registry.path("../../etc/passwd")
 
-    assert str(exc_info.value) == f"path escapes root: {UNSAFE_STATE_NAME}"
+    assert str(exc_info.value) == "path escapes root: ../../etc/passwd"

@@ -12,11 +12,34 @@ import pytest
 from cases import (
     DEVICE_STATE_NAMES,
     INVALID_STATE_NAME_ERRORS,
+    LONGEST_STATE_NAMES,
+    TOO_LONG_STATE_NAMES,
     UNPORTABLE_CHARACTERS,
     WINDOWS_INVALID_STATE_NAMES,
 )
-from constants import TEST_STATE_FILE, TEST_STATE_FILE_EXTENSION, TEST_STATE_NAME
-from preader import Config, PReader, State, StateError
+from constants import (
+    TEST_LARGE_COPIES,
+    TEST_NESTED_STATE_NAME,
+    TEST_STATE_FILE,
+    TEST_STATE_FILE_EXTENSION,
+    TEST_STATE_NAME,
+    TEST_WINDOW,
+)
+from preader import Config, PReader, State, StateError, StateRegistry
+
+
+def _get_unverified_state(make_reader: Callable[..., PReader], name: str) -> State:
+    return make_reader(verify_state=False).states[name]
+
+
+def _new_unverified_state(
+    make_reader: Callable[..., PReader], data_file: Path
+) -> State:
+    reader = make_reader(verify_state=False)
+
+    reader.bytes(data_file, state=TEST_STATE_NAME).state.save()
+
+    return _get_unverified_state(make_reader, TEST_STATE_NAME)
 
 
 def test_state_fields(config: Config, reader: PReader, tmp_file: Path) -> None:
@@ -58,7 +81,16 @@ def test_state_raises_when_the_name_is_not_portable(
 
 
 @pytest.mark.parametrize(
-    "shape", ["{}", "job{}1", "{}job-1", "job-1{}", "sub/job{}1", "sub{}/job-1"]
+    "shape",
+    ["{}", "job{}1", "{}job-1", "job-1{}", "sub/job{}1", "sub{}/job-1"],
+    ids=[
+        "alone",
+        "inside_the_name",
+        "leading",
+        "trailing",
+        "inside_a_nested_name",
+        "inside_a_directory",
+    ],
 )
 @pytest.mark.parametrize("character", UNPORTABLE_CHARACTERS)
 def test_state_raises_when_a_character_is_not_portable(
@@ -78,7 +110,7 @@ def test_state_raises_when_the_name_is_a_device(
         reader.bytes(tmp_file, state=name)
 
 
-def test_checksum_is_stable(reader: PReader, tmp_file: Path) -> None:
+def test_checksum_is_a_stable_hex_digest(reader: PReader, tmp_file: Path) -> None:
     state = reader.bytes(tmp_file).state
     checksum = state.checksum()
 
@@ -87,13 +119,13 @@ def test_checksum_is_stable(reader: PReader, tmp_file: Path) -> None:
 
 
 @pytest.mark.parametrize("content", [b"", b"foo"], ids=["empty_file", "unread_file"])
-def test_percent_before_reading(
+def test_percent_is_zero_before_reading(
     reader: PReader, make_file: Callable[..., Path], content: bytes
 ) -> None:
     assert reader.bytes(make_file(content)).percent() == 0.0
 
 
-def test_bytes_read_match_file_content(reader: PReader, tmp_file: Path) -> None:
+def test_bytes_yields_one_byte_per_item(reader: PReader, tmp_file: Path) -> None:
     content = tmp_file.read_bytes()
     read_bytes = list(reader.bytes(tmp_file))
 
@@ -101,7 +133,7 @@ def test_bytes_read_match_file_content(reader: PReader, tmp_file: Path) -> None:
     assert b"".join(read_bytes) == content
 
 
-def test_save_returns_created_path(
+def test_save_returns_the_created_path(
     reader: PReader, tmp_file: Path, read_state: Callable[..., Any]
 ) -> None:
     state = reader.bytes(tmp_file).state
@@ -128,7 +160,7 @@ def test_save_updates_timestamp_but_not_created_at(
     assert read_state(state)
 
 
-def test_save_persists_across_new_reader(
+def test_save_persists_across_readers(
     make_reader: Callable[..., PReader],
     reader: PReader,
     tmp_file: Path,
@@ -155,7 +187,7 @@ def test_save_raises_when_the_state_dir_is_a_file(
         state.save()
 
 
-def test_save_raises_when_state_path_is_a_directory(
+def test_save_raises_when_the_state_path_is_a_directory(
     reader: PReader, tmp_file: Path
 ) -> None:
     state = reader.bytes(tmp_file).state
@@ -165,27 +197,13 @@ def test_save_raises_when_state_path_is_a_directory(
         state.save()
 
 
-def _get_unverified_state(make_reader: Callable[..., PReader], name: str) -> State:
-    return make_reader(verify_state=False).states[name]
-
-
-def _new_unverified_state(
-    make_reader: Callable[..., PReader], data_file: Path
-) -> State:
-    reader = make_reader(verify_state=False)
-
-    reader.bytes(data_file, state=TEST_STATE_NAME).state.save()
-
-    return _get_unverified_state(make_reader, TEST_STATE_NAME)
-
-
-def test_verify_passes_when_untouched(
+def test_verify_passes_when_the_file_is_untouched(
     make_reader: Callable[..., PReader], tmp_large_file: Path
 ) -> None:
     _new_unverified_state(make_reader, tmp_large_file).verify()
 
 
-def test_verify_raises_when_checksum_mismatch(
+def test_verify_raises_when_the_payload_is_tampered(
     make_reader: Callable[..., PReader], tmp_large_file: Path
 ) -> None:
     state = _new_unverified_state(make_reader, tmp_large_file)
@@ -200,7 +218,7 @@ def test_verify_raises_when_checksum_mismatch(
         tampered.verify()
 
 
-def test_verify_raises_when_size_mismatch(
+def test_verify_raises_when_the_size_changed(
     make_reader: Callable[..., PReader],
     tmp_large_file: Path,
     truncate: Callable[[Path, int], None],
@@ -228,7 +246,7 @@ def test_verify_raises_when_mtime_precedes_the_epoch(
         state.verify()
 
 
-def test_verify_raises_when_mtime_mismatch(
+def test_verify_raises_when_the_mtime_changed(
     make_reader: Callable[..., PReader], tmp_large_file: Path
 ) -> None:
     state = _new_unverified_state(make_reader, tmp_large_file)
@@ -240,7 +258,7 @@ def test_verify_raises_when_mtime_mismatch(
         state.verify()
 
 
-def test_verify_raises_when_fingerprint_mismatch(
+def test_verify_raises_when_the_fingerprint_window_changed(
     make_reader: Callable[..., PReader],
     tmp_large_file: Path,
     overwrite: Callable[[Path, int, bytes], None],
@@ -256,7 +274,7 @@ def test_verify_raises_when_fingerprint_mismatch(
         state.verify()
 
 
-def test_verify_blind_spot_beyond_4096_bytes(
+def test_verify_ignores_a_change_past_the_fingerprint_window(
     make_reader: Callable[..., PReader],
     tmp_large_file: Path,
     overwrite: Callable[[Path, int, bytes], None],
@@ -271,7 +289,7 @@ def test_verify_blind_spot_beyond_4096_bytes(
     state.verify()
 
 
-def test_verify_raises_when_file_deleted(
+def test_verify_raises_when_the_file_is_deleted(
     make_reader: Callable[..., PReader], tmp_large_file: Path
 ) -> None:
     state = _new_unverified_state(make_reader, tmp_large_file)
@@ -284,7 +302,7 @@ def test_verify_raises_when_file_deleted(
     assert "mismatch" not in str(exc_info.value)
 
 
-def test_resync_updates_file_metadata(
+def test_resync_updates_the_file_metadata(
     reader: PReader,
     tmp_file: Path,
     make_file: Callable[..., Path],
@@ -302,7 +320,7 @@ def test_resync_updates_file_metadata(
     assert resynced.file.fingerprint == fingerprint(moved)
 
 
-def test_resync_preserves_name_position_and_created_at(
+def test_resync_keeps_name_position_and_created_at(
     reader: PReader,
     tmp_file: Path,
     make_file: Callable[..., Path],
@@ -320,7 +338,7 @@ def test_resync_preserves_name_position_and_created_at(
     assert resynced.timestamps.updated_at > state.timestamps.updated_at
 
 
-def test_resync_does_not_mutate_original(
+def test_resync_does_not_mutate_the_original(
     reader: PReader, tmp_file: Path, make_file: Callable[..., Path]
 ) -> None:
     state = reader.bytes(tmp_file, state=TEST_STATE_NAME).state
@@ -389,7 +407,7 @@ def test_save_succeeds_after_the_file_is_deleted(
     assert read_state(state)
 
 
-def test_reload_raises_when_the_file_is_deleted(
+def test_getitem_raises_when_the_file_is_deleted(
     reader: PReader, make_file: Callable[..., Path]
 ) -> None:
     path = make_file(b"foo")
@@ -419,12 +437,12 @@ def test_verify_suggests_resync_when_the_file_changed(
     ("before", "after"),
     [
         (b"foo\n" * 25, b"foo\n" * 2),
-        (b"foo\n" * 2560, b"foo\n" * 250),
-        (b"foo\n" * 2560, b"bar\n" * 1250),
+        (b"foo\n" * TEST_LARGE_COPIES, b"foo\n" * 250),
+        (b"foo\n" * TEST_LARGE_COPIES, b"bar\n" * 1250),
         (b"foo\n" * 25, b"bar\n" * 27),
         (b"foo\n" * 25, b"bar\n" * 25),
         (b"foo\n" * 25, b""),
-        (b"a" * 4096, b"a" * 4095),
+        (b"a" * TEST_WINDOW, b"a" * (TEST_WINDOW - 1)),
     ],
     ids=[
         "truncated_inside_the_window",
@@ -457,7 +475,7 @@ def test_resync_raises_when_the_prefix_is_gone(
     [
         (b"foo\n" * 25, b"foo\n" * 25 + b"more"),
         (b"foo\n" * 25, b"foo\n" * 25),
-        (b"foo\n" * 2560, b"foo\n" * 2560 + b"more"),
+        (b"foo\n" * TEST_LARGE_COPIES, b"foo\n" * TEST_LARGE_COPIES + b"more"),
     ],
     ids=["appended", "unchanged", "grown_past_a_wide_window"],
 )
@@ -501,7 +519,7 @@ def test_resync_clamps_the_position_to_the_new_size(
     assert resynced.percent() == 100.0
 
 
-def test_resync_blind_spot_beyond_4096_bytes(
+def test_resync_ignores_a_change_past_the_fingerprint_window(
     reader: PReader,
     tmp_large_file: Path,
     consume: Callable[..., Any],
@@ -556,7 +574,10 @@ def test_resync_trusts_the_path_without_verification(
 
 @pytest.mark.parametrize(
     ("before", "after", "read", "position", "percent"),
-    [(4096, 4096, 100, 100, 100 * 100 / 4096), (4097, 4096, 4097, 4096, 100.0)],
+    [
+        (TEST_WINDOW, TEST_WINDOW, 100, 100, 100 * 100 / TEST_WINDOW),
+        (TEST_WINDOW + 1, TEST_WINDOW, TEST_WINDOW + 1, TEST_WINDOW, 100.0),
+    ],
     ids=["at_the_window", "past_the_window"],
 )
 def test_resync_accepts_at_the_fingerprint_window(
@@ -678,7 +699,7 @@ def test_resync_accepts_every_path_shape(
         assert state.resync(shape).file.path == tmp_file
 
 
-def test_resync_moves_the_identity_reference_forward(
+def test_resync_moves_the_identity_forward(
     reader: PReader, make_file: Callable[..., Path], consume: Callable[..., Any]
 ) -> None:
     original = make_file(b"foo\n" * 25, name="tracked.bin")
@@ -711,7 +732,7 @@ def test_resync_is_stable_when_repeated(
 
 
 @pytest.mark.usefixtures("requires_non_utf8_names")
-def test_resync_raises_when_path_is_not_utf8(
+def test_resync_raises_when_the_path_is_not_utf8(
     reader: PReader, tmp_file: Path, make_file: Callable[..., Path]
 ) -> None:
     state = reader.bytes(tmp_file, state=TEST_STATE_NAME).state
@@ -745,7 +766,7 @@ def test_resync_reseals_a_tampered_state(
     assert resynced.position == 999
 
 
-def test_resynced_state_is_still_rejected_for_another_file(
+def test_bytes_raises_when_a_resynced_state_tracks_another_file(
     reader: PReader, make_file: Callable[..., Path]
 ) -> None:
     first = make_file(b"a" * 10, name="a.bin")
@@ -782,7 +803,7 @@ def test_resync_raises_when_the_path_cannot_be_resolved(
     reader: PReader, tmp_file: Path, tmp_path: Path, looped: bool
 ) -> None:
     state = reader.bytes(tmp_file, state=TEST_STATE_NAME).state
-    target = tmp_path / "does-not-exist.bin"
+    target = tmp_path / "missing.bin"
 
     if looped:
         target = tmp_path / "a-link"
@@ -802,7 +823,7 @@ def test_resync_raises_when_the_path_cannot_be_resolved(
         state.resync(target)
 
 
-def test_resync_allows_resuming_moved_file(
+def test_resync_allows_resuming_a_moved_file(
     reader: PReader, tmp_file: Path, tmp_path: Path, consume: Callable[..., Any]
 ) -> None:
     content = tmp_file.read_bytes()
@@ -821,7 +842,7 @@ def test_resync_allows_resuming_moved_file(
     assert b"".join(resumed) == content[1:]
 
 
-def test_resync_allows_resuming_grown_file(
+def test_resync_allows_resuming_a_grown_file(
     reader: PReader,
     tmp_file: Path,
     consume: Callable[..., Any],
@@ -931,16 +952,22 @@ def test_state_raises_when_the_name_has_a_nul_byte(
         reader.bytes(tmp_file, state="job\0")
 
 
-def test_save_raises_when_the_name_is_too_long(reader: PReader, tmp_file: Path) -> None:
-    state = reader.bytes(tmp_file, state="x" * 300).state
+@pytest.mark.parametrize("name", TOO_LONG_STATE_NAMES)
+def test_state_raises_when_the_name_is_too_long(
+    reader: PReader, tmp_file: Path, name: str
+) -> None:
+    with pytest.raises(StateError, match="path is invalid"):
+        reader.bytes(tmp_file, state=name)
 
-    with pytest.raises(
-        OSError,
-        match=(
-            "syntax is incorrect" if sys.platform == "win32" else "File name too long"
-        ),
-    ):
-        state.save()
+
+@pytest.mark.parametrize("name", LONGEST_STATE_NAMES)
+def test_save_round_trips_the_longest_portable_name(
+    reader: PReader, registry: StateRegistry, tmp_file: Path, name: str
+) -> None:
+    reader.bytes(tmp_file, state=name).state.save()
+
+    assert list(registry.names()) == [name]
+    assert registry[name].name == name
 
 
 def test_save_does_not_disturb_the_iterator(
@@ -1057,7 +1084,7 @@ def test_verify_reports_the_checksum_first(
 def test_path_uses_the_native_separator(
     reader: PReader, config: Config, tmp_file: Path
 ) -> None:
-    state = reader.bytes(tmp_file, state="sub-1/sub-2/job-1").state
+    state = reader.bytes(tmp_file, state=TEST_NESTED_STATE_NAME).state
 
     assert str(state.path()) == str(
         config.state_dir / "sub-1" / "sub-2" / TEST_STATE_FILE
@@ -1083,9 +1110,9 @@ def test_save_replaces_a_hard_link_without_touching_its_target(
 def test_save_raises_when_a_state_file_blocks_the_directory(
     reader: PReader, tmp_file: Path
 ) -> None:
-    saved = reader.bytes(tmp_file, state="x").state.save()
+    saved = reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
     before = saved.read_bytes()
-    state = reader.bytes(tmp_file, state="x.state.json/y").state
+    state = reader.bytes(tmp_file, state=f"{TEST_STATE_FILE}/job-2").state
 
     with pytest.raises(OSError, match=r"os error"):
         state.save()
@@ -1096,8 +1123,8 @@ def test_save_raises_when_a_state_file_blocks_the_directory(
 def test_save_raises_when_a_directory_blocks_the_state_file(
     reader: PReader, tmp_file: Path
 ) -> None:
-    nested = reader.bytes(tmp_file, state="x.state.json/y").state.save()
-    state = reader.bytes(tmp_file, state="x").state
+    nested = reader.bytes(tmp_file, state=f"{TEST_STATE_FILE}/job-2").state.save()
+    state = reader.bytes(tmp_file, state=TEST_STATE_NAME).state
 
     with pytest.raises(OSError, match=r"os error"):
         state.save()

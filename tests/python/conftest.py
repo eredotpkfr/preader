@@ -9,9 +9,8 @@ from typing import Any
 
 import pytest
 
+from constants import TEST_LARGE_COPIES, TEST_WINDOW
 from preader import Config, PReader, State, StateRegistry
-
-FINGERPRINT_BYTES = 4096
 
 
 @pytest.fixture
@@ -85,7 +84,7 @@ def tmp_file(make_file: Callable[..., Path]) -> Path:
 
 @pytest.fixture
 def tmp_large_file(make_file: Callable[..., Path]) -> Path:
-    return make_file(b"foo\n" * 2560, name="large.bin")  # 10 KiB
+    return make_file(b"foo\n" * TEST_LARGE_COPIES, name="large.bin")  # 10 KiB
 
 
 @pytest.fixture
@@ -125,7 +124,7 @@ def consume() -> Callable[..., Any]:
 
 @pytest.fixture
 def fingerprint() -> Callable[..., str]:
-    def _fingerprint(path: Path, window: int = FINGERPRINT_BYTES) -> str:
+    def _fingerprint(path: Path, window: int = TEST_WINDOW) -> str:
         return hashlib.sha256(path.read_bytes()[:window]).hexdigest()
 
     return _fingerprint

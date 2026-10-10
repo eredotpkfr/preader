@@ -47,10 +47,7 @@ fn delimiter_only_file_yields_blank_segments(sandbox: Sandbox) {
 
 #[rstest]
 fn file_without_delimiter_yields_one_segment(sandbox: Sandbox) {
-    assert_eq!(
-        segments(&sandbox, b"no-delimiter-here"),
-        ["no-delimiter-here"]
-    );
+    assert_eq!(segments(&sandbox, b"seg-0"), ["seg-0"]);
 }
 
 #[rstest]
@@ -99,7 +96,7 @@ fn a_skipped_blank_segment_does_not_consume_the_limit(sandbox: Sandbox) {
 
 #[rstest]
 fn read_splits_invalid_bytes(sandbox: Sandbox) {
-    let content = [TEST_INVALID_UTF8, b",", TEST_INVALID_UTF8].concat();
+    let content = [TEST_INVALID_UTF8, &[DEFAULT_DELIMITER], TEST_INVALID_UTF8].concat();
     let path = sandbox.file(&content);
     let read = items(sandbox.reader().delimiter(&path).build().unwrap());
 
@@ -107,7 +104,7 @@ fn read_splits_invalid_bytes(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn read_fills_segment_across_buffer_refill(sandbox: Sandbox) {
+fn read_fills_a_segment_across_a_buffer_refill(sandbox: Sandbox) {
     let path = sandbox.file(TEST_SEGMENT_CONTENT);
     let reader = sandbox.capped(1);
     let read = items(reader.delimiter(&path).build().unwrap());
@@ -127,7 +124,7 @@ fn align_skips_segment_window_starts_inside(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn align_is_a_no_op_on_a_boundary(sandbox: Sandbox) {
+fn align_is_a_no_op_on_a_segment_boundary(sandbox: Sandbox) {
     let path = sandbox.file(TEST_SEGMENT_CONTENT);
     let mut aligned = sandbox.reader().delimiter(&path).start(6).align(true).build().unwrap();
 
@@ -177,7 +174,7 @@ fn iterator_yields_owned_segments(sandbox: Sandbox) {
 
 #[cfg(unix)]
 #[rstest]
-fn read_reports_a_mid_segment_io_error(sandbox: Sandbox) {
+fn read_fails_when_io_fails_mid_segment(sandbox: Sandbox) {
     let directory = sandbox.dir_at("folder");
     let opened = sandbox.state_at(&directory, TEST_READ_FROM);
     let mut segments = sandbox.lenient().delimiter(&directory).state(opened).build().unwrap();

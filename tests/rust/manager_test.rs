@@ -13,7 +13,10 @@ use rstest_reuse::apply;
 use sha2::{Digest, Sha256};
 
 use crate::common::{
-    constants::{TEST_FILE_PATH, TEST_LINE, TEST_LINE_FINGERPRINT, TEST_STATE_NAME},
+    constants::{
+        TEST_FILE_NAME, TEST_FILE_PATH, TEST_LINE, TEST_LINE_FINGERPRINT, TEST_STAMP,
+        TEST_STATE_NAME,
+    },
     fixtures::sandbox,
     funcs::state_file,
     macros::asserts::assert_err_is,
@@ -129,7 +132,7 @@ fn autoname_differs_between_paths(sandbox: Sandbox) {
 #[rstest]
 #[case::current_dir_component(TEST_FILE_PATH, "/tmp/./data.bin")]
 #[case::trailing_slash("/tmp/data", "/tmp/data/")]
-#[case::relative_and_absolute("data.bin", "/tmp/data.bin")]
+#[case::relative_and_absolute(TEST_FILE_NAME, TEST_FILE_PATH)]
 fn autoname_does_not_normalize(sandbox: Sandbox, #[case] left: &str, #[case] right: &str) {
     assert_ne!(
         sandbox.manager().autoname(Path::new(left)),
@@ -138,8 +141,8 @@ fn autoname_does_not_normalize(sandbox: Sandbox, #[case] left: &str, #[case] rig
 }
 
 #[rstest]
-#[case::absolute("/tmp/data.bin")]
-#[case::relative("data.bin")]
+#[case::absolute(TEST_FILE_PATH)]
+#[case::relative(TEST_FILE_NAME)]
 #[case::empty("")]
 #[case::directory("/tmp/")]
 fn autoname_is_lowercase_hex(sandbox: Sandbox, #[case] file: &str) {
@@ -158,7 +161,7 @@ fn autoname_hashes_a_non_utf8_path(sandbox: Sandbox) {
 
     assert_eq!(name.len(), 64);
 
-    assert_ne!(name, sandbox.manager().autoname(Path::new("/tmp/data.bin")));
+    assert_ne!(name, sandbox.manager().autoname(Path::new(TEST_FILE_PATH)));
 }
 
 #[rstest]
@@ -201,7 +204,7 @@ fn path_nests_under_a_subdirectory(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn path_rejects_a_trailing_slash(sandbox: Sandbox) {
+fn path_fails_when_the_name_has_a_trailing_slash(sandbox: Sandbox) {
     assert_err_is!(
         sandbox.manager().path("job-1/"),
         Error::Path(PathError::Invalid(found)) if found == "job-1/"
@@ -225,7 +228,7 @@ fn path_fails_when_the_name_is_invalid(sandbox: Sandbox, #[case] name: &str, #[c
 
 #[cfg(unix)]
 #[rstest]
-fn path_fails_when_name_escapes_through_symlink(sandbox: Sandbox) {
+fn path_fails_when_the_name_escapes_through_a_symlink(sandbox: Sandbox) {
     let outside = sandbox.dir_at("outside");
 
     fs::create_dir_all(sandbox.state_dir()).unwrap();
@@ -343,7 +346,7 @@ fn load_returns_a_verified_state(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn load_treats_a_suffixed_name_as_another_state(sandbox: Sandbox) {
+fn load_fails_when_the_name_is_suffixed(sandbox: Sandbox) {
     verifiable(&sandbox, TEST_STATE_NAME, 2);
 
     let suffixed = state_file(TEST_STATE_NAME);
@@ -412,7 +415,7 @@ fn load_skips_verification_when_it_is_off(sandbox: Sandbox) {
     assert_eq!(state.checksum, "not-a-real-checksum");
     assert_eq!(state.file.path, Path::new(TEST_FILE_PATH));
     assert_eq!(state.file.size, 4);
-    assert_eq!(state.file.mtime.timestamp(), 1_700_000_000);
+    assert_eq!(state.file.mtime.timestamp(), TEST_STAMP);
     assert_eq!(state.file.fingerprint, TEST_LINE_FINGERPRINT);
     assert_eq!(state.timestamps.created_at.timestamp(), 1_700_000_001);
     assert_eq!(state.timestamps.updated_at.timestamp(), 1_700_000_002);
@@ -445,7 +448,7 @@ fn default_agrees_with_the_default_config() {
 }
 
 #[apply(windows_invalid_names)]
-fn every_location_rejects_an_unportable_name(sandbox: Sandbox, #[case] name: &str) {
+fn every_location_fails_when_the_name_is_not_portable(sandbox: Sandbox, #[case] name: &str) {
     let manager = sandbox.manager();
 
     assert_err_is!(manager.path(name), Error::Path(PathError::Invalid(found)) if found == name);
@@ -454,7 +457,7 @@ fn every_location_rejects_an_unportable_name(sandbox: Sandbox, #[case] name: &st
 }
 
 #[apply(unportable_characters)]
-fn every_location_rejects_an_unportable_character(
+fn every_location_fails_when_a_character_is_not_portable(
     sandbox: Sandbox,
     #[case] character: char,
     #[values("job{}1", "sub{}/job-1")] shape: &str,
@@ -482,7 +485,7 @@ fn tmp_keeps_the_name_beside_the_state_file(sandbox: Sandbox, #[case] name: &str
 }
 
 #[apply(device_names)]
-fn every_location_rejects_a_device_name(sandbox: Sandbox, #[case] name: &str) {
+fn every_location_fails_when_the_name_is_a_device(sandbox: Sandbox, #[case] name: &str) {
     let manager = sandbox.manager();
 
     assert_err_is!(manager.path(name), Error::Path(PathError::Invalid(found)) if found == name);

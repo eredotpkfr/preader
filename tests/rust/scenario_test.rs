@@ -12,7 +12,7 @@ use crate::common::guards::Blocked;
 use crate::common::{
     constants::{
         TEST_ALPHABET, TEST_BLANK_LINE_CONTENT, TEST_LINE_CONTENT, TEST_OTHER_STATE_NAME,
-        TEST_SEGMENT_CONTENT, TEST_STATE_NAME,
+        TEST_SEGMENT_CONTENT, TEST_STATE_NAME, TEST_TRACKED_NAME,
     },
     fixtures::sandbox,
     funcs::{drain, items, state_file, texts},
@@ -85,7 +85,7 @@ fn resume_honours_a_different_chunk_size(sandbox: Sandbox) {
 
 #[rstest]
 fn resume_honours_a_different_delimiter(sandbox: Sandbox) {
-    let path = sandbox.file(b"a,b;c,d");
+    let path = sandbox.file(b"seg-0,seg-1;seg-2,seg-3");
     let reader = sandbox.reader();
     let mut segments = reader
         .delimiter(&path)
@@ -105,7 +105,7 @@ fn resume_honours_a_different_delimiter(sandbox: Sandbox) {
 
     let read = items(reader.delimiter(&path).state(state).character(b';').build().unwrap());
 
-    assert_eq!(texts(&read), ["b", "c,d"]);
+    assert_eq!(texts(&read), ["seg-1", "seg-2,seg-3"]);
 }
 
 #[rstest]
@@ -351,7 +351,7 @@ fn symlinks_to_one_target_share_the_autoname(sandbox: Sandbox) {
 
 #[rstest]
 fn build_fails_when_the_tracked_file_is_deleted(sandbox: Sandbox) {
-    let tracked = sandbox.write("tracked.bin", TEST_ALPHABET);
+    let tracked = sandbox.write(TEST_TRACKED_NAME, TEST_ALPHABET);
     let reader = sandbox.lenient();
     let state = sandbox.named_state(&tracked, TEST_STATE_NAME);
 
@@ -382,7 +382,7 @@ fn read_fails_when_the_file_is_replaced_by_a_directory(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn save_error_stops_read_after_truncation(sandbox: Sandbox) {
+fn read_fails_when_a_save_fails_after_a_truncation(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let reader = sandbox.reader_with(Config {
         auto_save_state: true,
@@ -399,7 +399,7 @@ fn save_error_stops_read_after_truncation(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn save_error_stops_read_on_skipped_item(sandbox: Sandbox) {
+fn read_fails_when_a_save_fails_on_a_skipped_item(sandbox: Sandbox) {
     let path = sandbox.file(TEST_LINE_CONTENT);
     let reader = sandbox.autosaving(1);
     let mut lines = reader.lines(&path).state(TEST_STATE_NAME).skip(2).build().unwrap();
@@ -412,7 +412,7 @@ fn save_error_stops_read_on_skipped_item(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn save_error_stops_read_on_filtered_blank(sandbox: Sandbox) {
+fn read_fails_when_a_save_fails_on_a_filtered_blank(sandbox: Sandbox) {
     let path = sandbox.file(b"\nfoo\n");
     let reader = sandbox.autosaving(1);
     let mut lines = reader.lines(&path).state(TEST_STATE_NAME).skip_empty(true).build().unwrap();
@@ -425,7 +425,7 @@ fn save_error_stops_read_on_filtered_blank(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn save_error_stops_read_when_end_drops_chunk(sandbox: Sandbox) {
+fn read_fails_when_a_save_fails_on_a_chunk_dropped_by_end(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
     let reader = sandbox.autosaving(0);
     let mut chunks = reader

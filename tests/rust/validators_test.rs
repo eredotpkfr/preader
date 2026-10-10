@@ -6,7 +6,8 @@ use crate::common::{
     macros::asserts::assert_err_is,
     rule::Rule,
     templates::name::{
-        device_names, invalid_names, unportable_characters, valid_names, windows_invalid_names,
+        device_names, invalid_names, longest_names, too_long_names, unportable_characters,
+        valid_names, windows_invalid_names,
     },
 };
 
@@ -38,4 +39,14 @@ fn validate_name_fails_when_a_character_is_not_portable(
 #[apply(device_names)]
 fn validate_name_fails_when_the_name_is_a_device(#[case] name: &str) {
     assert_err_is!(validate_name(name), PathError::Invalid(found) if found == name);
+}
+
+#[apply(longest_names)]
+fn validate_name_accepts_the_longest_portable_name(#[case] name: String) {
+    assert_eq!(validate_name(&name).unwrap(), name);
+}
+
+#[apply(too_long_names)]
+fn validate_name_fails_when_the_name_is_too_long(#[case] name: String) {
+    assert_err_is!(validate_name(&name), PathError::Invalid(found) if *found == name);
 }

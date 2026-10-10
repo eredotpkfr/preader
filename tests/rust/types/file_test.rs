@@ -60,7 +60,7 @@ fn compares_by_value(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn rejects_a_directory(sandbox: Sandbox) {
+fn fails_when_the_path_is_a_directory(sandbox: Sandbox) {
     let path = sandbox.dir_at("folder");
 
     assert_err_is!(FileMetadata::try_from(path.as_path()), Error::NotAFile(found) if *found == path);
@@ -72,7 +72,7 @@ fn rejects_a_directory(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn rejects_a_missing_file(sandbox: Sandbox) {
+fn fails_when_the_file_is_missing(sandbox: Sandbox) {
     let path = sandbox.path().join("missing.bin");
 
     assert_err_is!(
@@ -82,7 +82,7 @@ fn rejects_a_missing_file(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn rejects_a_pre_epoch_mtime(sandbox: Sandbox) {
+fn fails_when_the_mtime_precedes_the_epoch(sandbox: Sandbox) {
     let path = sandbox.line_file();
 
     if !set_pre_epoch_mtime(&path) {

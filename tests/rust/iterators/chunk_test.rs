@@ -121,7 +121,7 @@ fn iterator_yields_owned_chunks(sandbox: Sandbox) {
 
 #[cfg(unix)]
 #[rstest]
-fn read_reports_a_mid_chunk_io_error(sandbox: Sandbox) {
+fn read_fails_when_io_fails_mid_chunk(sandbox: Sandbox) {
     let directory = sandbox.dir_at("folder");
     let opened = sandbox.state_at(&directory, TEST_READ_FROM);
     let mut chunks = sandbox.lenient().chunks(&directory).state(opened).build().unwrap();

@@ -15,7 +15,7 @@ use crate::common::{
 };
 
 #[rstest]
-fn options_are_validated_before_file_is_opened(sandbox: Sandbox) {
+fn build_fails_when_the_range_is_inverted_before_opening_the_file(sandbox: Sandbox) {
     let missing = sandbox.path().join("missing.bin");
 
     assert_err_is!(
@@ -44,7 +44,7 @@ fn file_is_canonicalized(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn empty_file_builds_and_yields_nothing(sandbox: Sandbox) {
+fn empty_file_yields_nothing(sandbox: Sandbox) {
     let path = sandbox.empty_file();
 
     for iterator in ITERATORS {

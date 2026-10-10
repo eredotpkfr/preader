@@ -2,15 +2,15 @@ use preader::{Error, IteratorBuild, IteratorRead};
 use rstest::rstest;
 
 use crate::common::{
-    constants::{TEST_BLANK_LINE_CONTENT, TEST_LINE_CONTENT, TEST_UNICODE_TEXT},
+    constants::{TEST_BLANK_LINE_CONTENT, TEST_LINE_CONTENT, TEST_STATE_NAME, TEST_UNICODE_TEXT},
     fixtures::sandbox,
     funcs::{drain, items},
     macros::asserts::assert_err_is,
+    matrix::contents::CRLF_LINES,
     sandbox::Sandbox,
 };
 
 const INVALID_LINES: &[u8] = b"line-0\n\xff\xfe\nline-2\n";
-const CRLF_CONTENT: &[u8] = b"line-0\r\nline-1\r\n";
 const LINES: [&str; 6] = ["line-0", "line-1", "line-2", "line-3", "line-4", "line-5"];
 
 fn lines(sandbox: &Sandbox, content: &[u8]) -> Vec<String> {
@@ -33,13 +33,13 @@ fn read_keeps_a_blank_line(sandbox: Sandbox) {
 }
 
 #[rstest]
-fn read_yields_blank_only_file_as_blank_lines(sandbox: Sandbox) {
+fn blank_only_file_yields_blank_lines(sandbox: Sandbox) {
     assert_eq!(lines(&sandbox, b"\n\n\n"), ["", "", ""]);
 }
 
 #[rstest]
 fn read_strips_both_crlf_characters(sandbox: Sandbox) {
-    assert_eq!(lines(&sandbox, CRLF_CONTENT), ["line-0", "line-1"]);
+    assert_eq!(lines(&sandbox, CRLF_LINES), ["line-0", "line-1"]);
 }
 
 #[rstest]
@@ -57,7 +57,7 @@ fn lone_carriage_return_is_not_a_separator(sandbox: Sandbox) {
 
 #[rstest]
 fn keepends_preserves_the_full_crlf(sandbox: Sandbox) {
-    let path = sandbox.file(CRLF_CONTENT);
+    let path = sandbox.file(CRLF_LINES);
     let read = items(sandbox.reader().lines(&path).keepends(true).build().unwrap());
 
     assert_eq!(read, ["line-0\r\n", "line-1\r\n"]);
@@ -154,7 +154,7 @@ fn read_counts_the_invalid_line(sandbox: Sandbox) {
 fn resume_after_an_invalid_line_stays_aligned(sandbox: Sandbox) {
     let path = sandbox.file(INVALID_LINES);
     let reader = sandbox.resuming();
-    let mut lines = reader.lines(&path).state("job-1").build().unwrap();
+    let mut lines = reader.lines(&path).state(TEST_STATE_NAME).build().unwrap();
 
     lines.read().unwrap();
 
@@ -164,7 +164,7 @@ fn resume_after_an_invalid_line_stays_aligned(sandbox: Sandbox) {
 
     drop(lines);
 
-    let resumed = items(reader.lines(&path).state("job-1").build().unwrap());
+    let resumed = items(reader.lines(&path).state(TEST_STATE_NAME).build().unwrap());
 
     assert_eq!(resumed, ["line-2"]);
 }
