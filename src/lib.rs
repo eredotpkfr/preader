@@ -48,7 +48,7 @@ pub use {
     constants::TMP_FILE_EXTENSION,
     enums::{autosave::AutoSave, skip::Skip},
     manager::StateManager,
-    types::{checksum::ChecksumBody, core::FileReader, window::Window},
+    types::{checksum::ChecksumBody, window::Window},
     utils::{
         file::{fingerprint, starts_mid_item},
         path::{default_state_dir, resolves_in_place, scoped_join},

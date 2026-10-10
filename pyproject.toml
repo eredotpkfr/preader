@@ -52,7 +52,6 @@ dev = [
     "pytest-xdist",
     "pytest-randomly",
     "pytest-timeout",
-    "pytest-repeat",
     "pytest-socket",
     "pytest-icdiff",
     "pytest-sugar",
