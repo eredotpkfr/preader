@@ -511,7 +511,7 @@ def test_delimiter_raises_when_the_delimiter_is_not_a_single_byte(
 def test_delimiter_raises_when_the_byte_is_out_of_range(
     reader: PReader, tmp_file: Path, delimiter: list[int]
 ) -> None:
-    with pytest.raises(OverflowError, match="out of range"):
+    with pytest.raises(OverflowError, match="'delimiter'"):
         reader.delimiter(tmp_file, delimiter=delimiter)
 
 
