@@ -1,6 +1,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::utils::time;
+
 #[cfg_attr(
     feature = "python",
     pyo3::pyclass(module = "preader", eq, frozen, get_all, skip_from_py_object)
@@ -15,7 +17,7 @@ pub struct Timestamps {
 
 impl Timestamps {
     pub fn now() -> Self {
-        let now = Utc::now();
+        let now = time::now();
 
         Self {
             created_at: now,

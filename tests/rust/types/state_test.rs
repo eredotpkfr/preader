@@ -321,12 +321,8 @@ fn resync_updates_the_file_metadata(sandbox: Sandbox) {
 #[rstest]
 fn resync_keeps_name_position_and_created_at(sandbox: Sandbox) {
     let path = sandbox.line_file();
-    let mut bytes = sandbox.reader().bytes(&path).state(TEST_STATE_NAME).build().unwrap();
-
-    bytes.read().unwrap();
-
-    let state = bytes.state().clone();
-    let moved = sandbox.write("moved.bin", TEST_LINE);
+    let state = sandbox.manager().state(state_data(canonical(&path)));
+    let moved = sandbox.write("moved.bin", &TEST_LINE.repeat(2));
     let resynced = state.resync(&moved).unwrap();
 
     assert!(resynced.timestamps.updated_at > state.timestamps.updated_at);
@@ -744,10 +740,9 @@ fn save_returns_the_created_path(sandbox: Sandbox) {
 #[rstest]
 fn save_updates_only_the_updated_at(sandbox: Sandbox) {
     let path = sandbox.line_file();
-    let mut state = sandbox.state(&path);
+    let mut state = sandbox.manager().state(state_data(canonical(&path)));
     let created_at = state.timestamps.created_at;
 
-    state.save().unwrap();
     state.save().unwrap();
 
     assert!(state.timestamps.updated_at > created_at);

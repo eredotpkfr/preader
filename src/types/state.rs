@@ -3,7 +3,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use chrono::Utc;
 use derive_more::{Deref, Eq, PartialEq};
 use serde::{Deserialize, Serialize};
 use serde_json::to_string_pretty;
@@ -13,6 +12,7 @@ use crate::{
     macros::ensure,
     manager::StateManager,
     types::{checksum::ChecksumBody, file::FileMetadata, time::Timestamps},
+    utils::time,
 };
 
 #[cfg_attr(
@@ -104,7 +104,7 @@ impl State {
             }
         }
 
-        data.timestamps.updated_at = Utc::now();
+        data.timestamps.updated_at = time::now();
         data.checksum = ChecksumBody::from(&data).compute()?;
 
         Ok(data)

@@ -154,12 +154,19 @@ def test_save_returns_the_created_path(
 
 @pytest.mark.repeat(10)
 def test_save_updates_timestamp_but_not_created_at(
-    reader: PReader, tmp_file: Path, read_state: Callable[..., Any]
+    make_reader: Callable[..., PReader], tmp_file: Path, read_state: Callable[..., Any]
 ) -> None:
-    state = reader.bytes(tmp_file).state
+    reader = make_reader(verify_state=False)
+    state_path = reader.bytes(tmp_file, state=TEST_STATE_NAME).state.save()
+
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    payload["timestamps"] = {"created_at": 0, "updated_at": 0}
+
+    state_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    state = reader.states[TEST_STATE_NAME]
     created_at = state.timestamps.created_at
 
-    state.save()
     state.save()
 
     assert state.timestamps.created_at == created_at
@@ -342,13 +349,20 @@ def test_resync_updates_the_file_metadata(
 
 
 def test_resync_keeps_name_position_and_created_at(
-    reader: PReader,
+    make_reader: Callable[..., PReader],
     tmp_file: Path,
     make_file: Callable[..., Path],
     consume: Callable[..., Any],
 ) -> None:
-    state = consume(reader.bytes(tmp_file, state=TEST_STATE_NAME), 1).state
-    state.save()
+    reader = make_reader(verify_state=False)
+    state_path = consume(reader.bytes(tmp_file, state=TEST_STATE_NAME), 1).state.save()
+
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    payload["timestamps"] = {"created_at": 0, "updated_at": 0}
+
+    state_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    state = reader.states[TEST_STATE_NAME]
 
     moved = make_file(tmp_file.read_bytes(), name="moved.bin")
     resynced = state.resync(moved)
@@ -1025,12 +1039,7 @@ def test_save_syncs_the_state_object_with_the_file(
     assert reloaded.position == 12
     assert reloaded.file == state.file
     assert reloaded.checksum() == state.checksum()
-    assert reloaded.timestamps.created_at == state.timestamps.created_at.replace(
-        microsecond=0
-    )
-    assert reloaded.timestamps.updated_at == state.timestamps.updated_at.replace(
-        microsecond=0
-    )
+    assert reloaded.timestamps == state.timestamps
 
 
 def test_saved_payload_has_the_expected_keys(
