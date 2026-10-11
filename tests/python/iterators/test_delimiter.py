@@ -23,10 +23,10 @@ from preader import (
 )
 
 SEGMENTS = [f"seg-{i}" for i in range(10)]
-DELIMITER_CONTENT = TEST_DEFAULT_DELIMITER.join(SEGMENTS).encode()
+DELIMITER_CONTENT = TEST_DEFAULT_DELIMITER.join(map(str.encode, SEGMENTS))
 BLANK_SEGMENT_CONTENT = TEST_DEFAULT_DELIMITER.join(
-    [SEGMENTS[0], "", SEGMENTS[2], ""]
-).encode()
+    [SEGMENTS[0].encode(), b"", SEGMENTS[2].encode(), b""]
+)
 
 
 @pytest.fixture
@@ -105,19 +105,6 @@ def test_skip_stops_at_a_truncation(
     )
 
 
-def test_skip_past_the_end_yields_nothing(reader: PReader, data_file: Path) -> None:
-    options = IteratorOptions(skip=1000)
-
-    assert (
-        list(
-            reader.delimiter(
-                data_file, options=options, delimiter=TEST_DEFAULT_DELIMITER
-            )
-        )
-        == []
-    )
-
-
 def test_align_start_skips_partial_segment(reader: PReader, data_file: Path) -> None:
     options = IteratorOptions(start=14)
 
@@ -179,18 +166,10 @@ def test_buffer_capacity_smaller_than_segment_length(
 def test_content_without_the_delimiter_yields_one_segment(
     reader: PReader, make_file: Callable[..., Path]
 ) -> None:
-    content = DELIMITER_CONTENT.replace(TEST_DEFAULT_DELIMITER.encode(), b"")
+    content = DELIMITER_CONTENT.replace(TEST_DEFAULT_DELIMITER, b"")
     path = make_file(content)
 
     assert list(reader.delimiter(path, delimiter=TEST_DEFAULT_DELIMITER)) == [content]
-
-
-def test_null_byte_delimiter_splits_the_content(
-    reader: PReader, make_file: Callable[..., Path]
-) -> None:
-    path = make_file(b"foo\x00bar\x00baz")
-
-    assert list(reader.delimiter(path, delimiter="\x00")) == [b"foo", b"bar", b"baz"]
 
 
 def test_resume_applies_a_different_delimiter(
@@ -205,9 +184,9 @@ def test_resume_applies_a_different_delimiter(
     ).state
     state.save()
 
-    resumed = reader.delimiter(path, delimiter=";", state=state)
+    resumed = reader.delimiter(path, delimiter=b";", state=state)
 
-    rest_of_first_copy = TEST_DEFAULT_DELIMITER.join(SEGMENTS[1:]).encode()
+    rest_of_first_copy = TEST_DEFAULT_DELIMITER.join(map(str.encode, SEGMENTS[1:]))
 
     assert list(resumed) == [rest_of_first_copy, DELIMITER_CONTENT]
 
@@ -277,6 +256,71 @@ def test_end_below_the_position_does_not_rewind_the_state(
     )
 
     assert reader.states[TEST_STATE_NAME].position == saved
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        IteratorOptions(start=1000),
+        IteratorOptions(end=0),
+        IteratorOptions(limit=0),
+        IteratorOptions(skip=1000),
+    ],
+    ids=["start_past_the_end", "end_zero", "limit_zero", "skip_past_the_end"],
+)
+def test_boundary_options_yield_nothing(
+    reader: PReader, data_file: Path, options: IteratorOptions
+) -> None:
+    segments = reader.delimiter(
+        data_file, delimiter=TEST_DEFAULT_DELIMITER, options=options
+    )
+
+    assert list(segments) == []
+
+
+@pytest.mark.parametrize(
+    ("options", "count"),
+    [(IteratorOptions(end=12, limit=100), 2), (IteratorOptions(end=100, limit=3), 3)],
+    ids=["end_is_tighter", "limit_is_tighter"],
+)
+def test_tighter_of_end_and_limit_wins(
+    reader: PReader, data_file: Path, options: IteratorOptions, count: int
+) -> None:
+    segments = reader.delimiter(
+        data_file, delimiter=TEST_DEFAULT_DELIMITER, options=options
+    )
+
+    assert list(segments) == [segment.encode() for segment in SEGMENTS[:count]]
+
+
+def test_resume_with_smaller_threshold_saves_early(
+    data_file: Path, make_reader: Callable[..., PReader], consume: Callable[..., Any]
+) -> None:
+    first_reader = make_reader(auto_save_state=True, auto_save_state_bytes=1000)
+    first = first_reader.delimiter(
+        data_file, delimiter=TEST_DEFAULT_DELIMITER, state=TEST_STATE_NAME
+    )
+    state = consume(first, 2).state
+    state.save()
+
+    second_reader = make_reader(auto_save_state=True, auto_save_state_bytes=8)
+    iterator = second_reader.delimiter(
+        data_file, delimiter=TEST_DEFAULT_DELIMITER, state=state
+    )
+
+    consume(iterator, 1)
+
+    assert second_reader.states[TEST_STATE_NAME].position == 18
+
+
+def test_skip_empty_drops_a_delimiter_only_file(
+    reader: PReader, make_file: Callable[..., Path]
+) -> None:
+    path = make_file(TEST_DEFAULT_DELIMITER * 3)
+
+    segments = reader.delimiter(path, delimiter=TEST_DEFAULT_DELIMITER, skip_empty=True)
+
+    assert list(segments) == []
 
 
 def test_resume_on_fully_consumed_file_yields_nothing(
@@ -493,7 +537,7 @@ def test_a_failing_autosave_stops_the_read_on_a_filtered_blank(
     config.state_dir.write_bytes(b"not a directory")
 
     reader = make_reader(auto_save_state=True, auto_save_state_bytes=1)
-    path = make_file(TEST_DEFAULT_DELIMITER.encode() + b"foo")
+    path = make_file(TEST_DEFAULT_DELIMITER + b"foo")
 
     iterator = reader.delimiter(
         path, state=TEST_STATE_NAME, delimiter=TEST_DEFAULT_DELIMITER, skip_empty=True
@@ -518,7 +562,7 @@ def test_delimiter_iterator_repr(
     assert repr(iterator) == expected_repr(
         "DelimiterIterator",
         state=reindent(repr(iterator.state), 2),
-        delimiter=f"'{iterator.delimiter}'",
+        delimiter=list(iterator.delimiter),
         keep_delimiter=str(iterator.keep_delimiter).lower(),
         skip_empty=str(iterator.skip_empty).lower(),
         skip_remaining=iterator.skip_remaining,
@@ -1035,18 +1079,18 @@ def test_resume_ignores_align_start_and_skip(
     assert list(resumed) == expected
 
 
-def test_newline_delimiter_splits_lines(
+def test_newline_delimiter_keeps_the_carriage_return(
     reader: PReader, make_file: Callable[..., Path]
 ) -> None:
-    path = make_file(b"foo\nbar\n")
+    path = make_file(b"foo\r\nbar\n")
 
-    assert list(reader.delimiter(path, delimiter="\n")) == [b"foo", b"bar"]
+    assert list(reader.delimiter(path, delimiter=b"\n")) == [b"foo\r", b"bar"]
 
 
 def test_delimiter_only_file_yields_blank_segments(
     reader: PReader, make_file: Callable[..., Path]
 ) -> None:
-    path = make_file(TEST_DEFAULT_DELIMITER.encode() * 3)
+    path = make_file(TEST_DEFAULT_DELIMITER * 3)
 
     assert list(reader.delimiter(path, delimiter=TEST_DEFAULT_DELIMITER)) == [
         b"",
@@ -1058,12 +1102,12 @@ def test_delimiter_only_file_yields_blank_segments(
 def test_delimiter_only_file_keeps_each_delimiter(
     reader: PReader, make_file: Callable[..., Path]
 ) -> None:
-    path = make_file(TEST_DEFAULT_DELIMITER.encode() * 3)
+    path = make_file(TEST_DEFAULT_DELIMITER * 3)
     iterator = reader.delimiter(
         path, delimiter=TEST_DEFAULT_DELIMITER, keep_delimiter=True
     )
 
-    assert list(iterator) == [TEST_DEFAULT_DELIMITER.encode()] * 3
+    assert list(iterator) == [TEST_DEFAULT_DELIMITER] * 3
 
 
 @pytest.mark.parametrize(

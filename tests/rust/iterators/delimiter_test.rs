@@ -1,3 +1,5 @@
+use std::io::BufRead;
+
 #[cfg(unix)]
 use preader::Error;
 use preader::{DEFAULT_DELIMITER, IteratorBuild, IteratorRead};
@@ -8,6 +10,7 @@ use crate::common::{
     constants::{TEST_BLANK_SEGMENT_CONTENT, TEST_INVALID_UTF8, TEST_SEGMENT_CONTENT},
     fixtures::sandbox,
     funcs::{drain, items, texts},
+    matrix::contents::{ALL_BYTES, EMPTY, UTF8_SEGMENTS},
     sandbox::Sandbox,
     templates::delimiter::delimiter_characters,
 };
@@ -53,6 +56,30 @@ fn file_without_delimiter_yields_one_segment(sandbox: Sandbox) {
 #[rstest]
 fn trailing_delimiter_yields_no_extra_segment(sandbox: Sandbox) {
     assert_eq!(segments(&sandbox, b"seg-0,seg-1,"), ["seg-0", "seg-1"]);
+}
+
+#[apply(delimiter_characters)]
+fn read_matches_std_split(
+    sandbox: Sandbox,
+    #[values(
+        EMPTY,
+        TEST_SEGMENT_CONTENT,
+        TEST_BLANK_SEGMENT_CONTENT,
+        UTF8_SEGMENTS,
+        ALL_BYTES
+    )]
+    content: &[u8],
+    #[case] character: u8,
+    #[values(1, 2, 64, 8192)] capacity: usize,
+) {
+    let path = sandbox.file(content);
+    let reader = sandbox.capped(capacity);
+    let builder = || reader.delimiter(&path).character(character);
+    let stripped: Vec<Vec<u8>> = BufRead::split(content, character).map(Result::unwrap).collect();
+    let kept: Vec<&[u8]> = content.split_inclusive(|byte| *byte == character).collect();
+
+    assert_eq!(items(builder().build().unwrap()), stripped);
+    assert_eq!(items(builder().keep(true).build().unwrap()), kept);
 }
 
 #[apply(delimiter_characters)]

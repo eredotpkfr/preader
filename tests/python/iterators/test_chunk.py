@@ -109,6 +109,20 @@ def test_resume_applies_a_different_chunk_size(
     assert resumed == expected
 
 
+def test_resume_applies_skip_when_the_position_equals_the_start(
+    reader: PReader, data_file: Path, consume: Callable[..., Any]
+) -> None:
+    saved = consume(
+        reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=2), 2
+    ).state
+    saved.save()
+
+    options = IteratorOptions(start=saved.position, skip=1)
+    resumed = reader.chunks(data_file, state=saved, options=options, chunk_size=2)
+
+    assert b"".join(resumed) == TEST_ALPHABET[6:]
+
+
 def test_resume_ignores_options_when_already_past_start(
     reader: PReader, data_file: Path, consume: Callable[..., Any]
 ) -> None:
@@ -146,6 +160,51 @@ def test_end_below_the_position_does_not_rewind_the_state(
     )
 
     assert reader.states[TEST_STATE_NAME].position == saved
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        IteratorOptions(start=1000),
+        IteratorOptions(end=0),
+        IteratorOptions(limit=0),
+        IteratorOptions(skip=1000),
+    ],
+    ids=["start_past_the_end", "end_zero", "limit_zero", "skip_past_the_end"],
+)
+def test_boundary_options_yield_nothing(
+    reader: PReader, data_file: Path, options: IteratorOptions
+) -> None:
+    assert list(reader.chunks(data_file, options=options)) == []
+
+
+@pytest.mark.parametrize(
+    ("options", "expected_length"),
+    [(IteratorOptions(end=5, limit=100), 5), (IteratorOptions(end=100, limit=2), 4)],
+    ids=["end_is_tighter", "limit_is_tighter"],
+)
+def test_tighter_of_end_and_limit_wins(
+    reader: PReader, data_file: Path, options: IteratorOptions, expected_length: int
+) -> None:
+    chunks = reader.chunks(data_file, options=options, chunk_size=2)
+
+    assert b"".join(chunks) == TEST_ALPHABET[:expected_length]
+
+
+def test_resume_with_smaller_threshold_saves_early(
+    data_file: Path, make_reader: Callable[..., PReader], consume: Callable[..., Any]
+) -> None:
+    first_reader = make_reader(auto_save_state=True, auto_save_state_bytes=1000)
+    first = first_reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=2)
+    state = consume(first, 3).state
+    state.save()
+
+    second_reader = make_reader(auto_save_state=True, auto_save_state_bytes=4)
+    iterator = second_reader.chunks(data_file, state=state, chunk_size=2)
+
+    consume(iterator, 1)
+
+    assert second_reader.states[TEST_STATE_NAME].position == 8
 
 
 def test_resume_on_fully_consumed_file_yields_nothing(

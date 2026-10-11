@@ -15,7 +15,7 @@ from preader import IteratorOptions, PReader
 
 SEEDS = (1, 2, 3)
 SIZES = (512, 4096, 51_200)
-KINDS = ("random", "text", "zip")
+KINDS = ("random", "text", "zip", "pdf")
 CHUNK_SIZES = (1, 4096)
 BUFFER_CAPACITIES = (1024, 65_536)
 CYCLES = 5
@@ -71,14 +71,32 @@ def _seeded_zip(
     return archive.getvalue()
 
 
+def _seeded_pdf(seed: int, size: int) -> bytes:
+    stream = _seeded_bytes(seed, size)
+
+    return b"%PDF-1.7\n1 0 obj\nstream\n" + stream + b"\nendstream\nendobj\n%%EOF\n"
+
+
 def _sized_content(kind: str, seed: int, size: int) -> bytes:
     match kind:
         case "random":
             return _seeded_bytes(seed, size)
         case "text":
             return _seeded_text(seed, size).encode()
+        case "pdf":
+            return _seeded_pdf(seed, size)
         case _:
             return _seeded_zip(seed, size)
+
+
+def _split_stream(
+    content: bytes, delimiter: bytes, *, keep: bool = False
+) -> list[bytes]:
+    segments = content.split(delimiter)
+    tail = segments.pop()
+    kept = [segment + delimiter for segment in segments] if keep else segments
+
+    return [*kept, tail] if tail else kept
 
 
 CONTENTS = {
@@ -97,6 +115,7 @@ ARCHIVES = {
     for name, content in CONTENTS.items()
     if name.startswith("zip") and name.endswith("seed-1")
 }
+DELIMITERS = {"comma": b",", "newline": b"\n", "null": b"\x00"}
 ITERATORS = {
     "bytes": lambda reader, path, **options: reader.bytes(path, **options),
     "chunks": lambda reader, path, **options: reader.chunks(
@@ -190,6 +209,64 @@ def test_skip_empty_drops_the_blank_lines(
     assert kept == [line for line in text.splitlines() if line]
 
 
+@pytest.mark.parametrize("buffer_capacity", BUFFER_CAPACITIES)
+@pytest.mark.parametrize("delimiter", DELIMITERS.values(), ids=DELIMITERS)
+@pytest.mark.parametrize("content", CONTENTS.values(), ids=CONTENTS)
+def test_delimiter_splits_like_a_stream(
+    make_reader: Callable[..., PReader],
+    make_file: Callable[..., Path],
+    content: bytes,
+    delimiter: bytes,
+    buffer_capacity: int,
+) -> None:
+    reader = make_reader(buffer_capacity=buffer_capacity)
+    path = make_file(content)
+
+    stripped = list(reader.delimiter(path, delimiter=delimiter))
+    kept = list(reader.delimiter(path, delimiter=delimiter, keep_delimiter=True))
+
+    assert stripped == _split_stream(content, delimiter)
+    assert kept == _split_stream(content, delimiter, keep=True)
+
+
+@pytest.mark.parametrize("content", CONTENTS.values(), ids=CONTENTS)
+def test_delimiter_skip_empty_drops_the_blank_segments(
+    reader: PReader, make_file: Callable[..., Path], content: bytes
+) -> None:
+    kept = list(
+        reader.delimiter(
+            make_file(content), delimiter=TEST_DEFAULT_DELIMITER, skip_empty=True
+        )
+    )
+
+    assert kept == [
+        segment for segment in _split_stream(content, TEST_DEFAULT_DELIMITER) if segment
+    ]
+
+
+@pytest.mark.parametrize(
+    ("text", "encoding", "delimiter"),
+    [
+        ("café,鉄", "utf-16-le", b","),
+        ("café,鉄", "utf-16-be", b","),
+        ("ਊ", "utf-16-le", b"\n"),
+    ],
+    ids=["little_endian", "big_endian", "newline_inside_a_character"],
+)
+def test_delimiter_splits_utf16_on_bytes(
+    reader: PReader,
+    make_file: Callable[..., Path],
+    text: str,
+    encoding: str,
+    delimiter: bytes,
+) -> None:
+    content = text.encode(encoding)
+
+    segments = list(reader.delimiter(make_file(content), delimiter=delimiter))
+
+    assert segments == _split_stream(content, delimiter)
+
+
 @pytest.mark.parametrize(("make_iterator", "content"), FLOWS.values(), ids=FLOWS)
 def test_percent_tracks_the_position(
     reader: PReader,
@@ -230,6 +307,29 @@ def test_resume_rebuilds_the_file_in_cycles(
     ]
 
     assert rebuilt == expected
+
+
+@pytest.mark.parametrize("delimiter", DELIMITERS.values(), ids=DELIMITERS)
+@pytest.mark.parametrize("content", CONTENTS.values(), ids=CONTENTS)
+def test_delimiter_windows_cover_the_content_once(
+    reader: PReader, make_file: Callable[..., Path], content: bytes, delimiter: bytes
+) -> None:
+    path = make_file(content)
+    cuts = [0, len(content) // 3, len(content) * 2 // 3, len(content)]
+
+    segments = [
+        segment
+        for start, end in itertools.pairwise(cuts)
+        for segment in reader.delimiter(
+            path,
+            delimiter=delimiter,
+            keep_delimiter=True,
+            align_start=start > 0,
+            options=IteratorOptions(start=start, end=end),
+        )
+    ]
+
+    assert b"".join(segments) == content
 
 
 @pytest.mark.parametrize(("make_iterator", "content"), WINDOWS.values(), ids=WINDOWS)
