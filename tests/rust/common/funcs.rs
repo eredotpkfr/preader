@@ -1,11 +1,106 @@
-use std::{fs, path::PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
-use tempfile::TempDir;
+use chrono::DateTime;
+use preader::{
+    FileMetadata, Result, STATE_FILE_EXTENSION, State, StateData, StateRegistry, Timestamps,
+};
+use sha2::{Digest, Sha256};
 
-pub fn write(tmp_dir: &TempDir, name: &str, content: &[u8]) -> PathBuf {
-    let path = tmp_dir.path().join(name);
+use crate::common::{
+    constants::{TEST_LINE, TEST_LINE_FINGERPRINT, TEST_STAMP, TEST_STATE_NAME},
+    interfaces::Item,
+};
 
-    fs::write(&path, content).unwrap();
+pub fn items<I, T>(iterator: I) -> Vec<T>
+where
+    I: Iterator<Item = Result<T>>,
+{
+    try_items(iterator).unwrap()
+}
 
-    path
+pub fn try_items<I, T>(iterator: I) -> Result<Vec<T>>
+where
+    I: Iterator<Item = Result<T>>,
+{
+    iterator.collect()
+}
+
+pub fn take<I, T>(iterator: &mut I, count: usize) -> Vec<T>
+where
+    I: Iterator<Item = Result<T>>,
+{
+    items(iterator.take(count))
+}
+
+pub fn drain<I, T>(iterator: &mut I) -> usize
+where
+    I: Iterator<Item = Result<T>>,
+{
+    items(iterator).len()
+}
+
+pub fn consume<I, T>(iterator: &mut I, count: usize)
+where
+    I: Iterator<Item = Result<T>>,
+{
+    take(iterator, count);
+}
+
+pub fn texts(items: &[Vec<u8>]) -> Vec<String> {
+    items.iter().map(|item| String::from_utf8(item.clone()).unwrap()).collect()
+}
+
+pub fn flatten<T: Item>(items: Vec<T>) -> Vec<Vec<u8>> {
+    items.into_iter().map(Item::bytes).collect()
+}
+
+pub fn digest(content: &[u8]) -> String {
+    hex::encode(Sha256::digest(content))
+}
+
+pub fn canonical(path: &Path) -> PathBuf {
+    dunce::canonicalize(path).unwrap()
+}
+
+pub fn state_file(name: &str) -> String {
+    format!("{name}{STATE_FILE_EXTENSION}")
+}
+
+pub fn names(registry: &StateRegistry) -> Vec<String> {
+    let mut names: Vec<String> = registry.names().unwrap().map(Result::unwrap).collect();
+
+    names.sort();
+    names
+}
+
+pub fn state_data(path: PathBuf) -> StateData {
+    let stamp = DateTime::from_timestamp(TEST_STAMP, 0).unwrap();
+
+    StateData {
+        name: TEST_STATE_NAME.to_owned(),
+        file: FileMetadata {
+            path,
+            size: TEST_LINE.len() as u64,
+            mtime: stamp,
+            fingerprint: TEST_LINE_FINGERPRINT.to_owned(),
+        },
+        position: 7,
+        timestamps: Timestamps {
+            created_at: stamp,
+            updated_at: stamp,
+        },
+        checksum: String::new(),
+    }
+}
+
+pub fn tamper(state: &State) {
+    let payload = state.path().unwrap();
+    let patched = fs::read_to_string(&payload)
+        .unwrap()
+        .replace("\"position\": 0", "\"position\": 999");
+
+    fs::write(&payload, patched).unwrap();
 }

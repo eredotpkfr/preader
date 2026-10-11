@@ -1,25 +1,31 @@
 SHELL=/bin/bash
 
-.PHONY: all
+BOLD := $(shell tput bold 2>/dev/null)
+CYAN := $(shell tput setaf 6 2>/dev/null)
+RESET := $(shell tput sgr0 2>/dev/null)
 
-all: \
+TARGETS := \
 	book-build \
 	book-test \
 	cargo-build \
 	cargo-check \
 	cargo-clean \
+	cargo-clippy \
+	cargo-deny \
 	cargo-doc \
 	cargo-doc-rs \
 	cargo-doc-test \
 	cargo-fix \
 	cargo-machete \
 	cargo-nextest \
+	cargo-rustfmt \
+	cargo-rustfmt-check \
 	cargo-test \
 	cargo-udeps \
-	clippy \
+	cargo-update \
 	coverage \
+	coverage-codecov \
 	coverage-lcov \
-	deny \
 	develop \
 	install-cargo-clippy \
 	install-cargo-deny \
@@ -38,58 +44,75 @@ all: \
 	install-uv-mac \
 	live-book \
 	maturin-generate-ci \
+	mypy \
+	pre-commit \
+	pre-commit-update-hooks \
 	pytest \
 	ruff-check \
 	ruff-check-fix \
 	ruff-format \
 	ruff-format-check \
-	rustfmt \
-	rustfmt-check \
 	rustup \
 	shell \
-	update-pre-commit-hooks \
+	stubs \
+	stubtest \
+	stubtest-allowlist \
 	uv-audit \
 	uv-create-venv
+
+.DEFAULT_GOAL := help
+.PHONY: help $(TARGETS)
+
+help:
+	@echo "$(BOLD)$(CYAN)Usage:$(RESET) make $(BOLD)<target>$(RESET), where $(BOLD)<target>$(RESET) is one of:"
+	@echo "$(TARGETS)" | sed 's/ /, /g' | fold -s -w 76 | sed 's/^/  /; s/ *$$//'
 
 book-build:
 	@mdbook build book
 book-test:
 	@mdbook test book
 cargo-build:
-	@uv run cargo build
+	@uv run cargo build --features python,experimental-inspect
 cargo-check:
-	@uv run cargo check
+	@uv run cargo check --all-features --all-targets
 cargo-clean:
 	@cargo clean
+cargo-clippy:
+	@uv run cargo clippy --all-targets --all-features -- -D warnings
+cargo-deny:
+	@cargo deny --all-features --log-level error check
 cargo-doc:
-	@uv run cargo doc
+	@uv run cargo doc --all-features
 cargo-doc-rs:
-	@uv run cargo +nightly docs-rs
+	@cargo +nightly docs-rs
 cargo-doc-test:
-	@uv run cargo test --doc
+	@cargo test --doc
 cargo-fix:
-	@uv run cargo fix --allow-dirty --allow-staged
+	@uv run cargo fix --all-features --allow-dirty --allow-staged
 cargo-machete:
 	@cargo machete
 cargo-nextest:
-	@uv run cargo nextest run
+	@cargo nextest run --features testing
+cargo-rustfmt: cargo-fix
+	@cargo +nightly fmt --all
+cargo-rustfmt-check:
+	@cargo +nightly fmt --all -- --check
 cargo-test:
-	@uv run cargo test
+	@cargo test --features testing
 cargo-udeps:
-	@uv run cargo +nightly udeps --all-targets
-clippy:
-	@uv run cargo clippy --all-targets --all-features
+	@uv run cargo +nightly udeps --all-targets --all-features
+cargo-update:
+	@cargo update --verbose
 coverage: COVERAGE_REPORT := --html --open
+coverage-codecov: COVERAGE_REPORT := --codecov --output-path codecov.json
 coverage-lcov: COVERAGE_REPORT := --lcov --output-path lcov.info
-coverage coverage-lcov:
+coverage coverage-codecov coverage-lcov:
 	@( eval "$$(cargo llvm-cov show-env --sh)" && \
 		cargo llvm-cov clean --workspace && \
-		$(MAKE) --no-print-directory cargo-test pytest && \
+		$(MAKE) --no-print-directory cargo-test cargo-doc-test pytest && \
 		cargo llvm-cov report $(COVERAGE_REPORT) ); \
 	status=$$?; cargo clean -p preader >/dev/null; \
 		$(MAKE) --no-print-directory develop; exit $$status
-deny:
-	@cargo deny --all-features --log-level error check
 develop:
 	@uv run python -c "import pathlib, shutil, sysconfig; shutil.rmtree(pathlib.Path(sysconfig.get_paths()['purelib']) / 'preader', ignore_errors=True)"
 	@uv run maturin develop --uv
@@ -135,28 +158,34 @@ live-book: book-test
 	@mdbook serve book
 maturin-generate-ci:
 	@uv run maturin generate-ci github
+mypy:
+	@uv run mypy
+pre-commit:
+	@pre-commit run -a
+pre-commit-update-hooks:
+	@pre-commit autoupdate
 pytest: develop
 	@uv run pytest
 ruff-check:
-	@uv run ruff check tests
+	@uv run ruff check
 ruff-check-fix:
-	@uv run ruff check --fix tests
+	@uv run ruff check --fix
 ruff-format:
-	@uv run ruff format tests
+	@uv run ruff format
 ruff-format-check:
-	@uv run ruff format --check tests
-rustfmt: cargo-fix
-	@cargo +nightly fmt --all
-rustfmt-check:
-	@cargo +nightly fmt --all -- --check
+	@uv run ruff format --check
 rustup:
 	@rustup self update
 	@rustup update
 shell: develop
-	@uv run python3
-update-pre-commit-hooks:
-	@pre-commit autoupdate
+	@uv run python
+stubs:
+	@uv run maturin generate-stubs -q --out python -F extension-module,experimental-inspect
+stubtest: develop
+	@uv run stubtest preader --concise --allowlist stubtest-allowlist.txt
+stubtest-allowlist: develop
+	@uv run stubtest preader --generate-allowlist > stubtest-allowlist.txt
 uv-audit:
 	@uv audit
 uv-create-venv:
-	@uv venv --python $(shell python3 --version | cut -d" " -f2)
+	@uv venv --allow-existing $(if $(PYTHON),--python $(PYTHON))

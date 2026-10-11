@@ -2,11 +2,11 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use crate::{
-    Error, State,
-    types::{file::FileMetadata, time::Timestamps},
+    Result,
+    types::{file::FileMetadata, state::StateData, time::Timestamps},
 };
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct ChecksumBody<'a> {
     pub name: &'a str,
     pub file: &'a FileMetadata,
@@ -14,19 +14,19 @@ pub struct ChecksumBody<'a> {
     pub timestamps: &'a Timestamps,
 }
 
-impl<'a> From<&'a State> for ChecksumBody<'a> {
-    fn from(state: &'a State) -> Self {
+impl<'a> From<&'a StateData> for ChecksumBody<'a> {
+    fn from(data: &'a StateData) -> Self {
         Self {
-            name: &state.name,
-            file: &state.file,
-            position: state.position,
-            timestamps: &state.timestamps,
+            name: &data.name,
+            file: &data.file,
+            position: data.position,
+            timestamps: &data.timestamps,
         }
     }
 }
 
 impl ChecksumBody<'_> {
-    pub fn compute(&self) -> Result<String, Error> {
+    pub fn compute(&self) -> Result<String> {
         Ok(hex::encode(Sha256::digest(serde_json::to_string(self)?)))
     }
 }

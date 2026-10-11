@@ -1,17 +1,14 @@
-use pyo3::{exceptions::PyValueError, prelude::*};
+use crate::{Error, Result, enums::skip::Skip, macros::ensure, types::window::Window};
 
-use crate::types::window::Window;
-
-#[pyclass(module = "preader", from_py_object)]
-#[derive(Clone)]
+#[cfg_attr(
+    feature = "python",
+    pyo3::pyclass(module = "preader", eq, frozen, from_py_object, get_all)
+)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct IteratorOptions {
-    #[pyo3(get, set)]
     pub start: u64,
-    #[pyo3(get, set)]
     pub end: u64,
-    #[pyo3(get, set)]
     pub skip: u64,
-    #[pyo3(get, set)]
     pub limit: u64,
 }
 
@@ -27,54 +24,21 @@ impl Default for IteratorOptions {
 }
 
 impl IteratorOptions {
-    pub(crate) fn validate(&self) -> PyResult<()> {
-        if self.start > self.end {
-            return Err(PyValueError::new_err(format!(
-                "start ({}) must be <= end ({})",
-                self.start, self.end
-            )));
-        }
-
-        Ok(())
-    }
-
-    pub fn window(&self, position: u64, size: u64, skip_bytes: u64) -> Window {
+    pub fn window(&self, position: u64, size: u64, skip: Skip) -> Window {
+        let (bytes, items) = skip.counts();
         let end = self.end.min(size);
-        let start = self.start.saturating_add(skip_bytes).min(end);
+        let start = self.start.saturating_add(bytes).min(end);
 
         Window {
             position: position.max(start),
             end,
-            from_start: position <= start && position < end,
-        }
-    }
-}
-
-#[pymethods]
-impl IteratorOptions {
-    #[new]
-    #[pyo3(signature = (
-        *,
-        start = 0,
-        end = u64::MAX,
-        skip = 0,
-        limit = u64::MAX,
-    ))]
-    pub fn new(start: u64, end: u64, skip: u64, limit: u64) -> Self {
-        Self {
-            start,
-            end,
-            skip,
-            limit,
+            skipping: (position <= start && position < end).then_some(items),
         }
     }
 
-    fn __repr__(&self) -> String {
-        crate::macros::pyrepr!("IteratorOptions" {
-            start = self.start,
-            end = self.end,
-            skip = self.skip,
-            limit = self.limit,
-        })
+    pub(crate) fn validate(&self) -> Result<()> {
+        ensure!(self.start <= self.end, Error::InvalidRange);
+
+        Ok(())
     }
 }

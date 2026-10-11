@@ -30,31 +30,31 @@ repos:
       - id: detect-private-key
 
   - repo: https://github.com/pre-commit/pre-commit
-    rev: v4.6.0
+    rev: v4.6.2
     hooks:
       - id: validate_manifest
 
   - repo: https://github.com/EmbarkStudios/cargo-deny
-    rev: 0.19.6
+    rev: 0.20.2
     hooks:
       - id: cargo-deny
         name: cargo-deny
         args: ["--all-features", "--log-level", "error", "check"]
 
   - repo: https://github.com/alessandrojcm/commitlint-pre-commit-hook
-    rev: v9.25.0
+    rev: v9.27.0
     hooks:
       - id: commitlint
         stages: [commit-msg]
         additional_dependencies: ['@commitlint/config-conventional']
 
   - repo: https://github.com/crate-ci/typos
-    rev: v1
+    rev: v1.51.1
     hooks:
       - id: typos
 
   - repo: https://github.com/codespell-project/codespell
-    rev: v2.4.2
+    rev: v2.4.3
     hooks:
       - id: codespell
         exclude: |
@@ -63,7 +63,7 @@ repos:
           )$
 
   - repo: https://github.com/markdownlint/markdownlint
-    rev: v0.15.0
+    rev: v0.18.1
     hooks:
       - id: markdownlint
         name: markdownlint
@@ -79,52 +79,59 @@ repos:
         name: gitleaks
 
   - repo: https://github.com/zizmorcore/zizmor-pre-commit
-    rev: v1.30.0
+    rev: v1.30.1
     hooks:
       - id: zizmor
 
   - repo: local
     hooks:
-      - id: rustfmt-check
-        name: rustfmt-check
-        entry: make rustfmt-check
+      - id: cargo-rustfmt-check
+        name: cargo-rustfmt-check
+        entry: make cargo-rustfmt-check
         language: system
-        files: \.(lock|rs|toml)$
+        files: (Cargo\.lock|\.(rs|toml))$
         pass_filenames: false
 
       - id: cargo-check
         name: cargo-check
         entry: make cargo-check
         language: system
-        files: \.(lock|rs|toml)$
+        files: (Cargo\.lock|\.(rs|toml))$
         pass_filenames: false
 
-      - id: clippy
-        name: clippy
-        entry: make clippy
+      - id: cargo-clippy
+        name: cargo-clippy
+        entry: make cargo-clippy
         language: system
-        files: \.(lock|rs|toml)$
+        files: (Cargo\.lock|\.(rs|toml))$
         pass_filenames: false
 
       - id: cargo-udeps
         name: cargo-udeps
         entry: make cargo-udeps
         language: system
-        files: \.(lock|rs|toml)$
+        files: (Cargo\.lock|\.(rs|toml))$
         pass_filenames: false
 
       - id: ruff-check
         name: ruff-check
         entry: make ruff-check
         language: system
-        types: [python]
+        types_or: [python, pyi]
         pass_filenames: false
 
       - id: ruff-format-check
         name: ruff-format-check
         entry: make ruff-format-check
         language: system
-        types: [python]
+        types_or: [python, pyi]
+        pass_filenames: false
+
+      - id: mypy
+        name: mypy
+        entry: make mypy
+        language: system
+        types_or: [python, pyi]
         pass_filenames: false
 
       - id: uv-audit
@@ -138,14 +145,21 @@ repos:
         name: cargo-test
         entry: make cargo-test
         language: system
-        files: \.(lock|rs|toml)$
+        files: (Cargo\.lock|\.(rs|toml))$
         pass_filenames: false
 
       - id: cargo-nextest
         name: cargo-nextest
         entry: make cargo-nextest
         language: system
-        files: \.(lock|rs|toml)$
+        files: (Cargo\.lock|\.(rs|toml))$
+        pass_filenames: false
+
+      - id: stubtest
+        name: stubtest
+        entry: make stubtest
+        language: system
+        files: (\.(lock|py|pyi|rs|toml)|stubtest-allowlist\.txt)$
         pass_filenames: false
 
       - id: pytest

@@ -1,14 +1,9 @@
-macro_rules! pyrepr {
-    ($name:literal { $($field:ident = $value:expr),* $(,)? }) => {{
-        let parts: Vec<String> = vec![
-            $({
-                let v = $value.to_string();
-                format!("  {}={}", stringify!($field), $crate::utils::text::indent_lines(&v, 2))
-            }),*
-        ];
-
-        format!("{}(\n{}\n)", $name, parts.join(",\n"))
-    }};
+macro_rules! ensure {
+    ($condition:expr, $error:expr $(,)?) => {
+        if !$condition {
+            return Err($error.into());
+        }
+    };
 }
 
-pub(crate) use pyrepr;
+pub(crate) use ensure;
