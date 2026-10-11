@@ -40,10 +40,10 @@ def test_config_repr(tmp_path: Path, expected_repr: Callable[..., str]) -> None:
 
     assert repr(config) == expected_repr(
         "Config",
-        state_dir=f"'{config.state_dir}'",
+        state_dir=config.state_dir,
         buffer_capacity=config.buffer_capacity,
-        auto_save_state=str(config.auto_save_state).lower(),
+        auto_save_state=config.auto_save_state,
         auto_save_state_bytes=config.auto_save_state_bytes,
-        auto_load_state=str(config.auto_load_state).lower(),
-        verify_state=str(config.verify_state).lower(),
+        auto_load_state=config.auto_load_state,
+        verify_state=config.verify_state,
     )

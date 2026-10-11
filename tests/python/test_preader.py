@@ -62,12 +62,9 @@ def test_bytes_raises_when_the_file_is_missing(reader: PReader, tmp_path: Path) 
 
 
 def test_preader_repr(
-    config: Config,
-    reader: PReader,
-    reindent: Callable[[str, int], str],
-    expected_repr: Callable[..., str],
+    config: Config, reader: PReader, expected_repr: Callable[..., str]
 ) -> None:
-    assert repr(reader) == expected_repr("PReader", config=reindent(repr(config), 2))
+    assert repr(reader) == expected_repr("PReader", config=config)
 
 
 @pytest.mark.usefixtures("requires_symlinks")

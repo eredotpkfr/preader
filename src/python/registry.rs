@@ -2,10 +2,7 @@ use std::path::{Path, PathBuf};
 
 use pyo3::prelude::*;
 
-use crate::{
-    State, StateIterator, StateRegistry,
-    python::{macros::repr::pyrepr, utils::text::quote},
-};
+use crate::{State, StateIterator, StateRegistry, python::macros::repr::pyrepr};
 
 #[pymethods]
 impl StateRegistry {
@@ -80,9 +77,7 @@ impl StateRegistry {
         Ok(self.count()?)
     }
 
-    pub(crate) fn __repr__(&self) -> String {
-        pyrepr!("StateRegistry" {
-            state_dir = quote(self.state_dir().display()),
-        })
+    fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
+        pyrepr!(slf, state_dir)
     }
 }

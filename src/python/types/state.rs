@@ -2,10 +2,7 @@ use std::path::PathBuf;
 
 use pyo3::prelude::*;
 
-use crate::{
-    FileMetadata, State, Timestamps,
-    python::{macros::repr::pyrepr, utils::text::quote},
-};
+use crate::{FileMetadata, State, Timestamps, python::macros::repr::pyrepr};
 
 #[pymethods]
 impl State {
@@ -59,12 +56,7 @@ impl State {
         Ok(self.resync(path)?)
     }
 
-    pub(crate) fn __repr__(&self) -> String {
-        pyrepr!("State" {
-            name = quote(&self.data.name),
-            file = self.data.file.__repr__(),
-            position = self.data.position,
-            timestamps = self.data.timestamps.__repr__(),
-        })
+    fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
+        pyrepr!(slf, name, file, position, timestamps)
     }
 }

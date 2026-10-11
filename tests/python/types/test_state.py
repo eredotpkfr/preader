@@ -899,19 +899,16 @@ def test_state_compares_by_value(
 
 
 def test_state_repr(
-    reader: PReader,
-    tmp_file: Path,
-    reindent: Callable[[str, int], str],
-    expected_repr: Callable[..., str],
+    reader: PReader, tmp_file: Path, expected_repr: Callable[..., str]
 ) -> None:
     state = reader.bytes(tmp_file, state=TEST_STATE_NAME).state
 
     assert repr(state) == expected_repr(
         "State",
-        name=f"'{state.name}'",
-        file=reindent(repr(state.file), 2),
+        name=state.name,
+        file=state.file,
         position=state.position,
-        timestamps=reindent(repr(state.timestamps), 2),
+        timestamps=state.timestamps,
     )
 
 

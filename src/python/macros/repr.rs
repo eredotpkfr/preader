@@ -1,12 +1,12 @@
 macro_rules! pyrepr {
-    ($name:literal { $($field:ident = $value:expr),* $(,)? }) => {{
-        let fields = [$(format!(
-            "  {}={}",
-            stringify!($field),
-            $crate::python::utils::text::nest(&$value.to_string())
+    ($slf:expr, $($field:ident),* $(,)?) => {{
+        let slf = $slf.as_any();
+        let fields = [$(::std::format!(
+            ::std::concat!(::std::stringify!($field), "={}"),
+            slf.getattr(::std::stringify!($field))?.repr()?
         )),*];
 
-        format!("{}(\n{}\n)", $name, fields.join(",\n"))
+        Ok(::std::format!("{}({})", slf.get_type().name()?, fields.join(", ")))
     }};
 }
 

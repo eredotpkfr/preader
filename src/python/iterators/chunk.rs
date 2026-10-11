@@ -3,7 +3,7 @@ use pyo3::{prelude::*, types::PyBytes};
 use crate::python::macros::iterator::pyiterator;
 
 pyiterator!(
-    ChunkIterator(crate::ChunkIterator) as "ChunkIterator" -> Py<PyBytes>,
+    ChunkIterator(crate::ChunkIterator) -> Py<PyBytes>,
     |py, item| PyBytes::new(py, item).unbind(),
     [chunk_size, drop_partial]
 

@@ -129,9 +129,7 @@ impl PReader {
         Py::new(py, (DelimiterIterator(iterator), IteratorBase))
     }
 
-    fn __repr__(&self) -> String {
-        pyrepr!("PReader" {
-            config = self.config().__repr__(),
-        })
+    fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
+        pyrepr!(slf, config)
     }
 }

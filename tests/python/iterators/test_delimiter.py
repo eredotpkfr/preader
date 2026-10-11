@@ -550,10 +550,7 @@ def test_a_failing_autosave_stops_the_read_on_a_filtered_blank(
 
 
 def test_delimiter_iterator_repr(
-    reader: PReader,
-    tmp_file: Path,
-    reindent: Callable[[str, int], str],
-    expected_repr: Callable[..., str],
+    reader: PReader, tmp_file: Path, expected_repr: Callable[..., str]
 ) -> None:
     iterator = reader.delimiter(
         tmp_file, delimiter=TEST_DEFAULT_DELIMITER, keep_delimiter=True, skip_empty=True
@@ -561,10 +558,10 @@ def test_delimiter_iterator_repr(
 
     assert repr(iterator) == expected_repr(
         "DelimiterIterator",
-        state=reindent(repr(iterator.state), 2),
-        delimiter=list(iterator.delimiter),
-        keep_delimiter=str(iterator.keep_delimiter).lower(),
-        skip_empty=str(iterator.skip_empty).lower(),
+        state=iterator.state,
+        delimiter=iterator.delimiter,
+        keep_delimiter=iterator.keep_delimiter,
+        skip_empty=iterator.skip_empty,
         skip_remaining=iterator.skip_remaining,
     )
 

@@ -399,18 +399,15 @@ def test_a_failing_autosave_stops_the_read_on_a_dropped_short_chunk(
 
 
 def test_chunk_iterator_repr(
-    reader: PReader,
-    tmp_file: Path,
-    reindent: Callable[[str, int], str],
-    expected_repr: Callable[..., str],
+    reader: PReader, tmp_file: Path, expected_repr: Callable[..., str]
 ) -> None:
     iterator = reader.chunks(tmp_file, chunk_size=3, drop_partial=True)
 
     assert repr(iterator) == expected_repr(
         "ChunkIterator",
-        state=reindent(repr(iterator.state), 2),
+        state=iterator.state,
         chunk_size=iterator.chunk_size,
-        drop_partial=str(iterator.drop_partial).lower(),
+        drop_partial=iterator.drop_partial,
     )
 
 

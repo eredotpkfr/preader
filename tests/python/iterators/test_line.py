@@ -502,18 +502,15 @@ def test_a_failing_autosave_stops_the_read_on_a_filtered_blank(
 
 
 def test_line_iterator_repr(
-    reader: PReader,
-    tmp_file: Path,
-    reindent: Callable[[str, int], str],
-    expected_repr: Callable[..., str],
+    reader: PReader, tmp_file: Path, expected_repr: Callable[..., str]
 ) -> None:
     iterator = reader.lines(tmp_file, keepends=True, skip_empty=True)
 
     assert repr(iterator) == expected_repr(
         "LineIterator",
-        state=reindent(repr(iterator.state), 2),
-        keepends=str(iterator.keepends).lower(),
-        skip_empty=str(iterator.skip_empty).lower(),
+        state=iterator.state,
+        keepends=iterator.keepends,
+        skip_empty=iterator.skip_empty,
         skip_remaining=iterator.skip_remaining,
     )
 

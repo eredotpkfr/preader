@@ -44,8 +44,8 @@ def test_file_metadata_repr(
 
     assert repr(metadata) == expected_repr(
         "FileMetadata",
-        path=f"'{metadata.path}'",
+        path=metadata.path,
         size=metadata.size,
-        mtime=int(metadata.mtime.timestamp()),
-        fingerprint=f"'{metadata.fingerprint}'",
+        mtime=metadata.mtime,
+        fingerprint=metadata.fingerprint,
     )

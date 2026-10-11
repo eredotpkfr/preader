@@ -3,7 +3,7 @@ use pyo3::{prelude::*, types::PyBytes};
 use crate::python::macros::iterator::pyiterator;
 
 pyiterator!(
-    DelimiterIterator(crate::DelimiterIterator) as "DelimiterIterator" -> Py<PyBytes>,
+    DelimiterIterator(crate::DelimiterIterator) -> Py<PyBytes>,
     |py, item| PyBytes::new(py, item).unbind(),
     [delimiter, keep_delimiter, skip_empty, skip_remaining]
 
