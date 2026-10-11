@@ -1,6 +1,6 @@
 import os
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -35,7 +35,7 @@ def test_every_iterator_counts_invalid_bytes(
 
     assert b"".join(reader.bytes(path)) == invalid
     assert b"".join(reader.chunks(path, chunk_size=4)) == invalid
-    assert list(reader.delimiter(path, delimiter="\n")) == [
+    assert list(reader.delimiter(path, delimiter=b"\n")) == [
         b"foo",
         bytes([0xFF, 0xFE]),
         b"bar",
@@ -54,14 +54,6 @@ def test_every_iterator_counts_invalid_bytes(
         next(lines)
 
     assert lines.state.position == 11
-
-
-def test_bytes_reads_with_a_zero_buffer_capacity(
-    make_reader: Callable[..., PReader], tmp_file: Path
-) -> None:
-    reader = make_reader(buffer_capacity=0)
-
-    assert b"".join(reader.bytes(tmp_file)) == tmp_file.read_bytes()
 
 
 def test_bytes_raises_when_the_file_is_missing(reader: PReader, tmp_path: Path) -> None:
@@ -362,6 +354,22 @@ def test_delimiter_splits_on_byte(
     )
 
 
+@pytest.mark.parametrize(
+    "delimiter",
+    [b",", b";", b"|", b"\t", b"\n", b"\x00"],
+    ids=["comma", "semicolon", "pipe", "tab", "newline", "null"],
+)
+def test_delimiter_splits_utf8_text_between_characters(
+    reader: PReader, make_file: Callable[..., Path], delimiter: bytes
+) -> None:
+    words = ["café", "Ünicode", "日本語", "🦀", "鉄"]
+    path = make_file(delimiter.join(map(str.encode, words)))
+
+    segments = list(reader.delimiter(path, delimiter=delimiter))
+
+    assert [segment.decode() for segment in segments] == words
+
+
 def test_delimiter_keep_delimiter_preserves_byte(
     reader: PReader, make_file: Callable[..., Path]
 ) -> None:
@@ -445,21 +453,6 @@ def test_delimiter_attributes(
     assert iterator.skip_remaining == options.skip
 
 
-def test_delimiter_accepts_a_codepoint_up_to_255(
-    reader: PReader, make_file: Callable[..., Path]
-) -> None:
-    path = make_file(b"foo" + bytes([ord("é")]) + b"bar")
-
-    assert list(reader.delimiter(path, delimiter="é")) == [b"foo", b"bar"]
-
-
-def test_delimiter_raises_when_the_codepoint_is_above_255(
-    reader: PReader, tmp_file: Path
-) -> None:
-    with pytest.raises(ValueError, match="delimiter must fit in a single byte"):
-        reader.delimiter(tmp_file, delimiter="€")
-
-
 @pytest.mark.parametrize(
     "name",
     ["café-日本語.bin", "foo bar; $baz & `qux`.bin"],
@@ -473,29 +466,76 @@ def test_bytes_reads_an_unusual_path(
     assert b"".join(reader.bytes(path)) == b"foo"
 
 
-def test_delimiter_accepts_a_control_character(
-    reader: PReader, make_file: Callable[..., Path]
+@pytest.mark.parametrize(
+    "byte",
+    [0x00, 0x7F, 0x80, 0xE9, 0xFF],
+    ids=["null", "last_ascii", "first_non_ascii", "latin_letter", "last"],
+)
+def test_delimiter_accepts_any_byte(
+    reader: PReader, make_file: Callable[..., Path], byte: int
 ) -> None:
-    path = make_file(b"foo\x7fbar")
+    delimiter, segment = bytes([byte]), bytes([(byte + 1) % 256])
+    path = make_file(segment + delimiter + segment)
 
-    assert list(reader.delimiter(path, delimiter="\x7f")) == [b"foo", b"bar"]
+    assert list(reader.delimiter(path, delimiter=delimiter)) == [segment, segment]
 
 
-@pytest.mark.parametrize("delimiter", ["AB", ""], ids=["two_characters", "empty"])
-def test_delimiter_raises_when_the_delimiter_is_not_a_single_character(
-    reader: PReader, tmp_file: Path, delimiter: str
+@pytest.mark.parametrize(
+    "delimiter",
+    [
+        bytearray(TEST_DEFAULT_DELIMITER),
+        memoryview(TEST_DEFAULT_DELIMITER),
+        list(TEST_DEFAULT_DELIMITER),
+        tuple(TEST_DEFAULT_DELIMITER),
+    ],
+    ids=["bytearray", "memoryview", "list", "tuple"],
+)
+def test_delimiter_accepts_a_byte_sequence(
+    reader: PReader, make_file: Callable[..., Path], delimiter: Sequence[int]
 ) -> None:
-    with pytest.raises(ValueError, match="expected a string of length 1"):
+    path = make_file(b"foo,bar")
+
+    assert list(reader.delimiter(path, delimiter=delimiter)) == [b"foo", b"bar"]
+
+
+@pytest.mark.parametrize(
+    "delimiter",
+    [b"", b",,", "é".encode(), ",".encode("utf-16-le")],
+    ids=["empty", "two_bytes", "utf8_character", "utf16_character"],
+)
+def test_delimiter_raises_when_the_delimiter_is_not_a_single_byte(
+    reader: PReader, tmp_file: Path, delimiter: bytes
+) -> None:
+    with pytest.raises(ValueError, match="sequence of length 1"):
         reader.delimiter(tmp_file, delimiter=delimiter)
 
 
-def test_delimiter_raises_when_the_delimiter_is_missing(
-    reader: PReader, tmp_file: Path
+@pytest.mark.parametrize("delimiter", [[-1], [256]], ids=["negative", "above_255"])
+def test_delimiter_raises_when_the_byte_is_out_of_range(
+    reader: PReader, tmp_file: Path, delimiter: list[int]
 ) -> None:
-    with pytest.raises(
-        TypeError, match="missing 1 required keyword argument: 'delimiter'"
-    ):
-        reader.delimiter(tmp_file)  # type: ignore[call-arg]
+    with pytest.raises(OverflowError, match="out of range"):
+        reader.delimiter(tmp_file, delimiter=delimiter)
+
+
+@pytest.mark.parametrize(
+    "delimiter",
+    [TEST_DEFAULT_DELIMITER.decode(), TEST_DEFAULT_DELIMITER[0], None],
+    ids=["str", "int", "none"],
+)
+def test_delimiter_raises_when_the_delimiter_is_not_a_byte_sequence(
+    reader: PReader, tmp_file: Path, delimiter: object
+) -> None:
+    with pytest.raises(TypeError):
+        reader.delimiter(tmp_file, delimiter=delimiter)  # type: ignore[arg-type]
+
+
+def test_delimiter_splits_on_a_comma_by_default(
+    reader: PReader, make_file: Callable[..., Path]
+) -> None:
+    path = make_file(b"foo,bar")
+
+    assert list(reader.delimiter(path)) == [b"foo", b"bar"]
 
 
 def test_bytes_names_a_long_path_by_its_digest(

@@ -1,5 +1,6 @@
-use preader::{DEFAULT_DELIMITER, IteratorBuild};
+use preader::IteratorBuild;
 use rstest::rstest;
+use rstest_reuse::apply;
 
 use crate::common::{
     constants::TEST_TIMEOUT,
@@ -8,13 +9,14 @@ use crate::common::{
     matrix::{
         asserts::assert_bounds,
         contents::{
-            BLANK_LINES, BLANK_SEGMENTS, CRLF_LINES, EMPTY, LINES, SEGMENTS, UNTERMINATED_LINES,
-            UNTERMINATED_SEGMENTS, WHOLE_SEGMENT,
+            ALL_BYTES, BLANK_LINES, BLANK_SEGMENTS, CRLF_LINES, EMPTY, LINES, SEGMENTS,
+            UNTERMINATED_LINES, UNTERMINATED_SEGMENTS, UTF8_SEGMENTS, WHOLE_SEGMENT,
         },
         expected,
         windows::{shapes, sizings, windows},
     },
     sandbox::Sandbox,
+    templates::delimiter::delimiter_characters,
 };
 
 #[rstest]
@@ -110,12 +112,21 @@ fn lines_match_the_reference(
     }
 }
 
-#[rstest]
+#[apply(delimiter_characters)]
 #[timeout(TEST_TIMEOUT)]
 fn segments_match_the_reference(
     sandbox: Sandbox,
-    #[values(EMPTY, SEGMENTS, UNTERMINATED_SEGMENTS, BLANK_SEGMENTS, WHOLE_SEGMENT)]
+    #[values(
+        EMPTY,
+        SEGMENTS,
+        UNTERMINATED_SEGMENTS,
+        BLANK_SEGMENTS,
+        WHOLE_SEGMENT,
+        UTF8_SEGMENTS,
+        ALL_BYTES
+    )]
     content: &[u8],
+    #[case] character: u8,
 ) {
     let path = sandbox.file(content);
     let reader = sandbox.reader();
@@ -125,7 +136,7 @@ fn segments_match_the_reference(
             let built = reader
                 .delimiter(&path)
                 .options(options)
-                .character(DEFAULT_DELIMITER)
+                .character(character)
                 .keep(shape.keep)
                 .skip_empty(shape.skip_empty)
                 .align(shape.align)
@@ -139,7 +150,7 @@ fn segments_match_the_reference(
 
             assert_eq!(
                 items(built.unwrap()),
-                expected::split::segments(content, shape, options),
+                expected::split::segments(content, shape, options, character),
                 "{options:?} {shape:?}"
             );
         }

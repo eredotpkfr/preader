@@ -76,12 +76,6 @@ def test_skip_stops_at_a_truncation(
     assert list(reader.lines(data_file, state=TEST_STATE_NAME, options=options)) == []
 
 
-def test_skip_past_the_end_yields_nothing(reader: PReader, data_file: Path) -> None:
-    options = IteratorOptions(skip=1000)
-
-    assert list(reader.lines(data_file, options=options)) == []
-
-
 def test_align_start_skips_partial_line(reader: PReader, data_file: Path) -> None:
     options = IteratorOptions(start=9)
 
@@ -271,6 +265,48 @@ def test_end_below_the_position_does_not_rewind_the_state(
     list(reader.lines(data_file, state=TEST_STATE_NAME, options=IteratorOptions(end=5)))
 
     assert reader.states[TEST_STATE_NAME].position == saved
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        IteratorOptions(start=1000),
+        IteratorOptions(end=0),
+        IteratorOptions(limit=0),
+        IteratorOptions(skip=1000),
+    ],
+    ids=["start_past_the_end", "end_zero", "limit_zero", "skip_past_the_end"],
+)
+def test_boundary_options_yield_nothing(
+    reader: PReader, data_file: Path, options: IteratorOptions
+) -> None:
+    assert list(reader.lines(data_file, options=options)) == []
+
+
+@pytest.mark.parametrize(
+    ("options", "count"),
+    [(IteratorOptions(end=14, limit=100), 2), (IteratorOptions(end=100, limit=3), 3)],
+    ids=["end_is_tighter", "limit_is_tighter"],
+)
+def test_tighter_of_end_and_limit_wins(
+    reader: PReader, data_file: Path, options: IteratorOptions, count: int
+) -> None:
+    assert list(reader.lines(data_file, options=options)) == LINES[:count]
+
+
+def test_resume_with_smaller_threshold_saves_early(
+    data_file: Path, make_reader: Callable[..., PReader], consume: Callable[..., Any]
+) -> None:
+    first_reader = make_reader(auto_save_state=True, auto_save_state_bytes=1000)
+    state = consume(first_reader.lines(data_file, state=TEST_STATE_NAME), 2).state
+    state.save()
+
+    second_reader = make_reader(auto_save_state=True, auto_save_state_bytes=10)
+    iterator = second_reader.lines(data_file, state=state)
+
+    consume(iterator, 1)
+
+    assert second_reader.states[TEST_STATE_NAME].position == 21
 
 
 def test_resume_on_fully_consumed_file_yields_nothing(
@@ -905,6 +941,15 @@ def test_reads_multi_byte_characters(
     path = make_file("café\n日本語\n".encode())
 
     assert list(reader.lines(path)) == ["café", "日本語"]
+
+
+def test_yields_every_ascii_byte_value(
+    reader: PReader, make_file: Callable[..., Path]
+) -> None:
+    content = bytes(range(128))
+    path = make_file(content)
+
+    assert "".join(reader.lines(path, keepends=True)) == content.decode()
 
 
 def test_position_counts_bytes_not_characters(

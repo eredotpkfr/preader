@@ -1,10 +1,10 @@
 use std::path::PathBuf;
 
-use pyo3::{exceptions::PyValueError, prelude::*};
+use pyo3::prelude::*;
 
 use crate::{
-    Config, DEFAULT_CHUNK_SIZE, IteratorBuild, IteratorOptions, PReader, StateRegistry,
-    StateSource,
+    Config, DEFAULT_CHUNK_SIZE, DEFAULT_DELIMITER, IteratorBuild, IteratorOptions, PReader,
+    StateRegistry, StateSource,
     python::{
         bases::iterator::IteratorBase,
         iterators::{
@@ -101,7 +101,7 @@ impl PReader {
         file, *,
         state = StateSource::Auto,
         options = IteratorOptions::default(),
-        delimiter,
+        delimiter = [DEFAULT_DELIMITER],
         keep_delimiter = false,
         align_start = false,
         skip_empty = false
@@ -113,16 +113,14 @@ impl PReader {
         file: PathBuf,
         state: StateSource,
         options: IteratorOptions,
-        delimiter: char,
+        delimiter: [u8; 1],
         keep_delimiter: bool,
         align_start: bool,
         skip_empty: bool,
     ) -> PyResult<Py<DelimiterIterator>> {
-        let character = u8::try_from(delimiter)
-            .map_err(|_| PyValueError::new_err("delimiter must fit in a single byte"))?;
         let builder = self
             .delimiter(file)
-            .character(character)
+            .character(delimiter[0])
             .keep(keep_delimiter)
             .align(align_start)
             .skip_empty(skip_empty);

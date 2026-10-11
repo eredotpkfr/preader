@@ -1,4 +1,4 @@
-use preader::{DEFAULT_DELIMITER, IteratorOptions};
+use preader::IteratorOptions;
 
 use crate::common::matrix::{expected::cursor::cursor, windows::Shape};
 
@@ -19,9 +19,9 @@ impl Split {
         }
     }
 
-    fn segments(shape: Shape) -> Self {
+    fn segments(shape: Shape, boundary: u8) -> Self {
         Self {
-            boundary: DEFAULT_DELIMITER,
+            boundary,
             carriage: false,
             shape,
         }
@@ -102,6 +102,11 @@ pub fn lines(content: &[u8], shape: Shape, options: IteratorOptions) -> Vec<Stri
         .collect()
 }
 
-pub fn segments(content: &[u8], shape: Shape, options: IteratorOptions) -> Vec<Vec<u8>> {
-    split(content, &Split::segments(shape), options)
+pub fn segments(
+    content: &[u8],
+    shape: Shape,
+    options: IteratorOptions,
+    boundary: u8,
+) -> Vec<Vec<u8>> {
+    split(content, &Split::segments(shape, boundary), options)
 }
