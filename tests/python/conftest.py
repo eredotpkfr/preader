@@ -93,18 +93,10 @@ def empty_file(make_file: Callable[..., Path]) -> Path:
 
 
 @pytest.fixture
-def reindent() -> Callable[[str, int], str]:
-    def _reindent(text: str, spaces: int) -> str:
-        return text.replace("\n", "\n" + " " * spaces)
-
-    return _reindent
-
-
-@pytest.fixture
 def expected_repr() -> Callable[..., str]:
     def _expected_repr(class_name: str, /, **fields: object) -> str:
-        body = ",\n".join(f"  {key}={value}" for key, value in fields.items())
-        return f"{class_name}(\n{body}\n)"
+        body = ", ".join(f"{key}={value!r}" for key, value in fields.items())
+        return f"{class_name}({body})"
 
     return _expected_repr
 

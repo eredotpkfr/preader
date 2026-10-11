@@ -3,7 +3,7 @@ use pyo3::{prelude::*, types::PyString};
 use crate::python::macros::iterator::pyiterator;
 
 pyiterator!(
-    LineIterator(crate::LineIterator) as "LineIterator" -> Py<PyString>,
+    LineIterator(crate::LineIterator) -> Py<PyString>,
     |py, item| PyString::new(py, item).unbind(),
     [keepends, skip_empty, skip_remaining]
 

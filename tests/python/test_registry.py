@@ -45,25 +45,32 @@ def test_state_registry_repr(
     registry: StateRegistry, expected_repr: Callable[..., str]
 ) -> None:
     assert repr(registry) == expected_repr(
-        "StateRegistry", state_dir=f"'{registry.state_dir}'"
+        "StateRegistry", state_dir=registry.state_dir
     )
 
 
 @pytest.mark.parametrize(
-    ("pattern", "expected_pattern"),
-    [(None, "None"), (TEST_STATE_NAME, f"'{TEST_STATE_NAME}'")],
-    ids=["without_a_pattern", "with_a_pattern"],
+    "pattern", [None, TEST_STATE_NAME], ids=["without_a_pattern", "with_a_pattern"]
+)
+def test_state_iterator_attributes(
+    registry: StateRegistry, pattern: str | None
+) -> None:
+    iterator = registry.search(pattern) if pattern else registry.names()
+
+    assert iterator.state_dir == registry.state_dir
+    assert iterator.pattern == pattern
+
+
+@pytest.mark.parametrize(
+    "pattern", [None, TEST_STATE_NAME], ids=["without_a_pattern", "with_a_pattern"]
 )
 def test_state_iterator_repr(
-    registry: StateRegistry,
-    expected_repr: Callable[..., str],
-    pattern: str | None,
-    expected_pattern: str,
+    registry: StateRegistry, expected_repr: Callable[..., str], pattern: str | None
 ) -> None:
     iterator = registry.search(pattern) if pattern else registry.names()
 
     assert repr(iterator) == expected_repr(
-        "StateIterator", state_dir=f"'{registry.state_dir}'", pattern=expected_pattern
+        "StateIterator", state_dir=registry.state_dir, pattern=pattern
     )
 
 

@@ -1,6 +1,6 @@
 macro_rules! pyiterator {
     (
-        $name:ident($inner:ty) as $label:literal -> $output:ty,
+        $name:ident($inner:ty) -> $output:ty,
         |$py:ident, $item:ident| $convert:expr,
         [$($field:ident),* $(,)?]
         $($extra:tt)*
@@ -35,11 +35,8 @@ macro_rules! pyiterator {
                 Ok($convert)
             }
 
-            fn __repr__(&self) -> String {
-                $crate::python::macros::repr::pyrepr!($label {
-                    state = self.0.state.__repr__(),
-                    $($field = ::std::format!("{:?}", self.$field())),*
-                })
+            fn __repr__(slf: &::pyo3::Bound<'_, Self>) -> ::pyo3::PyResult<String> {
+                $crate::python::macros::repr::pyrepr!(slf, state, $($field),*)
             }
 
             $($extra)*

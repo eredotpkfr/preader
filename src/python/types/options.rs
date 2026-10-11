@@ -15,12 +15,7 @@ impl IteratorOptions {
         }
     }
 
-    fn __repr__(&self) -> String {
-        pyrepr!("IteratorOptions" {
-            start = self.start,
-            end = self.end,
-            skip = self.skip,
-            limit = self.limit,
-        })
+    fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
+        pyrepr!(slf, start, end, skip, limit)
     }
 }

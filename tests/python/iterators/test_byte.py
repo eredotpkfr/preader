@@ -309,16 +309,11 @@ def test_a_failing_autosave_stops_the_read_after_a_truncation(
 
 
 def test_byte_iterator_repr(
-    reader: PReader,
-    tmp_file: Path,
-    reindent: Callable[[str, int], str],
-    expected_repr: Callable[..., str],
+    reader: PReader, tmp_file: Path, expected_repr: Callable[..., str]
 ) -> None:
     iterator = reader.bytes(tmp_file)
 
-    assert repr(iterator) == expected_repr(
-        "ByteIterator", state=reindent(repr(iterator.state), 2)
-    )
+    assert repr(iterator) == expected_repr("ByteIterator", state=iterator.state)
 
 
 def test_auto_load_state_resumes_previous_position(
