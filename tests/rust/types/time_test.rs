@@ -8,6 +8,7 @@ fn now_starts_both_stamps() {
     let timestamps = Timestamps::now();
 
     assert_eq!(timestamps.created_at, timestamps.updated_at);
+    assert_eq!(timestamps.created_at.timestamp_subsec_nanos(), 0);
 }
 
 #[rstest]
