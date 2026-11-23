@@ -1,6 +1,9 @@
-use std::io::{ErrorKind, Read};
+use std::{
+    assert_matches,
+    io::{ErrorKind, Read},
+};
 
-use preader::{Error, IteratorOptions, Skip, Window};
+use preader::{Error, IteratorOptions, SkipPlan, Window};
 use rstest::rstest;
 
 use crate::common::{
@@ -13,7 +16,15 @@ use crate::common::{
 const CONTENT_SIZE: u64 = TEST_LINE_CONTENT.len() as u64;
 
 fn window(position: u64) -> Window {
-    IteratorOptions::default().window(position, CONTENT_SIZE, Skip::Bytes(0))
+    IteratorOptions::default().window(position, CONTENT_SIZE, SkipPlan::Bytes(0))
+}
+
+#[rstest]
+fn open_fails_when_the_file_is_missing(sandbox: Sandbox) {
+    assert_err_is!(
+        window(0).open(&sandbox.path().join("missing.bin"), 64),
+        Error::Io(error) if error.kind() == ErrorKind::NotFound
+    );
 }
 
 #[rstest]
@@ -27,6 +38,23 @@ fn open_reads_from_the_position(sandbox: Sandbox, #[case] position: u64, #[case]
     window(position).open(&path, 64).unwrap().read_to_end(&mut content).unwrap();
 
     assert_eq!(content, expected);
+}
+
+#[rstest]
+fn open_fails_when_the_position_is_unseekable(sandbox: Sandbox) {
+    let path = sandbox.file(TEST_LINE_CONTENT);
+    let window = Window {
+        position: TEST_UNSEEKABLE_POSITION,
+        end: 0,
+        limit: u64::MAX,
+        skipping: None,
+        boundary: None,
+    };
+
+    assert_err_is!(
+        window.open(&path, 64),
+        Error::Io(error) if error.raw_os_error().is_some()
+    );
 }
 
 #[rstest]
@@ -50,29 +78,6 @@ fn open_applies_the_buffer_capacity(
 }
 
 #[rstest]
-fn open_fails_when_the_file_is_missing(sandbox: Sandbox) {
-    assert_err_is!(
-        window(0).open(&sandbox.path().join("missing.bin"), 64),
-        Error::Io(error) if error.kind() == ErrorKind::NotFound
-    );
-}
-
-#[rstest]
-fn open_fails_when_the_position_is_unseekable(sandbox: Sandbox) {
-    let path = sandbox.file(TEST_LINE_CONTENT);
-    let window = Window {
-        position: TEST_UNSEEKABLE_POSITION,
-        end: 0,
-        skipping: None,
-    };
-
-    assert_err_is!(
-        window.open(&path, 64),
-        Error::Io(error) if error.raw_os_error().is_some()
-    );
-}
-
-#[rstest]
 fn open_fails_when_the_path_is_a_directory(sandbox: Sandbox) {
     let path = sandbox.dir_at("folder");
     let mut content = Vec::new();
@@ -82,8 +87,5 @@ fn open_fails_when_the_path_is_a_directory(sandbox: Sandbox) {
         Ok(mut reader) => reader.read_to_end(&mut content).unwrap_err().kind(),
     };
 
-    assert!(matches!(
-        kind,
-        ErrorKind::IsADirectory | ErrorKind::PermissionDenied
-    ));
+    assert_matches!(kind, ErrorKind::IsADirectory | ErrorKind::PermissionDenied);
 }

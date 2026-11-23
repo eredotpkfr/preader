@@ -1,10 +1,9 @@
-use std::{io::BufRead, ops::Range, str};
+use std::{ops::Range, str};
 
 use crate::{
     LineIterator, Result,
-    enums::skip::Skip,
-    interfaces::{iterator::IteratorRead, segmented::Segmented, skippable::Skippable},
-    types::core::FileReader,
+    enums::skip::SkipPlan,
+    interfaces::{iterator::IteratorRead, segmented::Segmented, skip::Skip},
 };
 
 // Byte a line iterator always splits on
@@ -21,10 +20,12 @@ pub struct Line {
 }
 
 impl Segmented for Line {
-    fn fill(&mut self, reader: &mut FileReader) -> Result<usize> {
-        self.buffer.clear();
+    fn boundary(&self) -> u8 {
+        LINE_BOUNDARY
+    }
 
-        Ok(reader.read_until(LINE_BOUNDARY, &mut self.buffer)?)
+    fn buffer(&mut self) -> &mut Vec<u8> {
+        &mut self.buffer
     }
 
     fn body(&self) -> Option<Range<usize>> {
@@ -58,11 +59,11 @@ impl IteratorRead for LineIterator {
     }
 }
 
-impl Skippable for Line {
-    fn skip(&self, count: u64) -> Skip {
-        Skip::Items {
+impl Skip for Line {
+    fn skip(&self, count: u64) -> SkipPlan {
+        SkipPlan::Items {
             count,
-            boundary: self.align.then_some(LINE_BOUNDARY),
+            boundary: self.align.then_some(self.boundary()),
         }
     }
 }

@@ -1,10 +1,10 @@
-use std::path::PathBuf;
+use std::{num::NonZeroU64, path::PathBuf};
 
 use pyo3::prelude::*;
 
 use crate::{
     Config, DEFAULT_AUTO_SAVE_STATE_BYTES, DEFAULT_BUFFER_CAPACITY, DEFAULT_VERIFY_STATE,
-    python::macros::repr::pyrepr, utils::path::default_state_dir,
+    python::macros::repr::pyrepr, utils::path,
 };
 
 #[pymethods]
@@ -13,7 +13,7 @@ impl Config {
     #[pyo3(signature = (
         *,
         buffer_capacity = DEFAULT_BUFFER_CAPACITY,
-        state_dir = default_state_dir(),
+        state_dir = path::default_state_dir(),
         auto_save_state = false,
         auto_save_state_bytes = DEFAULT_AUTO_SAVE_STATE_BYTES,
         auto_load_state = false,
@@ -23,7 +23,7 @@ impl Config {
         buffer_capacity: usize,
         state_dir: PathBuf,
         auto_save_state: bool,
-        auto_save_state_bytes: u64,
+        auto_save_state_bytes: NonZeroU64,
         auto_load_state: bool,
         verify_state: bool,
     ) -> Self {

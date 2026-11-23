@@ -2,7 +2,7 @@ use std::path::Path;
 
 use derive_more::From;
 
-use crate::{Error, Result, State, manager::StateManager};
+use crate::{Error, Result, State, StateRegistry};
 
 #[derive(Debug, Default, From)]
 pub enum StateSource {
@@ -21,30 +21,24 @@ impl<T: Into<Self>> From<Option<T>> for StateSource {
 }
 
 impl StateSource {
-    pub(crate) fn resolve(self, manager: &StateManager, file: &Path) -> Result<State> {
-        let name = match self {
-            Self::Named(name) => name,
-            Self::Auto => manager.autoname(file),
+    pub(crate) fn resolve(self, registry: &StateRegistry, file: &Path) -> Result<State> {
+        let (name, load) = match self {
+            Self::Named(name) => (name, true),
+            Self::Auto => (registry.autoname(file), registry.auto_load_state),
             Self::Existing(state) => {
-                let state = state.for_file(file)?;
-
-                if manager.verify_state {
-                    state.verify()?;
-                }
-
-                return Ok(state);
+                return registry.tracked(*state, file).map_err(Error::unsealed);
             }
         };
 
-        manager.path(&name)?;
+        registry.path(&name)?;
 
-        if manager.auto_load_state {
-            match manager.load(&name) {
+        if load {
+            match registry.read(&name) {
                 Err(Error::NotFound(_)) => {}
-                loaded => return loaded?.for_file(file),
+                read => return registry.tracked(read?, file),
             }
         }
 
-        State::new(manager.clone(), file, name)
+        State::new(file, name)
     }
 }

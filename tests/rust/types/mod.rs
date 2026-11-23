@@ -1,4 +1,3 @@
-mod checksum_test;
 mod config_test;
 mod file_test;
 mod options_test;

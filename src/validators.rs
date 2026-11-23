@@ -4,12 +4,10 @@ use regex::Regex;
 
 use crate::{
     NameError,
-    constants::{NAME_SEPARATOR, STATE_FILE_EXTENSION, TMP_FILE_EXTENSION},
+    constants::{CURRENT_DIR, NAME_SEPARATOR, STATE_FILE_EXTENSION, TMP_FILE_EXTENSION},
     macros::ensure,
 };
 
-// Name part that means the current directory, rejected so a name has a single spelling
-const CURRENT_DIR: &str = ".";
 // Name part that means the parent directory, rejected so a name cannot leave the state directory
 const PARENT_DIR: &str = "..";
 // Characters Win32 strips from the end of a directory name, which would alias another directory
@@ -18,7 +16,7 @@ const TRIMMED_CHARS: [char; 2] = ['.', ' '];
 const MAX_PART_BYTES: usize = 255;
 // Longest last part; the temporary file appends ".{signed i64 nanoseconds}.state.json.tmp"
 const MAX_FILE_BYTES: usize =
-    MAX_PART_BYTES - (1 + 20 + STATE_FILE_EXTENSION.len() + 1 + TMP_FILE_EXTENSION.len());
+    MAX_PART_BYTES - (1 + 20 + 1 + STATE_FILE_EXTENSION.len() + 1 + TMP_FILE_EXTENSION.len());
 // Keeps the state file under macOS's 1023-byte absolute path limit with room left for state_dir
 const MAX_NAME_BYTES: usize = 512;
 // Characters Windows does not allow in a file name, rejected on every platform

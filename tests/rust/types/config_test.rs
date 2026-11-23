@@ -1,21 +1,22 @@
-use preader::{
-    Config, DEFAULT_AUTO_SAVE_STATE_BYTES, DEFAULT_BUFFER_CAPACITY, DEFAULT_VERIFY_STATE,
-    default_state_dir,
-};
+use std::num::NonZeroU64;
+
+use preader::{Config, path};
 use rstest::rstest;
 use serde_json::json;
 
 #[rstest]
-fn defaults_match_the_constants() {
+fn defaults() {
     let config = Config::default();
 
     assert!(!config.auto_save_state);
     assert!(!config.auto_load_state);
+    assert!(config.verify_state);
+    assert!(config.state_dir.is_absolute());
 
-    assert_eq!(config.buffer_capacity, DEFAULT_BUFFER_CAPACITY);
-    assert_eq!(config.state_dir, default_state_dir());
-    assert_eq!(config.auto_save_state_bytes, DEFAULT_AUTO_SAVE_STATE_BYTES);
-    assert_eq!(config.verify_state, DEFAULT_VERIFY_STATE);
+    assert_eq!(config.buffer_capacity, 64 * 1024);
+    assert_eq!(config.auto_save_state_bytes.get(), 100 * 1024 * 1024);
+    assert_eq!(config.state_dir, path::default_state_dir());
+    assert_eq!(config.state_dir.file_name().unwrap(), "preader");
 }
 
 #[rstest]
@@ -48,7 +49,7 @@ fn roundtrips_through_json() {
         state_dir: "/tmp/states".into(),
         buffer_capacity: 1024,
         auto_save_state: true,
-        auto_save_state_bytes: 2048,
+        auto_save_state_bytes: NonZeroU64::new(2048).unwrap(),
         auto_load_state: true,
         verify_state: false,
     };

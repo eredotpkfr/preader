@@ -92,7 +92,7 @@ cargo-fix:
 cargo-machete:
 	@cargo machete
 cargo-nextest:
-	@cargo nextest run --features testing
+	@cargo nextest run --features testing --config-file nextest.toml
 cargo-rustfmt: cargo-fix
 	@cargo +nightly fmt --all
 cargo-rustfmt-check:

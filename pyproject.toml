@@ -47,12 +47,13 @@ package = false
 
 [dependency-groups]
 dev = [
+    "hypothesis",
     "maturin>=1.15.0,<2.0",
     "mypy",
+    "pypdf",
     "pytest",
     "pytest-icdiff",
     "pytest-randomly",
-    "pytest-repeat",
     "pytest-socket",
     "pytest-sugar",
     "pytest-timeout",
@@ -87,7 +88,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["cases", "constants", "preader"]
+known-first-party = ["cases", "common", "preader"]
 lines-between-types = 1
 split-on-trailing-comma = false
 

@@ -1,27 +1,51 @@
-use chrono::TimeDelta;
 use preader::Timestamps;
 use rstest::rstest;
-use serde_json::{Value, json};
+use serde_json::{Value, error::Category, json};
+use time::{Duration, UtcDateTime};
+
+use crate::common::{fixtures::sandbox, sandbox::Sandbox};
 
 #[rstest]
-fn now_starts_both_stamps() {
-    let timestamps = Timestamps::now();
+fn fields(sandbox: Sandbox) {
+    let path = sandbox.line_file();
+    let before = UtcDateTime::now().truncate_to_second();
+    let timestamps = sandbox.state(&path).timestamps;
+    let after = UtcDateTime::now();
+
+    assert!(before <= timestamps.created_at);
+    assert!(timestamps.created_at <= after);
 
     assert_eq!(timestamps.created_at, timestamps.updated_at);
-    assert_eq!(timestamps.created_at.timestamp_subsec_nanos(), 0);
+    assert_eq!(timestamps.created_at.nanosecond(), 0);
 }
 
 #[rstest]
 fn compares_by_value() {
     let timestamps = Timestamps::now();
     let touched = Timestamps {
-        updated_at: timestamps.updated_at + TimeDelta::seconds(1),
+        updated_at: timestamps.updated_at + Duration::SECOND,
         ..timestamps.clone()
     };
 
     assert_eq!(timestamps, timestamps.clone());
 
     assert_ne!(timestamps, touched);
+}
+
+#[rstest]
+fn now_starts_both_stamps() {
+    let timestamps = Timestamps::now();
+
+    assert_eq!(timestamps.created_at, timestamps.updated_at);
+    assert_eq!(timestamps.created_at.nanosecond(), 0);
+}
+
+#[rstest]
+fn deserialization_fails_when_a_stamp_is_out_of_range() {
+    let payload = json!({ "created_at": i64::MAX, "updated_at": 2 });
+    let error = serde_json::from_value::<Timestamps>(payload).unwrap_err();
+
+    assert_eq!(error.classify(), Category::Data);
 }
 
 #[rstest]
@@ -32,8 +56,8 @@ fn serializes_as_unix_seconds() {
     assert_eq!(
         payload,
         json!({
-            "created_at": timestamps.created_at.timestamp(),
-            "updated_at": timestamps.updated_at.timestamp(),
+            "created_at": timestamps.created_at.unix_timestamp(),
+            "updated_at": timestamps.updated_at.unix_timestamp(),
         })
     );
 }
@@ -43,6 +67,6 @@ fn deserializes_from_unix_seconds() {
     let payload = json!({ "created_at": 1, "updated_at": 2 });
     let timestamps: Timestamps = serde_json::from_value(payload).unwrap();
 
-    assert_eq!(timestamps.created_at.timestamp(), 1);
-    assert_eq!(timestamps.updated_at.timestamp(), 2);
+    assert_eq!(timestamps.created_at.unix_timestamp(), 1);
+    assert_eq!(timestamps.updated_at.unix_timestamp(), 2);
 }

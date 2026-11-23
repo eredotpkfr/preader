@@ -3,13 +3,12 @@ use std::path::PathBuf;
 use pyo3::prelude::*;
 
 use crate::{
-    Config, DEFAULT_CHUNK_SIZE, DEFAULT_DELIMITER, IteratorBuild, IteratorOptions, PReader,
-    StateRegistry, StateSource,
+    Config, DEFAULT_CHUNK_SIZE, DEFAULT_DELIMITER, IteratorOptions, PReader, StateRegistry,
+    StateSource,
     python::{
         bases::iterator::IteratorBase,
         iterators::{
-            byte::ByteIterator, chunk::ChunkIterator, delimiter::DelimiterIterator,
-            line::LineIterator,
+            byte::ByteIterator, chunk::ChunkIterator, line::LineIterator, segment::SegmentIterator,
         },
         macros::repr::pyrepr,
     },
@@ -97,7 +96,7 @@ impl PReader {
         Py::new(py, (LineIterator(iterator), IteratorBase))
     }
 
-    #[pyo3(name = "delimiter", signature = (
+    #[pyo3(name = "segments", signature = (
         file, *,
         state = StateSource::Auto,
         options = IteratorOptions::default(),
@@ -107,7 +106,7 @@ impl PReader {
         skip_empty = false
     ))]
     #[expect(clippy::too_many_arguments)]
-    fn py_delimiter(
+    fn py_segments(
         &self,
         py: Python<'_>,
         file: PathBuf,
@@ -117,16 +116,16 @@ impl PReader {
         keep_delimiter: bool,
         align_start: bool,
         skip_empty: bool,
-    ) -> PyResult<Py<DelimiterIterator>> {
+    ) -> PyResult<Py<SegmentIterator>> {
         let builder = self
-            .delimiter(file)
-            .character(delimiter[0])
+            .segments(file)
+            .delimiter(delimiter[0])
             .keep(keep_delimiter)
             .align(align_start)
             .skip_empty(skip_empty);
         let iterator = builder.state(state).options(options).build()?;
 
-        Py::new(py, (DelimiterIterator(iterator), IteratorBase))
+        Py::new(py, (SegmentIterator(iterator), IteratorBase))
     }
 
     fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {

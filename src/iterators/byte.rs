@@ -2,8 +2,8 @@ use std::io::Read;
 
 use crate::{
     ByteIterator, Result,
-    enums::skip::Skip,
-    interfaces::{iterator::IteratorRead, skippable::Skippable},
+    enums::skip::SkipPlan,
+    interfaces::{iterator::IteratorRead, skip::Skip},
 };
 
 #[derive(Debug, Default)]
@@ -15,22 +15,26 @@ impl IteratorRead for ByteIterator {
 
     fn read(&mut self) -> Result<Option<u8>> {
         if self.done() {
-            return self.stop();
+            return self.finalize();
         }
 
-        let Some(byte) = (&mut self.reader).bytes().next().transpose()? else {
-            return self.stop();
+        let (read, byte) = match (&mut self.reader).bytes().next().transpose() {
+            Ok(byte) => (Ok(usize::from(byte.is_some())), byte),
+            Err(error) => (Err(error.into()), None),
         };
 
-        self.advance(Ok(1))?;
-        self.progress.count();
+        if self.advance(read)? == 0 {
+            return self.finalize();
+        }
 
-        Ok(Some(byte))
+        self.progress.tick();
+
+        Ok(byte)
     }
 }
 
-impl Skippable for Byte {
-    fn skip(&self, count: u64) -> Skip {
-        Skip::Bytes(count)
+impl Skip for Byte {
+    fn skip(&self, count: u64) -> SkipPlan {
+        SkipPlan::Bytes(count)
     }
 }

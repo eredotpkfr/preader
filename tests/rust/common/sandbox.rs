@@ -1,22 +1,20 @@
 use std::{
     fs::{self, OpenOptions},
     io::{Seek, SeekFrom, Write},
+    num::NonZeroU64,
     path::{Path, PathBuf},
 };
 
-use chrono::Timelike;
-use preader::{
-    Config, IteratorBuild, IteratorRead, PReader, State, StateData, StateManager, StateRegistry,
-    Timestamps,
-};
+use preader::{Config, PReader, State, StateRegistry};
 use serde_json::Value;
 use tempfile::TempDir;
 
-use crate::common::constants::{
-    TEST_FILE_NAME, TEST_LARGE_COPIES, TEST_LINE, TEST_STATE_NAME, TEST_TRACKED_NAME,
-};
 #[cfg(unix)]
 use crate::common::funcs::{canonical, state_data};
+use crate::common::{
+    constants::{TEST_FILE_NAME, TEST_LARGE_COPIES, TEST_LINE, TEST_STATE_NAME, TEST_TRACKED_NAME},
+    funcs::drain,
+};
 
 #[cfg(unix)]
 const RECORDED_SIZE: u64 = 64;
@@ -61,10 +59,7 @@ impl Sandbox {
     }
 
     pub fn reader_with(&self, config: Config) -> PReader {
-        PReader::from(Config {
-            state_dir: self.state_dir().to_path_buf(),
-            ..config
-        })
+        PReader::from(config)
     }
 
     pub fn reader_in(&self, name: &str, config: Config) -> PReader {
@@ -91,7 +86,7 @@ impl Sandbox {
     pub fn autosaving(&self, threshold: u64) -> PReader {
         self.reader_with(Config {
             auto_save_state: true,
-            auto_save_state_bytes: threshold,
+            auto_save_state_bytes: NonZeroU64::new(threshold).unwrap(),
             ..self.config()
         })
     }
@@ -103,18 +98,15 @@ impl Sandbox {
         })
     }
 
-    pub fn manager(&self) -> StateManager {
-        StateManager::from(&self.config())
-    }
-
     pub fn states(&self) -> StateRegistry {
-        StateRegistry::from(&self.config())
+        StateRegistry::from(&self.config)
     }
 
     pub fn write(&self, name: &str, content: &[u8]) -> PathBuf {
         let path = self.path().join(name);
 
         path.parent().map(fs::create_dir_all).transpose().unwrap();
+
         fs::write(&path, content).unwrap();
 
         path
@@ -177,19 +169,15 @@ impl Sandbox {
 
         data.file.size = RECORDED_SIZE;
         data.position = position;
-
-        self.manager().state(data)
+        data
     }
 
-    pub fn saved(&self, path: &Path, name: &str) -> State {
-        let mut state = self.named_state(path, name);
-
-        state.save().unwrap();
-
-        state
+    pub fn saved(&self, path: &Path, name: &str) -> PathBuf {
+        self.reader().bytes(path).state(name).build().unwrap().save().unwrap();
+        self.states().path(name).unwrap()
     }
 
-    pub fn save(&self, name: &str) -> State {
+    pub fn save(&self, name: &str) -> PathBuf {
         let path = self.path().join(TEST_FILE_NAME);
 
         if !path.is_file() {
@@ -202,42 +190,57 @@ impl Sandbox {
     pub fn checkpoint(&self, path: &Path, name: &str, items: u64) -> State {
         let mut bytes = self.reader().bytes(path).state(name).limit(items).build().unwrap();
 
-        while bytes.read().unwrap().is_some() {}
+        drain(&mut bytes);
 
-        bytes.state().save().unwrap();
-        bytes.state().clone()
-    }
-
-    pub fn stored(&self, path: &Path, name: &str) -> State {
-        let reader = self.lenient();
-        let mut state = reader.bytes(path).state(name).build().unwrap().state().clone();
-
-        state.save().unwrap();
-
-        reader.states().load(name).unwrap()
+        bytes.save().unwrap().clone()
     }
 
     pub fn recorded(&self, content: &[u8], read: u64) -> State {
-        let path = self.write(TEST_TRACKED_NAME, content);
-        let mut bytes =
-            self.reader().bytes(&path).state(TEST_STATE_NAME).limit(read).build().unwrap();
+        self.checkpoint(
+            &self.write(TEST_TRACKED_NAME, content),
+            TEST_STATE_NAME,
+            read,
+        )
+    }
 
-        while bytes.read().unwrap().is_some() {}
+    pub fn persist(&self, state: &State) {
+        let path = self.states().path(&state.name).unwrap();
+        let sealed = State {
+            checksum: state.checksum().unwrap(),
+            ..state.clone()
+        };
 
-        bytes.state().clone()
+        path.parent().map(fs::create_dir_all).transpose().unwrap();
+
+        fs::write(path, serde_json::to_string(&sealed).unwrap()).unwrap();
+    }
+
+    pub fn write_state(&self, name: &str, payload: impl AsRef<[u8]>) {
+        let path = self.states().path(name).unwrap();
+
+        path.parent().map(fs::create_dir_all).transpose().unwrap();
+
+        fs::write(path, payload).unwrap();
+    }
+
+    pub fn tamper(&self, name: &str) {
+        self.patch(name, |payload| payload["position"] = Value::from(999));
+    }
+
+    pub fn patch(&self, name: &str, change: impl FnOnce(&mut Value)) {
+        let path = self.states().path(name).unwrap();
+        let mut payload: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+
+        change(&mut payload);
+
+        fs::write(&path, serde_json::to_string_pretty(&payload).unwrap()).unwrap();
     }
 
     pub fn payload(&self, state: &State) -> Value {
-        let content = fs::read_to_string(state.path().unwrap()).unwrap();
-        let written: StateData = serde_json::from_str(&content).unwrap();
-        let mut expected = (**state).clone();
+        let content = fs::read_to_string(self.states().path(&state.name).unwrap()).unwrap();
+        let written: State = serde_json::from_str(&content).unwrap();
 
-        expected.timestamps = Timestamps {
-            created_at: expected.timestamps.created_at.with_nanosecond(0).unwrap(),
-            updated_at: expected.timestamps.updated_at.with_nanosecond(0).unwrap(),
-        };
-
-        assert_eq!(written, expected);
+        assert_eq!(written, *state);
 
         serde_json::from_str(&content).unwrap()
     }

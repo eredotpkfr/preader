@@ -1,17 +1,28 @@
 use std::{
-    fs::File,
-    io::{self, Read, Seek, SeekFrom},
+    fs::{self, File},
+    io::{self, Read, Seek, SeekFrom, Write},
     path::Path,
 };
 
-use sha2::{Digest, Sha256};
+use crate::utils::hash;
 
-pub fn fingerprint(path: &Path, window: u64) -> io::Result<String> {
-    let mut buffer = Vec::with_capacity(window as usize);
+pub fn fingerprint(path: &Path, bytes: u64) -> io::Result<String> {
+    let mut buffer = Vec::new();
 
-    File::open(path)?.take(window).read_to_end(&mut buffer)?;
+    File::open(path)?.take(bytes).read_to_end(&mut buffer)?;
 
-    Ok(hex::encode(Sha256::digest(&buffer)))
+    Ok(hash::sha256(&buffer))
+}
+
+pub fn write_atomic(path: &Path, tmp: &Path, content: impl AsRef<[u8]>) -> io::Result<()> {
+    path.parent().map(fs::create_dir_all).transpose()?;
+
+    let mut file = File::create_new(tmp)?;
+
+    file.write_all(content.as_ref())
+        .and_then(|()| file.sync_all())
+        .and_then(|()| fs::rename(tmp, path))
+        .inspect_err(|_| drop(fs::remove_file(tmp)))
 }
 
 pub fn starts_mid_item(file: &File, position: u64, boundary: u8) -> io::Result<bool> {

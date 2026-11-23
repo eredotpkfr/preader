@@ -1,26 +1,21 @@
-import json
-
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from cases import (
-    DEVICE_STATE_NAMES,
-    INVALID_STATE_NAME_ERRORS,
-    UNPORTABLE_CHARACTERS,
-    WINDOWS_INVALID_STATE_NAMES,
+from common.constants import (
+    TEST_ALPHABET,
+    TEST_CHUNK_SIZE,
+    TEST_INVALID_UTF8,
+    TEST_LINE,
+    TEST_STATE_NAME,
 )
-from constants import TEST_ALPHABET, TEST_STATE_FILE, TEST_STATE_NAME
-from preader import (
-    Config,
-    IteratorOptions,
-    PReader,
-    State,
-    StateError,
-    StateMismatchError,
-)
+from preader import Config, IteratorOptions, PReader
+
+
+def _chunked(content: bytes, size: int) -> list[bytes]:
+    return [content[index : index + size] for index in range(0, len(content), size)]
 
 
 @pytest.fixture
@@ -29,373 +24,22 @@ def data_file(make_file: Callable[..., Path]) -> Path:
 
 
 @pytest.mark.parametrize(
-    ("options", "expected"),
-    [
-        (IteratorOptions(start=6), TEST_ALPHABET[6:]),
-        (IteratorOptions(end=10), TEST_ALPHABET[:10]),
-        (IteratorOptions(skip=4), TEST_ALPHABET[12:]),
-        (IteratorOptions(start=6, limit=2), TEST_ALPHABET[6:12]),
-    ],
-    ids=[
-        "start_skips_to_position",
-        "end_stops_before_position",
-        "skip_skips_items",
-        "limit_caps_yielded_items",
-    ],
+    "drop_partial", [True, False], ids=["drop_partial", "keep_partial"]
 )
-def test_options_narrow_the_output(
-    reader: PReader, data_file: Path, options: IteratorOptions, expected: object
+def test_chunk_iterator_attributes(
+    reader: PReader, tmp_file: Path, drop_partial: bool
 ) -> None:
-    assert b"".join(reader.chunks(data_file, options=options, chunk_size=3)) == expected
+    iterator = reader.chunks(tmp_file, chunk_size=3, drop_partial=drop_partial)
 
+    assert iterator.chunk_size == 3
+    assert iterator.drop_partial is drop_partial
 
-def test_read_yields_invalid_bytes(
-    reader: PReader, make_file: Callable[..., Path]
-) -> None:
-    invalid = b"foo" + bytes([0xFF, 0xFE]) + b"bar"
-    iterator = reader.chunks(make_file(invalid), chunk_size=4)
 
-    assert b"".join(iterator) == invalid
-    assert iterator.state.position == 8
-    assert iterator.state.percent() == 100.0
+def test_chunk_iterator_defaults(reader: PReader, tmp_file: Path) -> None:
+    iterator = reader.chunks(tmp_file)
 
-
-@pytest.mark.parametrize("buffer_capacity", [0, 2], ids=["zero", "tiny"])
-def test_buffer_capacity_smaller_than_chunk_size(
-    data_file: Path, make_reader: Callable[..., PReader], buffer_capacity: int
-) -> None:
-    reader = make_reader(buffer_capacity=buffer_capacity)
-
-    assert b"".join(reader.chunks(data_file, chunk_size=10)) == TEST_ALPHABET
-
-
-def test_zero_chunk_size_yields_nothing(reader: PReader, tmp_file: Path) -> None:
-    assert list(reader.chunks(tmp_file, chunk_size=0)) == []
-
-
-def test_drop_partial_discards_a_chunk_cut_short_by_end(
-    reader: PReader, data_file: Path
-) -> None:
-    options = IteratorOptions(end=12)
-    iterator = reader.chunks(
-        data_file, options=options, chunk_size=5, drop_partial=True
-    )
-
-    assert list(iterator) == [TEST_ALPHABET[0:5], TEST_ALPHABET[5:10]]
-    assert iterator.state.position == 10
-
-
-def test_keeps_partial_chunk_by_default(reader: PReader, data_file: Path) -> None:
-    options = IteratorOptions(end=12)
-
-    chunks = list(reader.chunks(data_file, options=options, chunk_size=5))
-
-    assert chunks == [TEST_ALPHABET[0:5], TEST_ALPHABET[5:10], TEST_ALPHABET[10:12]]
-
-
-def test_resume_applies_a_different_chunk_size(
-    reader: PReader, data_file: Path, consume: Callable[..., Any]
-) -> None:
-    state = consume(
-        reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=4), 1
-    ).state
-    state.save()
-
-    resumed = list(reader.chunks(data_file, state=state, chunk_size=3))
-
-    remaining = TEST_ALPHABET[4:]
-    expected = [remaining[i : i + 3] for i in range(0, len(remaining), 3)]
-
-    assert resumed == expected
-
-
-def test_resume_applies_skip_when_the_position_equals_the_start(
-    reader: PReader, data_file: Path, consume: Callable[..., Any]
-) -> None:
-    saved = consume(
-        reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=2), 2
-    ).state
-    saved.save()
-
-    options = IteratorOptions(start=saved.position, skip=1)
-    resumed = reader.chunks(data_file, state=saved, options=options, chunk_size=2)
-
-    assert b"".join(resumed) == TEST_ALPHABET[6:]
-
-
-def test_resume_ignores_options_when_already_past_start(
-    reader: PReader, data_file: Path, consume: Callable[..., Any]
-) -> None:
-    iterator = reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=3)
-    options = IteratorOptions(start=3)
-
-    state = consume(iterator, 4).state
-    state.save()
-
-    resumed = reader.chunks(data_file, state=state, options=options, chunk_size=3)
-
-    assert b"".join(resumed) == TEST_ALPHABET[12:]
-
-
-def test_end_below_the_position_does_not_rewind_the_state(
-    data_file: Path, make_reader: Callable[..., PReader]
-) -> None:
-    reader = make_reader(
-        auto_save_state=True, auto_save_state_bytes=64, auto_load_state=True
-    )
-
-    list(reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=3))
-
-    saved = reader.states[TEST_STATE_NAME].position
-
-    assert saved == len(data_file.read_bytes())
-
-    list(
-        reader.chunks(
-            data_file,
-            state=TEST_STATE_NAME,
-            options=IteratorOptions(end=5),
-            chunk_size=3,
-        )
-    )
-
-    assert reader.states[TEST_STATE_NAME].position == saved
-
-
-@pytest.mark.parametrize(
-    "options",
-    [
-        IteratorOptions(start=1000),
-        IteratorOptions(end=0),
-        IteratorOptions(limit=0),
-        IteratorOptions(skip=1000),
-    ],
-    ids=["start_past_the_end", "end_zero", "limit_zero", "skip_past_the_end"],
-)
-def test_boundary_options_yield_nothing(
-    reader: PReader, data_file: Path, options: IteratorOptions
-) -> None:
-    assert list(reader.chunks(data_file, options=options)) == []
-
-
-@pytest.mark.parametrize(
-    ("options", "expected_length"),
-    [(IteratorOptions(end=5, limit=100), 5), (IteratorOptions(end=100, limit=2), 4)],
-    ids=["end_is_tighter", "limit_is_tighter"],
-)
-def test_tighter_of_end_and_limit_wins(
-    reader: PReader, data_file: Path, options: IteratorOptions, expected_length: int
-) -> None:
-    chunks = reader.chunks(data_file, options=options, chunk_size=2)
-
-    assert b"".join(chunks) == TEST_ALPHABET[:expected_length]
-
-
-def test_resume_with_smaller_threshold_saves_early(
-    data_file: Path, make_reader: Callable[..., PReader], consume: Callable[..., Any]
-) -> None:
-    first_reader = make_reader(auto_save_state=True, auto_save_state_bytes=1000)
-    first = first_reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=2)
-    state = consume(first, 3).state
-    state.save()
-
-    second_reader = make_reader(auto_save_state=True, auto_save_state_bytes=4)
-    iterator = second_reader.chunks(data_file, state=state, chunk_size=2)
-
-    consume(iterator, 1)
-
-    assert second_reader.states[TEST_STATE_NAME].position == 8
-
-
-def test_resume_on_fully_consumed_file_yields_nothing(
-    reader: PReader, tmp_file: Path, consume: Callable[..., Any]
-) -> None:
-    iterator = reader.chunks(tmp_file, state=TEST_STATE_NAME, chunk_size=3)
-
-    state = consume(iterator).state
-    state.save()
-
-    resumed = reader.chunks(tmp_file, state=state, chunk_size=3)
-
-    assert list(resumed) == []
-    assert resumed.percent() == 100.0
-
-
-def test_threshold_autosave_triggers_mid_iteration(
-    data_file: Path, make_reader: Callable[..., PReader], consume: Callable[..., Any]
-) -> None:
-    reader = make_reader(auto_save_state=True, auto_save_state_bytes=9)
-
-    iterator = reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=3)
-    consume(iterator, 3)
-
-    assert reader.states[TEST_STATE_NAME].position == 9
-
-
-def test_drop_saves_partial_progress(
-    data_file: Path, make_reader: Callable[..., PReader]
-) -> None:
-    reader = make_reader(auto_save_state=True)
-
-    iterator = reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=3)
-
-    next(iterator)
-
-    del iterator
-
-    assert reader.states[TEST_STATE_NAME].position == 3
-
-
-def test_drop_does_not_save_by_default(reader: PReader, tmp_file: Path) -> None:
-    iterator = reader.chunks(tmp_file, state=TEST_STATE_NAME, chunk_size=3)
-
-    next(iterator)
-
-    del iterator
-
-    assert TEST_STATE_NAME not in reader.states
-
-
-def test_zero_threshold_saves_only_at_finalize(
-    data_file: Path, make_reader: Callable[..., PReader], consume: Callable[..., Any]
-) -> None:
-    reader = make_reader(auto_save_state=True, auto_save_state_bytes=0)
-    iterator = reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=3)
-
-    consume(iterator, 3)
-    position = iterator.state.position
-
-    assert TEST_STATE_NAME not in reader.states
-
-    del iterator
-
-    assert reader.states[TEST_STATE_NAME].position == position
-
-
-def test_extra_next_after_exhaustion_does_not_resave(
-    data_file: Path, make_reader: Callable[..., PReader], consume: Callable[..., Any]
-) -> None:
-    reader = make_reader(auto_save_state=True)
-    iterator = reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=3)
-
-    consume(iterator)
-
-    mtime_before = reader.states[TEST_STATE_NAME].path().stat().st_mtime
-
-    with pytest.raises(StopIteration):
-        next(iterator)
-
-    assert reader.states[TEST_STATE_NAME].path().stat().st_mtime == mtime_before
-
-
-def test_a_failing_threshold_save_stops_the_read(
-    config: Config, make_reader: Callable[..., PReader], data_file: Path
-) -> None:
-    config.state_dir.write_bytes(b"not a directory")
-
-    reader = make_reader(auto_save_state=True, auto_save_state_bytes=5)
-    iterator = reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=3)
-
-    assert next(iterator) == TEST_ALPHABET[:3]
-
-    with pytest.raises(FileExistsError):
-        next(iterator)
-
-
-def test_a_failing_save_exhausts_the_iterator(
-    config: Config, make_reader: Callable[..., PReader], data_file: Path
-) -> None:
-    config.state_dir.write_bytes(b"not a directory")
-
-    reader = make_reader(auto_save_state=True, auto_save_state_bytes=1)
-    iterator = reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=3)
-
-    with pytest.raises(FileExistsError):
-        next(iterator)
-
-    with pytest.raises(StopIteration):
-        next(iterator)
-
-
-def test_a_failing_final_save_reaches_every_item_first(
-    data_file: Path, make_reader: Callable[..., PReader], config: Config
-) -> None:
-    config.state_dir.write_bytes(b"not a directory")
-
-    reader = make_reader(auto_save_state=True)
-    iterator = reader.chunks(data_file, chunk_size=13, state=TEST_STATE_NAME)
-    consumed = b"".join(next(iterator) for _ in range(2))
-
-    assert consumed == TEST_ALPHABET
-
-    with pytest.raises(FileExistsError):
-        next(iterator)
-
-
-def test_a_failing_autosave_stops_the_read_after_a_truncation(
-    data_file: Path,
-    make_reader: Callable[..., PReader],
-    truncate: Callable[[Path, int], None],
-    config: Config,
-) -> None:
-    config.state_dir.write_bytes(b"not a directory")
-
-    reader = make_reader(auto_save_state=True, buffer_capacity=1)
-    iterator = reader.chunks(data_file, chunk_size=3, state=TEST_STATE_NAME)
-
-    assert next(iterator) == TEST_ALPHABET[:3]
-
-    truncate(data_file, 1)
-
-    with pytest.raises(FileExistsError):
-        list(iterator)
-
-
-def test_a_failing_autosave_stops_the_read_when_end_drops_a_chunk(
-    data_file: Path, make_reader: Callable[..., PReader], config: Config
-) -> None:
-    config.state_dir.write_bytes(b"not a directory")
-
-    reader = make_reader(auto_save_state=True)
-    options = IteratorOptions(end=12)
-    iterator = reader.chunks(
-        data_file,
-        chunk_size=8,
-        drop_partial=True,
-        state=TEST_STATE_NAME,
-        options=options,
-    )
-
-    assert next(iterator) == TEST_ALPHABET[:8]
-
-    with pytest.raises(FileExistsError):
-        next(iterator)
-
-
-@pytest.mark.parametrize("threshold", [4, 1000], ids=["at_the_threshold", "at_the_end"])
-def test_a_failing_autosave_stops_the_read_on_a_dropped_short_chunk(
-    make_file: Callable[..., Path],
-    make_reader: Callable[..., PReader],
-    threshold: int,
-    truncate: Callable[[Path, int], None],
-    config: Config,
-) -> None:
-    config.state_dir.write_bytes(b"not a directory")
-
-    reader = make_reader(
-        auto_save_state=True, auto_save_state_bytes=threshold, buffer_capacity=1
-    )
-    path = make_file(b"foobarbaz")
-    iterator = reader.chunks(
-        path, chunk_size=3, drop_partial=True, state=TEST_STATE_NAME
-    )
-
-    assert next(iterator) == b"foo"
-
-    truncate(path, 5)
-
-    with pytest.raises(FileExistsError):
-        list(iterator)
+    assert iterator.chunk_size == 1024
+    assert iterator.drop_partial is False
 
 
 def test_chunk_iterator_repr(
@@ -411,471 +55,95 @@ def test_chunk_iterator_repr(
     )
 
 
-def test_auto_load_state_resumes_previous_position(
-    data_file: Path, make_reader: Callable[..., PReader]
+def test_zero_chunk_size_yields_nothing(reader: PReader, tmp_file: Path) -> None:
+    assert list(reader.chunks(tmp_file, chunk_size=0)) == []
+
+
+def test_drop_partial_yields_nothing_for_an_empty_file(
+    reader: PReader, empty_file: Path
 ) -> None:
-    reader = make_reader(auto_load_state=True)
-    iterator = reader.chunks(data_file, chunk_size=5)
-
-    next(iterator)
-
-    iterator.state.save()
-
-    assert reader.chunks(data_file, chunk_size=5).state.position == 5
+    assert list(reader.chunks(empty_file, drop_partial=True)) == []
 
 
-def test_auto_load_state_raises_when_the_file_changed(
-    data_file: Path,
-    make_reader: Callable[..., PReader],
-    append: Callable[[Path, bytes], None],
-) -> None:
-    reader = make_reader(auto_load_state=True)
-    iterator = reader.chunks(data_file, chunk_size=5)
-
-    next(iterator)
-
-    iterator.state.save()
-
-    append(data_file, b"tampered")
-
-    with pytest.raises(StateMismatchError, match="file size changed"):
-        reader.chunks(data_file, chunk_size=5)
-
-
-def test_auto_load_state_resumes_stale_state_without_verification(
-    data_file: Path,
-    make_reader: Callable[..., PReader],
-    append: Callable[[Path, bytes], None],
-) -> None:
-    reader = make_reader(auto_load_state=True, verify_state=False)
-    iterator = reader.chunks(data_file, chunk_size=5)
-
-    next(iterator)
-
-    iterator.state.save()
-
-    append(data_file, b"tampered")
-
-    assert reader.chunks(data_file, chunk_size=5).state.position == 5
-
-
-def test_auto_load_state_ignores_an_existing_state_by_default(
-    reader: PReader, tmp_file: Path, consume: Callable[..., Any]
-) -> None:
-    consume(reader.chunks(tmp_file, chunk_size=3)).state.save()
-
-    assert reader.chunks(tmp_file, chunk_size=3).state.position == 0
-
-
-def test_state_name_change_creates_orphaned_state(
+def test_drop_partial_yields_nothing_for_a_large_chunk_size(
     reader: PReader, tmp_file: Path
 ) -> None:
-    reader.chunks(tmp_file, state="job-old").state.save()
-
-    new_state = reader.chunks(tmp_file, state="job-new").state
-
-    assert new_state.position == 0
-    assert "job-old" in reader.states
+    assert list(reader.chunks(tmp_file, chunk_size=1024, drop_partial=True)) == []
 
 
-@pytest.mark.parametrize("state", [123, [], True], ids=["int", "list", "bool"])
-def test_raises_when_state_has_an_unsupported_type(
-    reader: PReader, data_file: Path, state: State
+@pytest.mark.parametrize("chunk_size", [1024, 2**64 - 1], ids=["large", "largest"])
+def test_yields_one_chunk_for_a_large_chunk_size(
+    reader: PReader, tmp_file: Path, chunk_size: int
 ) -> None:
-    with pytest.raises(TypeError, match="state must be None"):
-        reader.chunks(data_file, state=state)
+    assert list(reader.chunks(tmp_file, chunk_size=chunk_size)) == [TEST_LINE]
 
 
-@pytest.mark.parametrize(("name", "message"), INVALID_STATE_NAME_ERRORS)
-def test_raises_when_the_state_name_is_invalid(
-    reader: PReader, tmp_file: Path, name: str, message: str
+@pytest.mark.parametrize("chunk_size", ["3", 1.5, None], ids=["str", "float", "none"])
+def test_raises_when_the_chunk_size_is_not_an_integer(
+    reader: PReader, tmp_file: Path, chunk_size: object
 ) -> None:
-    with pytest.raises(ValueError, match=message):
-        reader.chunks(tmp_file, state=name)
+    with pytest.raises(TypeError, match="cannot be interpreted as an integer"):
+        reader.chunks(tmp_file, chunk_size=chunk_size)  # type: ignore[arg-type]
 
 
-@pytest.mark.parametrize("name", WINDOWS_INVALID_STATE_NAMES)
-def test_raises_when_the_state_name_is_not_portable(
-    reader: PReader, tmp_file: Path, name: str
+@pytest.mark.parametrize(
+    ("chunk_size", "message"),
+    [(-1, "negative int"), (2**64, "too big")],
+    ids=["negative", "too_large"],
+)
+def test_raises_when_the_chunk_size_overflows(
+    reader: PReader, tmp_file: Path, chunk_size: int, message: str
 ) -> None:
-    with pytest.raises(ValueError, match="is not valid"):
-        reader.chunks(tmp_file, state=name)
+    with pytest.raises(OverflowError, match=message):
+        reader.chunks(tmp_file, chunk_size=chunk_size)
 
 
-@pytest.mark.parametrize("name", DEVICE_STATE_NAMES)
-def test_raises_when_the_state_name_is_a_device(
-    reader: PReader, tmp_file: Path, name: str
-) -> None:
-    with pytest.raises(ValueError, match="is not valid"):
-        reader.chunks(tmp_file, state=name)
-
-
-@pytest.mark.parametrize("character", UNPORTABLE_CHARACTERS)
-def test_raises_when_a_state_name_character_is_not_portable(
-    reader: PReader, tmp_file: Path, character: str
-) -> None:
-    name = f"job{character}1"
-
-    with pytest.raises(ValueError, match="is not valid"):
-        reader.chunks(tmp_file, state=name)
-
-
-def test_raises_when_the_state_tracks_another_file(
+def test_drop_partial_discards_a_single_byte_file(
     reader: PReader, make_file: Callable[..., Path]
 ) -> None:
-    tracked = make_file(b"foo", name="tracked.bin")
-    untracked = make_file(b"foo", name="untracked.bin")
+    path = make_file(b"a")
 
-    state = reader.chunks(tracked, state=TEST_STATE_NAME).state
-    state.save()
+    assert list(reader.chunks(path, drop_partial=True)) == []
 
-    with pytest.raises(
-        StateMismatchError, match=r"state tracks a different file .*resync"
-    ):
-        reader.chunks(untracked, state=state)
 
+def test_splits_into_fixed_size_pieces(reader: PReader, data_file: Path) -> None:
+    chunks = list(reader.chunks(data_file, chunk_size=3))
 
-def test_raises_when_the_file_differs_without_verification(
-    make_file: Callable[..., Path], make_reader: Callable[..., PReader]
-) -> None:
-    reader = make_reader(verify_state=False)
-    tracked = make_file(b"foo", name="tracked.bin")
-    untracked = make_file(b"bar", name="untracked.bin")
-
-    state = reader.chunks(tracked, state=TEST_STATE_NAME).state
-    state.save()
-
-    with pytest.raises(StateMismatchError, match="state tracks a different file"):
-        reader.chunks(untracked, state=state)
-
-
-def test_resumes_a_grown_file_without_verification(
-    data_file: Path,
-    make_reader: Callable[..., PReader],
-    append: Callable[[Path, bytes], None],
-) -> None:
-    reader = make_reader()
-    iterator = reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=3)
-
-    next(iterator)
-
-    state = iterator.state
-    state.save()
-
-    append(data_file, b"more")
-
-    lenient_reader = make_reader(verify_state=False)
-    resumed = lenient_reader.chunks(data_file, state=state, chunk_size=3)
-
-    assert resumed.state.position == state.position
-
-
-def test_raises_when_the_file_is_deleted_without_verification(
-    data_file: Path, make_reader: Callable[..., PReader]
-) -> None:
-    reader = make_reader(verify_state=False)
-
-    state = reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=3).state
-    state.save()
-
-    data_file.unlink()
-
-    with pytest.raises(FileNotFoundError):
-        reader.chunks(data_file, state=state, chunk_size=3)
-
-
-def test_raises_when_the_tracked_file_is_deleted(
-    make_file: Callable[..., Path], make_reader: Callable[..., PReader]
-) -> None:
-    reader = make_reader(verify_state=False)
-    tracked = make_file(b"foo", name="tracked.bin")
-
-    state = reader.chunks(tracked, state=TEST_STATE_NAME).state
-
-    state.save()
-    tracked.unlink()
-
-    with pytest.raises(FileNotFoundError):
-        reader.chunks(tracked, state=state)
-
-
-def test_resync_allows_resuming_moved_file(
-    reader: PReader, tmp_path: Path, data_file: Path, consume: Callable[..., Any]
-) -> None:
-    state = consume(
-        reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=5), 1
-    ).state
-    state.save()
-
-    moved = data_file.rename(tmp_path / "moved.bin")
-
-    with pytest.raises(
-        StateMismatchError, match=r"state tracks a different file .*resync"
-    ):
-        reader.chunks(moved, state=state)
-
-    resynced = state.resync(moved)
-    resumed = reader.chunks(moved, state=resynced, chunk_size=5)
-
-    assert resumed.state.file.path == moved
-    assert b"".join(resumed) == TEST_ALPHABET[5:]
-
-
-def test_resync_allows_resuming_grown_file(
-    reader: PReader,
-    data_file: Path,
-    consume: Callable[..., Any],
-    append: Callable[[Path, bytes], None],
-) -> None:
-    state = consume(reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=5)).state
-    state.save()
-
-    append(data_file, b"more")
-
-    with pytest.raises(StateMismatchError, match="file size changed"):
-        reader.chunks(data_file, state=state)
-
-    resynced = state.resync(data_file)
-    resumed = reader.chunks(data_file, state=resynced, chunk_size=5)
-
-    assert resynced.file.size == len(TEST_ALPHABET) + len(b"more")
-    assert b"".join(resumed) == b"more"
-
-
-def test_auto_load_state_raises_when_the_name_tracks_another_file(
-    make_file: Callable[..., Path], make_reader: Callable[..., PReader]
-) -> None:
-    reader = make_reader(auto_load_state=True)
-
-    file_a = make_file(b"foo", name="data-1.bin")
-    file_b = make_file(b"bar", name="data-2.bin")
-
-    reader.chunks(file_a, state="shared-name").state.save()
-
-    with pytest.raises(StateMismatchError, match="state tracks a different file"):
-        reader.chunks(file_b, state="shared-name")
-
-
-def test_auto_name_changes_when_file_moves(
-    reader: PReader, tmp_path: Path, data_file: Path
-) -> None:
-    iterator = reader.chunks(data_file)
-
-    next(iterator)
-
-    iterator.state.save()
-
-    moved = data_file.rename(tmp_path / "moved.bin")
-
-    assert reader.chunks(moved).state.position == 0
-
-
-def test_raises_when_resumed_after_file_grows(
-    reader: PReader,
-    data_file: Path,
-    consume: Callable[..., Any],
-    append: Callable[[Path, bytes], None],
-) -> None:
-    state = consume(reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=5)).state
-    state.save()
-
-    append(data_file, b"more")
-
-    with pytest.raises(StateMismatchError, match="file size changed"):
-        reader.chunks(data_file, state=state)
-
-
-def test_recorded_file_size_never_refreshes_after_file_grows(
-    data_file: Path,
-    make_reader: Callable[..., PReader],
-    consume: Callable[..., Any],
-    append: Callable[[Path, bytes], None],
-) -> None:
-    reader = make_reader(verify_state=False)
-
-    state = consume(reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=5)).state
-    state.save()
-
-    append(data_file, b"more")
-
-    options = IteratorOptions(end=100)
-    resumed = reader.chunks(data_file, state=state, options=options)
-
-    assert list(resumed) == []
-    assert resumed.state.file.size == len(TEST_ALPHABET)
-
-
-def test_clear_does_not_affect_live_iterator(reader: PReader, data_file: Path) -> None:
-    iterator = reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=5)
-
-    next(iterator)
-
-    iterator.state.save()
-    reader.states.clear()
-
-    assert TEST_STATE_NAME not in reader.states
-
-    next(iterator)
-
-    assert iterator.state.position == 10
-    assert (
-        reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=5).state.position
-        == 0
-    )
-
-
-def test_raises_when_reading_a_directory_without_verification(
-    data_file: Path, make_reader: Callable[..., PReader]
-) -> None:
-    reader = make_reader(verify_state=False)
-    state = reader.chunks(data_file, state=TEST_STATE_NAME).state
-    state.save()
-
-    data_file.unlink()
-    data_file.mkdir()
-
-    with pytest.raises(OSError, match=r"os error"):
-        list(reader.chunks(data_file, state=state))
-
-
-def test_raises_when_the_resumed_file_is_replaced_by_a_directory(
-    reader: PReader, data_file: Path
-) -> None:
-    state = reader.chunks(data_file, state=TEST_STATE_NAME).state
-    state.save()
-
-    data_file.unlink()
-    data_file.mkdir()
-
-    with pytest.raises(IsADirectoryError, match="is a directory"):
-        reader.chunks(data_file, state=state)
-
-
-@pytest.mark.usefixtures("requires_symlinks")
-def test_two_symlinks_to_same_target_share_auto_name(
-    reader: PReader, tmp_path: Path, make_file: Callable[..., Path]
-) -> None:
-    real = make_file(TEST_ALPHABET, name="real.bin")
-
-    link1 = tmp_path / "link-1.bin"
-    link2 = tmp_path / "link-2.bin"
-
-    link1.symlink_to(real)
-    link2.symlink_to(real)
-
-    assert reader.chunks(link1).state.name == reader.chunks(link2).state.name
-
-
-def test_state_dir_change_creates_fresh_state(
-    data_file: Path, make_reader: Callable[..., PReader], tmp_path: Path
-) -> None:
-    reader = make_reader()
-
-    iterator = reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=5)
-
-    next(iterator)
-
-    iterator.state.save()
-
-    other_reader = make_reader(state_dir=tmp_path / "other-preader")
-
-    assert (
-        other_reader.chunks(
-            data_file, state=TEST_STATE_NAME, chunk_size=5
-        ).state.position
-        == 0
-    )
-
-
-def test_state_object_keeps_its_own_state_dir(
-    data_file: Path, make_reader: Callable[..., PReader], tmp_path: Path
-) -> None:
-    owner = make_reader(auto_save_state=True)
-    state = owner.bytes(data_file, state=TEST_STATE_NAME).state
-
-    reader = make_reader(
-        state_dir=tmp_path / "other-preader", auto_save_state=True, verify_state=False
-    )
-
-    list(reader.chunks(data_file, state=state))
-
-    assert (owner.config.state_dir / TEST_STATE_FILE).is_file()
-    assert not (reader.config.state_dir / TEST_STATE_FILE).exists()
-
-
-def test_auto_load_state_raises_when_the_payload_is_corrupt(
-    data_file: Path, make_reader: Callable[..., PReader]
-) -> None:
-    reader = make_reader(auto_load_state=True)
-    iterator = reader.chunks(data_file, chunk_size=3)
-
-    next(iterator)
-
-    state_path = iterator.state.save()
-    state_path.write_text("not valid json", encoding="utf-8")
-
-    with pytest.raises(StateError, match="expected ident"):
-        reader.chunks(data_file, chunk_size=3)
-
-
-def test_auto_load_state_raises_when_the_payload_is_incomplete(
-    data_file: Path, make_reader: Callable[..., PReader]
-) -> None:
-    reader = make_reader(auto_load_state=True)
-    iterator = reader.chunks(data_file, chunk_size=3)
-
-    next(iterator)
-
-    state_path = iterator.state.save()
-    payload = json.loads(state_path.read_text(encoding="utf-8"))
-
-    del payload["timestamps"]
-
-    state_path.write_text(json.dumps(payload), encoding="utf-8")
-
-    with pytest.raises(StateError, match="missing field `timestamps`"):
-        reader.chunks(data_file, chunk_size=3)
-
-
-def test_second_iteration_yields_nothing(reader: PReader, data_file: Path) -> None:
-    iterator = reader.chunks(data_file, chunk_size=3)
-
-    list(iterator)
-
-    assert list(iterator) == []
-
-
-def test_drop_does_not_save_without_progress(
-    data_file: Path, make_reader: Callable[..., PReader]
-) -> None:
-    reader = make_reader(auto_save_state=True)
-    iterator = reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=3)
-
-    del iterator
-
-    assert TEST_STATE_NAME not in reader.states
-
-
-def test_default_chunk_size_is_1024(reader: PReader, data_file: Path) -> None:
-    assert reader.chunks(data_file).chunk_size == 1024
+    assert chunks == _chunked(TEST_ALPHABET, 3)
 
 
 def test_whole_file_chunk_size_yields_one_chunk(
     reader: PReader, data_file: Path
 ) -> None:
-    size = len(data_file.read_bytes())
+    size = len(TEST_ALPHABET)
 
     assert list(reader.chunks(data_file, chunk_size=size)) == [TEST_ALPHABET]
 
 
-def test_start_is_not_realigned_to_the_chunk_grid(
+@pytest.mark.parametrize(
+    ("options", "expected"),
+    [
+        (IteratorOptions(start=6), TEST_ALPHABET[6:]),
+        (IteratorOptions(end=10), TEST_ALPHABET[:10]),
+        (IteratorOptions(skip=4), TEST_ALPHABET[12:]),
+        (IteratorOptions(start=6, limit=2), TEST_ALPHABET[6:12]),
+    ],
+    ids=["start", "end", "skip", "start_and_limit"],
+)
+def test_options_narrow_the_output(
+    reader: PReader, data_file: Path, options: IteratorOptions, expected: bytes
+) -> None:
+    chunks = _chunked(expected, 3)
+
+    assert list(reader.chunks(data_file, options=options, chunk_size=3)) == chunks
+
+
+def test_limit_counts_chunks_from_an_unaligned_start(
     reader: PReader, data_file: Path
 ) -> None:
-    options = IteratorOptions(start=7)
+    options = IteratorOptions(start=1, limit=1)
 
-    assert list(reader.chunks(data_file, chunk_size=3, options=options)) == [
-        TEST_ALPHABET[i : i + 3] for i in range(7, len(TEST_ALPHABET), 3)
-    ]
+    assert list(reader.chunks(data_file, options=options, chunk_size=4)) == [b"bcde"]
 
 
 def test_skip_saturates_when_multiplied_by_the_chunk_size(
@@ -883,25 +151,25 @@ def test_skip_saturates_when_multiplied_by_the_chunk_size(
 ) -> None:
     options = IteratorOptions(skip=2**32)
 
-    assert list(reader.chunks(data_file, chunk_size=2**32, options=options)) == []
+    assert list(reader.chunks(data_file, options=options, chunk_size=2**32)) == []
 
 
-def test_drop_warns_on_stderr_when_saving_fails(
-    data_file: Path,
-    make_reader: Callable[..., PReader],
-    capfd: pytest.CaptureFixture[str],
-    config: Config,
+def test_start_is_not_realigned_to_the_chunk_grid(
+    reader: PReader, data_file: Path
 ) -> None:
-    config.state_dir.write_bytes(b"not a directory")
+    options = IteratorOptions(start=7)
 
-    reader = make_reader(auto_save_state=True)
-    iterator = reader.chunks(data_file, chunk_size=3, state=TEST_STATE_NAME)
+    iterator = reader.chunks(data_file, options=options, chunk_size=3)
 
-    next(iterator)
+    assert list(iterator) == _chunked(TEST_ALPHABET[7:], 3)
 
-    del iterator
 
-    assert "preader: save failed" in capfd.readouterr().err
+def test_drop_partial_discards_the_partial_chunk(
+    reader: PReader, data_file: Path
+) -> None:
+    chunks = list(reader.chunks(data_file, chunk_size=3, drop_partial=True))
+
+    assert chunks == _chunked(TEST_ALPHABET[: len(TEST_ALPHABET) // 3 * 3], 3)
 
 
 def test_chunk_size_of_one_yields_single_bytes(
@@ -913,64 +181,13 @@ def test_chunk_size_of_one_yields_single_bytes(
     assert chunks == list(reader.bytes(data_file))
 
 
-def test_threshold_autosave_records_every_item_boundary(
-    data_file: Path, make_reader: Callable[..., PReader]
-) -> None:
-    reader = make_reader(auto_save_state=True, auto_save_state_bytes=10)
-    saved: list[int] = []
-
-    for _ in reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=3):
-        if TEST_STATE_NAME not in reader.states:
-            continue
-
-        position = reader.states[TEST_STATE_NAME].position
-
-        if not saved or saved[-1] != position:
-            saved.append(position)
-
-    assert saved == [12, 24]
-    assert reader.states[TEST_STATE_NAME].position == len(TEST_ALPHABET)
-
-
-def test_file_growth_during_iteration_is_ignored(
-    reader: PReader,
-    make_file: Callable[..., Path],
-    append: Callable[[Path, bytes], None],
+def test_drop_partial_keeps_an_exact_chunk(
+    reader: PReader, make_file: Callable[..., Path]
 ) -> None:
     path = make_file(TEST_ALPHABET[:6])
-    iterator = reader.chunks(path, chunk_size=3)
+    iterator = reader.chunks(path, chunk_size=3, drop_partial=True)
 
-    next(iterator)
-
-    append(path, b"more")
-
-    assert list(iterator) == [TEST_ALPHABET[3:6]]
-
-
-def test_resume_applies_the_limit_again(
-    data_file: Path, make_reader: Callable[..., PReader]
-) -> None:
-    reader = make_reader(auto_load_state=True)
-    options = IteratorOptions(limit=2)
-    iterator = reader.chunks(data_file, options=options, chunk_size=3)
-
-    list(iterator)
-
-    iterator.state.save()
-
-    assert len(list(reader.chunks(data_file, options=options, chunk_size=3))) == 2
-
-
-def test_two_iterators_with_the_same_name_advance_independently(
-    reader: PReader, data_file: Path
-) -> None:
-    first = reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=3)
-    second = reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=3)
-
-    next(first)
-
-    assert first.state.position == 3
-    assert second.state.position == 0
+    assert list(iterator) == [TEST_ALPHABET[:3], TEST_ALPHABET[3:6]]
 
 
 def test_yields_every_byte_value(
@@ -983,14 +200,63 @@ def test_yields_every_byte_value(
     ]
 
 
+def test_keeps_a_partial_chunk_by_default(reader: PReader, data_file: Path) -> None:
+    options = IteratorOptions(end=12)
+
+    chunks = list(reader.chunks(data_file, options=options, chunk_size=5))
+
+    assert chunks == [TEST_ALPHABET[0:5], TEST_ALPHABET[5:10], TEST_ALPHABET[10:12]]
+
+
+def test_drop_partial_discards_a_chunk_cut_short_by_end(
+    reader: PReader, data_file: Path
+) -> None:
+    options = IteratorOptions(end=12)
+
+    iterator = reader.chunks(
+        data_file, options=options, chunk_size=5, drop_partial=True
+    )
+
+    assert list(iterator) == [TEST_ALPHABET[0:5], TEST_ALPHABET[5:10]]
+    assert iterator.state.position == 10
+
+
+def test_resume_applies_a_different_chunk_size(
+    reader: PReader, data_file: Path, consume: Callable[..., Any]
+) -> None:
+    iterator = reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=4)
+    state = consume(iterator, 2).save()
+
+    resumed = list(reader.chunks(data_file, state=state, chunk_size=3))
+
+    assert resumed == _chunked(TEST_ALPHABET[4:], 3)
+
+
 def test_drop_partial_reads_past_a_buffer_refill(
     make_reader: Callable[..., PReader], make_file: Callable[..., Path]
 ) -> None:
     reader = make_reader(buffer_capacity=64)
     content = TEST_ALPHABET * 20
-    chunks = reader.chunks(make_file(content), chunk_size=7, drop_partial=True)
+    iterator = reader.chunks(
+        make_file(content), chunk_size=TEST_CHUNK_SIZE, drop_partial=True
+    )
 
-    assert b"".join(chunks) == content[: len(content) - len(content) % 7]
+    assert (
+        b"".join(iterator) == content[: len(content) - len(content) % TEST_CHUNK_SIZE]
+    )
+
+
+def test_position_counts_finished_items(reader: PReader, data_file: Path) -> None:
+    iterator = reader.chunks(data_file, chunk_size=3)
+
+    next(iterator)
+
+    assert iterator.state.position == 0
+    assert iterator.percent() == 0.0
+
+    next(iterator)
+
+    assert iterator.state.position == 3
 
 
 def test_drop_partial_discards_a_truncated_chunk(
@@ -1010,44 +276,137 @@ def test_drop_partial_discards_a_truncated_chunk(
     assert iterator.state.position == 5
 
 
-def test_percent_tracks_the_position(reader: PReader, data_file: Path) -> None:
-    iterator = reader.chunks(data_file, chunk_size=7)
-    size = len(data_file.read_bytes())
+def test_file_growth_during_iteration_is_ignored(
+    reader: PReader,
+    make_file: Callable[..., Path],
+    append: Callable[[Path, bytes], None],
+) -> None:
+    path = make_file(TEST_ALPHABET[:6])
+    iterator = reader.chunks(path, chunk_size=3)
 
-    assert iterator.percent() == 0.0
+    next(iterator)
+    append(path, b"more")
 
-    for _ in iterator:
-        assert iterator.percent() == pytest.approx(iterator.state.position / size * 100)
+    assert list(iterator) == [TEST_ALPHABET[3:6]]
+    assert iterator.state.position == 6
 
+
+def test_read_yields_invalid_bytes(
+    reader: PReader, make_file: Callable[..., Path]
+) -> None:
+    invalid = b"foo" + TEST_INVALID_UTF8 + b"bar"
+    iterator = reader.chunks(make_file(invalid), chunk_size=4)
+
+    assert list(iterator) == [invalid[:4], invalid[4:]]
+    assert iterator.state.position == len(invalid)
     assert iterator.percent() == 100.0
 
 
-def test_iteration_survives_the_file_being_deleted(
-    make_reader: Callable[..., PReader], data_file: Path
-) -> None:
-    reader = make_reader(buffer_capacity=1)
-    expected = list(reader.chunks(data_file, chunk_size=3))
-    iterator = reader.chunks(data_file, chunk_size=3)
-
-    first = next(iterator)
-    data_file.unlink()
-
-    assert [first, *iterator] == expected
-    assert iterator.state.position == len(TEST_ALPHABET)
-
-
-def test_iteration_stops_at_a_truncation(
+def test_resumed_read_floors_the_last_saved_position(
+    reader: PReader,
     make_reader: Callable[..., PReader],
     data_file: Path,
-    truncate: Callable[[Path, int], None],
+    consume: Callable[..., Any],
 ) -> None:
-    reader = make_reader(buffer_capacity=1)
-    iterator = reader.chunks(data_file, chunk_size=3)
+    iterator = reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=2)
+    state = consume(iterator, 4).save()
 
-    next(iterator)
+    saving = make_reader(auto_save_state=True, auto_save_state_bytes=4)
+    resumed = saving.chunks(data_file, state=state, chunk_size=2)
 
-    truncate(data_file, 10)
+    consume(resumed, 2)
+
+    assert saving.states[TEST_STATE_NAME].position == 8
+
+
+def test_resume_applies_a_different_chunk_size_and_limit(
+    reader: PReader, data_file: Path
+) -> None:
+    options = IteratorOptions(limit=1)
+    iterator = reader.chunks(
+        data_file, state=TEST_STATE_NAME, options=options, chunk_size=4
+    )
 
     list(iterator)
 
-    assert iterator.state.position == 10
+    state = iterator.save()
+    resumed = reader.chunks(
+        data_file, state=state, options=IteratorOptions(limit=2), chunk_size=2
+    )
+
+    assert list(resumed) == [b"ef", b"gh"]
+
+
+def test_resume_applies_a_skip_past_the_saved_position(
+    reader: PReader, data_file: Path, consume: Callable[..., Any]
+) -> None:
+    iterator = reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=2)
+    state = consume(iterator, 2).save()
+
+    options = IteratorOptions(start=1, skip=5)
+    resumed = list(reader.chunks(data_file, state=state, chunk_size=2, options=options))
+
+    assert resumed == _chunked(TEST_ALPHABET[11:], 2)
+
+
+def test_raises_when_a_save_fails_on_a_chunk_dropped_by_end(
+    make_reader: Callable[..., PReader], data_file: Path, config: Config
+) -> None:
+    config.state_dir.write_bytes(b"not a directory")
+
+    reader = make_reader(auto_save_state=True)
+    options = IteratorOptions(end=12)
+    iterator = reader.chunks(
+        data_file,
+        state=TEST_STATE_NAME,
+        options=options,
+        chunk_size=8,
+        drop_partial=True,
+    )
+
+    assert next(iterator) == TEST_ALPHABET[:8]
+
+    with pytest.raises(FileExistsError):
+        next(iterator)
+
+    assert iterator.state.position == 8
+
+
+def test_raises_when_a_save_fails_on_a_dropped_short_chunk(
+    make_reader: Callable[..., PReader],
+    make_file: Callable[..., Path],
+    truncate: Callable[[Path, int], None],
+    config: Config,
+) -> None:
+    config.state_dir.write_bytes(b"not a directory")
+
+    reader = make_reader(auto_save_state=True, buffer_capacity=1)
+    path = make_file(b"foobarbaz")
+    iterator = reader.chunks(
+        path, state=TEST_STATE_NAME, chunk_size=3, drop_partial=True
+    )
+
+    assert next(iterator) == b"foo"
+
+    truncate(path, 5)
+
+    with pytest.raises(FileExistsError):
+        next(iterator)
+
+    assert iterator.state.position == 5
+
+
+def test_threshold_saves_during_iteration(
+    make_reader: Callable[..., PReader], data_file: Path
+) -> None:
+    reader = make_reader(auto_save_state=True, auto_save_state_bytes=10)
+    iterator = reader.chunks(data_file, state=TEST_STATE_NAME, chunk_size=3)
+
+    saved = [
+        reader.states[TEST_STATE_NAME].position
+        for _ in iterator
+        if TEST_STATE_NAME in reader.states
+    ]
+
+    assert list(dict.fromkeys(saved)) == [12, 24]
+    assert reader.states[TEST_STATE_NAME].position == len(TEST_ALPHABET)

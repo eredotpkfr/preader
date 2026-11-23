@@ -1,3 +1,14 @@
+macro_rules! each {
+    ($iterator:expr, $inner:ident => $body:expr) => {
+        match $iterator {
+            $crate::common::iterators::AnyIterator::Bytes($inner) => $body,
+            $crate::common::iterators::AnyIterator::Chunks($inner) => $body,
+            $crate::common::iterators::AnyIterator::Lines($inner) => $body,
+            $crate::common::iterators::AnyIterator::Segments($inner) => $body,
+        }
+    };
+}
+
 macro_rules! read_iterator {
     ($builder:expr, $plan:expr) => {{
         let plan = $plan;
@@ -19,4 +30,5 @@ macro_rules! read_iterator {
     }};
 }
 
+pub(crate) use each;
 pub(crate) use read_iterator;

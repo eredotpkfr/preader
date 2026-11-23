@@ -1,8 +1,7 @@
 use preader::{Error, Mismatch};
 use rstest::rstest;
 
-const RESYNC_HINT: &str = "(call state.resync(file) if this is expected)";
-const RESTART_HINT: &str = "(read it under a new state to start over)";
+use crate::common::constants::{TEST_OTHER_STATE_NAME, TEST_STATE_NAME};
 
 #[rstest]
 fn checksum_reports_an_outside_change() {
@@ -16,7 +15,7 @@ fn checksum_reports_an_outside_change() {
 fn path_suggests_a_resync() {
     assert_eq!(
         Mismatch::Path.to_string(),
-        format!("state tracks a different file {RESYNC_HINT}")
+        "file path changed (resync the state if the file moved)"
     );
 }
 
@@ -24,7 +23,7 @@ fn path_suggests_a_resync() {
 fn size_suggests_a_resync() {
     assert_eq!(
         Mismatch::Size.to_string(),
-        format!("file size changed {RESYNC_HINT}")
+        "file size changed (resync the state if this is expected)"
     );
 }
 
@@ -32,15 +31,15 @@ fn size_suggests_a_resync() {
 fn mtime_suggests_a_resync() {
     assert_eq!(
         Mismatch::Mtime.to_string(),
-        format!("file mtime changed {RESYNC_HINT}")
+        "file mtime changed (resync the state if this is expected)"
     );
 }
 
 #[rstest]
-fn fingerprint_suggests_a_resync() {
+fn missing_suggests_a_resync() {
     assert_eq!(
-        Mismatch::Fingerprint.to_string(),
-        format!("file content changed {RESYNC_HINT}")
+        Mismatch::Missing.to_string(),
+        "file is missing (resync the state if the file moved)"
     );
 }
 
@@ -48,25 +47,50 @@ fn fingerprint_suggests_a_resync() {
 fn identity_suggests_a_restart() {
     assert_eq!(
         Mismatch::Identity.to_string(),
-        format!("file is not the tracked file {RESTART_HINT}")
+        "file is not the tracked file (start over under a new state)"
+    );
+}
+
+#[rstest]
+fn unsealed_points_to_the_saved_state() {
+    assert_eq!(
+        Mismatch::Unsealed.to_string(),
+        "state object has unsaved progress or was modified outside preader \
+         (pass the state returned by save())"
+    );
+}
+
+#[rstest]
+fn stale_points_to_a_new_iterator() {
+    assert_eq!(
+        Mismatch::Stale.to_string(),
+        "state file was saved elsewhere since this iterator last loaded or saved it \
+         (open a new iterator to continue)"
     );
 }
 
 #[rstest]
 fn name_reports_the_owning_state() {
     let message = Mismatch::Name {
-        saved: "job-2".to_owned(),
+        saved: TEST_OTHER_STATE_NAME.to_owned(),
     }
     .to_string();
 
-    assert_eq!(message, "state file belongs to 'job-2'");
+    assert_eq!(
+        message,
+        format!("state file belongs to '{TEST_OTHER_STATE_NAME}'")
+    );
 }
 
 #[rstest]
-fn mismatch_converts_into_an_error() {
-    let error = Error::from(Mismatch::Checksum);
+fn mismatch_names_the_state() {
+    let error = Error::Mismatch {
+        name: TEST_STATE_NAME.to_owned(),
+        kind: Mismatch::Checksum,
+    };
 
-    assert!(matches!(error, Error::Mismatch(Mismatch::Checksum)));
-
-    assert_eq!(error.to_string(), Mismatch::Checksum.to_string());
+    assert_eq!(
+        error.to_string(),
+        format!("state '{TEST_STATE_NAME}': {}", Mismatch::Checksum)
+    );
 }

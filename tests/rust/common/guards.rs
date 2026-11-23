@@ -6,23 +6,6 @@ use std::{
 #[cfg(unix)]
 use std::{os::unix::fs::PermissionsExt, path::PathBuf};
 
-pub fn mtime(path: &Path) -> SystemTime {
-    fs::metadata(path).unwrap().modified().unwrap()
-}
-
-pub fn set_mtime(path: &Path, stamp: SystemTime) {
-    File::options().write(true).open(path).unwrap().set_modified(stamp).unwrap();
-}
-
-pub fn set_pre_epoch_mtime(path: &Path, before: Duration) -> bool {
-    let times = FileTimes::new().set_modified(UNIX_EPOCH - before);
-
-    File::options()
-        .write(true)
-        .open(path)
-        .is_ok_and(|file| file.set_times(times).is_ok())
-}
-
 #[cfg(unix)]
 #[derive(Debug, Default)]
 pub struct Blocked {
@@ -42,19 +25,17 @@ impl Blocked {
         enforced
     }
 
-    pub fn block(&mut self, path: &Path) -> PathBuf {
-        self.chmod(path, 0o000)
+    pub fn block(&mut self, path: &Path) {
+        self.chmod(path, 0o000);
     }
 
-    pub fn read_only(&mut self, path: &Path) -> PathBuf {
-        self.chmod(path, 0o500)
+    pub fn read_only(&mut self, path: &Path) {
+        self.chmod(path, 0o500);
     }
 
-    fn chmod(&mut self, path: &Path, mode: u32) -> PathBuf {
+    fn chmod(&mut self, path: &Path, mode: u32) {
         fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap();
         self.paths.push(path.to_path_buf());
-
-        path.to_path_buf()
     }
 }
 
@@ -67,4 +48,21 @@ impl Drop for Blocked {
             drop(fs::set_permissions(path, fs::Permissions::from_mode(mode)));
         }
     }
+}
+
+pub fn mtime(path: &Path) -> SystemTime {
+    fs::metadata(path).unwrap().modified().unwrap()
+}
+
+pub fn set_mtime(path: &Path, stamp: SystemTime) {
+    File::options().write(true).open(path).unwrap().set_modified(stamp).unwrap();
+}
+
+pub fn set_pre_epoch_mtime(path: &Path, before: Duration) -> bool {
+    let times = FileTimes::new().set_modified(UNIX_EPOCH - before);
+
+    File::options()
+        .write(true)
+        .open(path)
+        .is_ok_and(|file| file.set_times(times).is_ok())
 }

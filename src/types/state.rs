@@ -1,139 +1,130 @@
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::{fs, path::Path};
 
-use derive_more::{Deref, Eq, PartialEq};
 use serde::{Deserialize, Serialize};
-use serde_json::to_string_pretty;
 
 use crate::{
-    Mismatch, Result,
+    Error, Mismatch, Result,
     macros::ensure,
-    manager::StateManager,
-    types::{checksum::ChecksumBody, file::FileMetadata, time::Timestamps},
-    utils::time,
+    types::{file::FileMetadata, time::Timestamps},
+    utils::{self, hash},
 };
 
 #[cfg_attr(
     feature = "python",
-    pyo3::pyclass(module = "preader", eq, from_py_object)
+    pyo3::pyclass(module = "preader", eq, frozen, from_py_object)
 )]
-#[derive(Clone, Debug, Deref, Eq, PartialEq)]
-pub struct State {
-    #[deref]
-    pub(crate) data: StateData,
-    #[partial_eq(skip)]
-    pub(crate) manager: StateManager,
-}
-
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct StateData {
+pub struct State {
     pub name: String,
     pub file: FileMetadata,
     pub position: u64,
     pub timestamps: Timestamps,
-    #[serde(rename = "_checksum")]
+    #[serde(rename = "_checksum", skip_serializing_if = "String::is_empty")]
     pub checksum: String,
 }
 
 impl State {
-    pub(crate) fn new(manager: StateManager, path: &Path, name: String) -> Result<Self> {
-        let mut data = StateData {
+    pub(crate) fn new(path: &Path, name: String) -> Result<Self> {
+        Self {
             name,
             file: FileMetadata::try_from(path)?,
             position: 0,
             timestamps: Timestamps::now(),
             checksum: String::new(),
-        };
-
-        data.checksum = ChecksumBody::from(&data).compute()?;
-
-        Ok(Self { data, manager })
-    }
-
-    pub fn path(&self) -> Result<PathBuf> {
-        self.manager.path(&self.name)
+        }
+        .sealed()
     }
 
     pub fn checksum(&self) -> Result<String> {
-        ChecksumBody::from(&self.data).compute()
+        let body = Self {
+            checksum: String::new(),
+            ..self.clone()
+        };
+
+        Ok(hash::sha256(serde_json::to_string(&body)?))
     }
 
     pub fn percent(&self) -> f64 {
         self.position as f64 * 100.0 / self.file.size.max(1) as f64
     }
 
-    pub fn verify(&self) -> Result<()> {
-        ensure!(self.checksum()? == self.checksum, Mismatch::Checksum);
-
-        let current = FileMetadata::try_from(self.file.path.as_path())?;
-
-        self.file.compare(&current)
-    }
-
-    pub fn save(&mut self) -> Result<PathBuf> {
-        let refreshed = self.refresh(None)?;
-        let path = self.commit(&refreshed)?;
-
-        self.data = refreshed;
-
-        Ok(path)
-    }
-
-    pub fn resync(&self, path: impl AsRef<Path>) -> Result<Self> {
-        let path = dunce::canonicalize(path)?;
-        let data = self.refresh(Some(&path))?;
+    pub(crate) fn verify(&self) -> Result<()> {
+        let current = self.resync_metadata(&self.file.path, true)?;
 
         ensure!(
-            !self.manager.verify_state || self.file.matches(&path)?,
-            Mismatch::Identity
+            self.file.size == current.size,
+            Error::mismatch(&self.name, Mismatch::Size)
+        );
+        ensure!(
+            self.file.mtime == current.mtime,
+            Error::mismatch(&self.name, Mismatch::Mtime)
         );
 
-        Ok(self.manager.state(data))
+        Ok(())
     }
 
-    fn refresh(&self, file: Option<&Path>) -> Result<StateData> {
-        let mut data = self.data.clone();
+    pub(crate) fn refreshed(mut self) -> Result<Self> {
+        self.timestamps.updated_at = utils::time::now();
+        self.sealed()
+    }
 
-        if let Some(path) = file {
-            data.file = FileMetadata::try_from(path)?;
+    pub(crate) fn resynced(self, path: &Path, verify: bool) -> Result<Self> {
+        let file = self.resync_metadata(path, verify)?;
 
-            if self.manager.verify_state {
-                data.position = data.position.min(data.file.size);
-            }
+        Self {
+            position: self.position.min(file.size),
+            file,
+            ..self
         }
-
-        data.timestamps.updated_at = time::now();
-        data.checksum = ChecksumBody::from(&data).compute()?;
-
-        Ok(data)
+        .refreshed()
     }
 
     pub(crate) fn advance(&mut self, bytes: u64) {
-        self.data.position += bytes;
+        self.position += bytes;
     }
 
     pub(crate) fn seek(mut self, position: u64) -> Self {
-        self.data.position = position;
+        self.position = position;
         self
     }
 
-    pub(crate) fn for_file(self, file: &Path) -> Result<Self> {
-        ensure!(self.file.path == file, Mismatch::Path);
+    pub(crate) fn tracking(self, file: &Path, verify: bool) -> Result<Self> {
+        if self.file.path != file {
+            self.resync_metadata(file, verify)?;
+
+            return Err(Error::mismatch(&self.name, Mismatch::Path));
+        }
 
         Ok(self)
     }
 
-    fn commit(&self, data: &StateData) -> Result<PathBuf> {
-        let (path, tmp) = (self.path()?, self.manager.tmp(&self.name)?);
+    pub(crate) fn is_sealed(&self) -> Result<bool> {
+        Ok(self.checksum()? == self.checksum)
+    }
 
-        path.parent().map(fs::create_dir_all).transpose()?;
+    fn resync_metadata(&self, path: &Path, verify: bool) -> Result<FileMetadata> {
+        ensure!(
+            !verify || self.is_sealed()?,
+            Error::mismatch(&self.name, Mismatch::Checksum)
+        );
+        ensure!(
+            fs::exists(path)?,
+            Error::mismatch(&self.name, Mismatch::Missing)
+        );
 
-        fs::write(&tmp, to_string_pretty(data)?)
-            .and_then(|()| fs::rename(&tmp, &path))
-            .inspect_err(|_| drop(fs::remove_file(&tmp)))?;
+        let file = FileMetadata::try_from(path)?;
 
-        Ok(path)
+        ensure!(
+            !verify || self.file.identifies(path)?,
+            Error::mismatch(&self.name, Mismatch::Identity)
+        );
+
+        Ok(file)
+    }
+
+    fn sealed(mut self) -> Result<Self> {
+        self.checksum = self.checksum()?;
+
+        Ok(self)
     }
 }

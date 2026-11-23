@@ -5,12 +5,12 @@ use std::{
 
 use crate::{
     NameError,
-    constants::{DEFAULT_STATE_DIR, NAME_SEPARATOR},
+    constants::{NAME_SEPARATOR, STATE_DIR_NAME},
     validators::validate_name,
 };
 
 pub fn default_state_dir() -> PathBuf {
-    scoped_join(&dirs::cache_dir().unwrap_or_default(), DEFAULT_STATE_DIR).unwrap()
+    scoped_join(&dirs::cache_dir().unwrap_or_default(), STATE_DIR_NAME).unwrap()
 }
 
 pub fn scoped_join(root: &Path, name: &str) -> Result<PathBuf, NameError> {
@@ -25,6 +25,6 @@ pub fn resolves_in_place(root: &Path, path: &Path) -> bool {
 
     scoped
         .ancestors()
-        .find(|ancestor| ancestor.exists())
+        .find(|ancestor| ancestor.symlink_metadata().is_ok())
         .is_none_or(|existing| fs::canonicalize(existing).is_ok_and(|real| real == existing))
 }

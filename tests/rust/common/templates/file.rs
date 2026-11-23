@@ -7,6 +7,7 @@ use rstest_reuse::template;
 #[case::partial_suffix("job-1.state")]
 #[case::temporary_suffix("job-1.state.json.tmp")]
 #[case::uppercase_suffix("job-2.STATE.JSON")]
+#[case::only_looks_suffixed("mystate.json")]
 fn non_state_files(#[case] name: &str) {}
 
 #[template]
@@ -37,4 +38,9 @@ fn unaddressable_files(#[case] file: &str) {}
 #[case::directory_ending_in_a_dot("sub./job-2.state.json")]
 #[case::directory_ending_in_a_space("sub /job-2.state.json")]
 #[case::control_character("job\t2.state.json")]
-fn unrepresentable_files(#[case] file: &str) {}
+#[case::format_character("job\u{200b}2.state.json")]
+#[case::device("con.state.json")]
+#[case::nested_device("sub/aux.state.json")]
+#[case::too_long_file(format!("{}.state.json", "f".repeat(220)))]
+#[case::too_long_whole_name(format!("{0}/{0}/{0}/{0}/{1}.state.json", "d".repeat(100), "f".repeat(109)))]
+fn unrepresentable_files(#[case] file: String) {}

@@ -1,4 +1,4 @@
-use crate::{Error, Result, enums::skip::Skip, macros::ensure, types::window::Window};
+use crate::{Error, Result, enums::skip::SkipPlan, macros::ensure, types::window::Window};
 
 #[cfg_attr(
     feature = "python",
@@ -24,7 +24,7 @@ impl Default for IteratorOptions {
 }
 
 impl IteratorOptions {
-    pub fn window(&self, position: u64, size: u64, skip: Skip) -> Window {
+    pub fn window(&self, position: u64, size: u64, skip: SkipPlan) -> Window {
         let (bytes, items) = skip.counts();
         let end = self.end.min(size);
         let start = self.start.saturating_add(bytes).min(end);
@@ -32,7 +32,9 @@ impl IteratorOptions {
         Window {
             position: position.max(start),
             end,
+            limit: self.limit,
             skipping: (position <= start && position < end).then_some(items),
+            boundary: skip.boundary(),
         }
     }
 

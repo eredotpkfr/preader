@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use crate::{
-    ByteBuilder, ChunkBuilder, Config, DelimiterBuilder, LineBuilder, StateRegistry,
+    ByteBuilder, ChunkBuilder, Config, LineBuilder, SegmentBuilder, StateRegistry,
     bases::builder::PReaderIteratorBuilder,
 };
 
@@ -52,11 +52,11 @@ impl PReader {
         self.builder(file)
     }
 
-    pub fn delimiter(&self, file: impl Into<PathBuf>) -> DelimiterBuilder<'_> {
+    pub fn segments(&self, file: impl Into<PathBuf>) -> SegmentBuilder<'_> {
         self.builder(file)
     }
 
     fn builder<I: Default>(&self, file: impl Into<PathBuf>) -> PReaderIteratorBuilder<'_, I> {
-        PReaderIteratorBuilder::new(&self.config, self.registry.manager(), file)
+        PReaderIteratorBuilder::new(&self.config, &self.registry, file)
     }
 }

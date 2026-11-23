@@ -4,8 +4,10 @@ use pyo3::{
 };
 
 use crate::{
-    Error, NameError,
-    python::exceptions::{StateError, StateMismatchError},
+    Error, Mismatch,
+    python::exceptions::{
+        StateConflictError, StateCorruptError, StateError, StateMismatchError, StateOutdatedError,
+    },
 };
 
 impl From<Error> for PyErr {
@@ -13,12 +15,22 @@ impl From<Error> for PyErr {
         let message = error.to_string();
 
         match error {
-            Error::Io(error) => error.into(),
+            Error::Io(io) => io.into(),
             Error::NotFound(name) => PyKeyError::new_err(name),
-            Error::Mismatch(_) => Self::new::<StateMismatchError, _>(message),
-            Error::Name(NameError::Alias) | Error::Corrupt { .. } => {
-                Self::new::<StateError, _>(message)
-            }
+            Error::Alias { name } => Self::new::<StateError, _>((message, name)),
+            Error::Corrupt { name, .. } => Self::new::<StateCorruptError, _>((message, name)),
+            Error::Mismatch { name, kind } => match kind {
+                Mismatch::Path | Mismatch::Size | Mismatch::Mtime | Mismatch::Missing => {
+                    Self::new::<StateOutdatedError, _>((message, name))
+                }
+                Mismatch::Checksum | Mismatch::Name { .. } => {
+                    Self::new::<StateCorruptError, _>((message, name))
+                }
+                Mismatch::Stale => Self::new::<StateConflictError, _>((message, name)),
+                Mismatch::Identity | Mismatch::Unsealed => {
+                    Self::new::<StateMismatchError, _>((message, name))
+                }
+            },
             Error::Name(_)
             | Error::InvalidRange
             | Error::InvalidMtime

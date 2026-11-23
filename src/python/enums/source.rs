@@ -25,8 +25,12 @@ impl<'a, 'py> FromPyObject<'a, 'py> for StateSource {
             return Ok(Self::from(state));
         }
 
-        object.extract::<String>().map(Self::from).map_err(|_| {
-            PyTypeError::new_err("state must be None, a name (str), or a preader.State object")
-        })
+        if let Ok(name) = object.extract::<String>() {
+            return Ok(Self::from(name));
+        }
+
+        Err(PyTypeError::new_err(
+            "state must be None, a name (str), or a preader.State object",
+        ))
     }
 }

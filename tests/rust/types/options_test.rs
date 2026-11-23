@@ -1,20 +1,12 @@
-use preader::{Error, IteratorBuild, IteratorOptions, Skip};
+use preader::{IteratorOptions, SkipPlan};
 use rstest::rstest;
 
-use crate::common::{fixtures::sandbox, macros::asserts::assert_err_is, sandbox::Sandbox};
+use crate::common::{fixtures::sandbox, funcs::range, sandbox::Sandbox};
 
 const FILE_SIZE: u64 = 100;
 
-fn range(start: u64, end: u64) -> IteratorOptions {
-    IteratorOptions {
-        start,
-        end,
-        ..IteratorOptions::default()
-    }
-}
-
 #[rstest]
-fn defaults_are_unbounded() {
+fn defaults() {
     let options = IteratorOptions::default();
 
     assert_eq!(options.start, 0);
@@ -51,6 +43,17 @@ fn compares_by_value() {
 }
 
 #[rstest]
+#[case::bytes(SkipPlan::Bytes(3), None)]
+#[case::unaligned_items(SkipPlan::Items { count: 3, boundary: None }, None)]
+#[case::aligned_items(SkipPlan::Items { count: 3, boundary: Some(b'\n') }, Some(b'\n'))]
+fn window_carries_the_boundary(#[case] skip: SkipPlan, #[case] expected: Option<u8>) {
+    assert_eq!(
+        IteratorOptions::default().window(0, FILE_SIZE, skip).boundary,
+        expected
+    );
+}
+
+#[rstest]
 #[case::zero_length(range(0, 0))]
 #[case::whole_range(range(0, u64::MAX))]
 #[case::equal_bounds(range(10, 10))]
@@ -61,16 +64,34 @@ fn build_accepts_an_ordered_range(sandbox: Sandbox, #[case] options: IteratorOpt
 }
 
 #[rstest]
-#[case::one_apart(range(1, 0))]
-#[case::far_apart(range(100, 10))]
-#[case::maximum_start(range(u64::MAX, 0))]
-fn build_fails_when_the_range_is_inverted(sandbox: Sandbox, #[case] options: IteratorOptions) {
-    let path = sandbox.line_file();
-    let reader = sandbox.reader();
+#[case::unbounded(u64::MAX, FILE_SIZE)]
+#[case::inside_the_file(50, 50)]
+#[case::at_the_file_size(FILE_SIZE, FILE_SIZE)]
+#[case::past_the_file_size(FILE_SIZE + 1, FILE_SIZE)]
+fn window_clamps_the_end_to_the_size(#[case] end: u64, #[case] expected: u64) {
+    let options = IteratorOptions {
+        end,
+        ..IteratorOptions::default()
+    };
 
-    assert_err_is!(
-        reader.bytes(&path).options(options).build(),
-        Error::InvalidRange
+    assert_eq!(
+        options.window(0, FILE_SIZE, SkipPlan::Bytes(0)).end,
+        expected
+    );
+}
+
+#[rstest]
+#[case::from_the_start(0, Some(3))]
+#[case::mid_file(40, None)]
+fn window_carries_skipped_items(#[case] position: u64, #[case] expected: Option<u64>) {
+    let skip = SkipPlan::Items {
+        count: 3,
+        boundary: None,
+    };
+
+    assert_eq!(
+        IteratorOptions::default().window(position, FILE_SIZE, skip).skipping,
+        expected
     );
 }
 
@@ -95,24 +116,10 @@ fn window_resolves_the_position(
     #[case] expected: u64,
     #[case] skipping: bool,
 ) {
-    let window = options.window(position, FILE_SIZE, Skip::Bytes(0));
+    let window = options.window(position, FILE_SIZE, SkipPlan::Bytes(0));
 
     assert_eq!(window.position, expected);
     assert_eq!(window.skipping.is_some(), skipping);
-}
-
-#[rstest]
-#[case::unbounded(u64::MAX, FILE_SIZE)]
-#[case::inside_the_file(50, 50)]
-#[case::at_the_file_size(FILE_SIZE, FILE_SIZE)]
-#[case::past_the_file_size(FILE_SIZE + 1, FILE_SIZE)]
-fn window_clamps_the_end_to_the_size(#[case] end: u64, #[case] expected: u64) {
-    let options = IteratorOptions {
-        end,
-        ..IteratorOptions::default()
-    };
-
-    assert_eq!(options.window(0, FILE_SIZE, Skip::Bytes(0)).end, expected);
 }
 
 #[rstest]
@@ -128,29 +135,24 @@ fn window_folds_skipped_bytes_into_the_start(#[case] bytes: u64, #[case] expecte
     };
 
     assert_eq!(
-        options.window(0, FILE_SIZE, Skip::Bytes(bytes)).position,
+        options.window(0, FILE_SIZE, SkipPlan::Bytes(bytes)).position,
         expected
     );
 }
 
 #[rstest]
-#[case::from_the_start(0, Some(3))]
-#[case::mid_file(40, None)]
-fn window_carries_skipped_items(#[case] position: u64, #[case] expected: Option<u64>) {
-    let skip = Skip::Items {
-        count: 3,
-        boundary: None,
+fn window_carries_the_limit() {
+    let options = IteratorOptions {
+        limit: 7,
+        ..IteratorOptions::default()
     };
 
-    assert_eq!(
-        IteratorOptions::default().window(position, FILE_SIZE, skip).skipping,
-        expected
-    );
+    assert_eq!(options.window(0, FILE_SIZE, SkipPlan::Bytes(0)).limit, 7);
 }
 
 #[rstest]
 fn window_resolves_an_empty_file() {
-    let window = IteratorOptions::default().window(0, 0, Skip::Bytes(0));
+    let window = IteratorOptions::default().window(0, 0, SkipPlan::Bytes(0));
 
     assert!(window.skipping.is_none());
 

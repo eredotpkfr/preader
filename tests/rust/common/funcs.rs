@@ -1,16 +1,13 @@
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
-use chrono::DateTime;
-use preader::{
-    FileMetadata, Result, STATE_FILE_EXTENSION, State, StateData, StateRegistry, Timestamps,
-};
+use preader::{FileMetadata, IteratorOptions, Result, State, StateRegistry, Timestamps};
 use sha2::{Digest, Sha256};
+use time::UtcDateTime;
 
 use crate::common::{
-    constants::{TEST_LINE, TEST_LINE_FINGERPRINT, TEST_STAMP, TEST_STATE_NAME},
+    constants::{
+        TEST_LINE, TEST_LINE_FINGERPRINT, TEST_STAMP, TEST_STATE_FILE_EXTENSION, TEST_STATE_NAME,
+    },
     interfaces::Item,
 };
 
@@ -66,20 +63,20 @@ pub fn canonical(path: &Path) -> PathBuf {
 }
 
 pub fn state_file(name: &str) -> String {
-    format!("{name}{STATE_FILE_EXTENSION}")
+    format!("{name}{TEST_STATE_FILE_EXTENSION}")
 }
 
 pub fn names(registry: &StateRegistry) -> Vec<String> {
-    let mut names: Vec<String> = registry.names().unwrap().map(Result::unwrap).collect();
+    let mut names = items(registry.names().unwrap());
 
     names.sort();
     names
 }
 
-pub fn state_data(path: PathBuf) -> StateData {
-    let stamp = DateTime::from_timestamp(TEST_STAMP, 0).unwrap();
+pub fn state_data(path: PathBuf) -> State {
+    let stamp = UtcDateTime::from_unix_timestamp(TEST_STAMP).unwrap();
 
-    StateData {
+    State {
         name: TEST_STATE_NAME.to_owned(),
         file: FileMetadata {
             path,
@@ -96,11 +93,10 @@ pub fn state_data(path: PathBuf) -> StateData {
     }
 }
 
-pub fn tamper(state: &State) {
-    let payload = state.path().unwrap();
-    let patched = fs::read_to_string(&payload)
-        .unwrap()
-        .replace("\"position\": 0", "\"position\": 999");
-
-    fs::write(&payload, patched).unwrap();
+pub fn range(start: u64, end: u64) -> IteratorOptions {
+    IteratorOptions {
+        start,
+        end,
+        ..IteratorOptions::default()
+    }
 }

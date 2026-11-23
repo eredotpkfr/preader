@@ -1,4 +1,3 @@
-use preader::IteratorBuild;
 use rstest::rstest;
 
 use crate::common::{
@@ -7,6 +6,20 @@ use crate::common::{
     funcs::items,
     sandbox::Sandbox,
 };
+
+#[rstest]
+#[case::kept(false, &["line-0", "", "line-2"])]
+#[case::skipped(true, &["line-0", "line-2"])]
+fn skip_empty_decides_about_blank_lines(
+    sandbox: Sandbox,
+    #[case] skip_empty: bool,
+    #[case] expected: &[&str],
+) {
+    let path = sandbox.file(TEST_BLANK_LINE_CONTENT);
+    let read = items(sandbox.reader().lines(&path).skip_empty(skip_empty).build().unwrap());
+
+    assert_eq!(read, expected);
+}
 
 #[rstest]
 #[case::stripped(false, "line-0")]
@@ -20,20 +33,6 @@ fn keepends_decides_about_the_terminator(
     let read = items(sandbox.reader().lines(&path).keepends(keepends).limit(1).build().unwrap());
 
     assert_eq!(read, [expected]);
-}
-
-#[rstest]
-#[case::kept(false, 3)]
-#[case::skipped(true, 2)]
-fn skip_empty_decides_about_blank_lines(
-    sandbox: Sandbox,
-    #[case] skip_empty: bool,
-    #[case] expected: usize,
-) {
-    let path = sandbox.file(TEST_BLANK_LINE_CONTENT);
-    let read = items(sandbox.reader().lines(&path).skip_empty(skip_empty).build().unwrap());
-
-    assert_eq!(read.len(), expected);
 }
 
 #[rstest]
@@ -53,12 +52,12 @@ fn last_keepends_wins(sandbox: Sandbox) {
         sandbox
             .reader()
             .lines(&path)
-            .keepends(false)
             .keepends(true)
+            .keepends(false)
             .limit(1)
             .build()
             .unwrap(),
     );
 
-    assert_eq!(read, ["line-0\n"]);
+    assert_eq!(read, ["line-0"]);
 }

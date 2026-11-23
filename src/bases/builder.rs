@@ -1,17 +1,16 @@
 use std::path::PathBuf;
 
 use crate::{
-    Config, IteratorOptions, Result, StateSource,
+    Config, IteratorOptions, Result, StateRegistry, StateSource,
     bases::iterator::PReaderIterator,
-    interfaces::{builder::IteratorBuild, iterator::IteratorRead, skippable::Skippable},
-    manager::StateManager,
+    interfaces::{iterator::IteratorRead, skip::Skip},
 };
 
 #[derive(Debug)]
 #[must_use]
 pub struct PReaderIteratorBuilder<'a, I> {
     pub(crate) config: &'a Config,
-    pub(crate) manager: &'a StateManager,
+    pub(crate) registry: &'a StateRegistry,
     pub(crate) options: IteratorOptions,
     pub(crate) state: StateSource,
     pub(crate) file: PathBuf,
@@ -21,12 +20,12 @@ pub struct PReaderIteratorBuilder<'a, I> {
 impl<'a, I: Default> PReaderIteratorBuilder<'a, I> {
     pub(crate) fn new(
         config: &'a Config,
-        manager: &'a StateManager,
+        registry: &'a StateRegistry,
         file: impl Into<PathBuf>,
     ) -> Self {
         Self {
             config,
-            manager,
+            registry,
             file: file.into(),
             state: StateSource::default(),
             options: IteratorOptions::default(),
@@ -35,21 +34,19 @@ impl<'a, I: Default> PReaderIteratorBuilder<'a, I> {
     }
 }
 
-impl<I: Skippable> IteratorBuild for PReaderIteratorBuilder<'_, I>
+impl<I: Skip> PReaderIteratorBuilder<'_, I>
 where
     PReaderIterator<I>: IteratorRead,
 {
-    type Iterator = PReaderIterator<I>;
-
-    fn build(self) -> Result<Self::Iterator> {
+    pub fn build(self) -> Result<PReaderIterator<I>> {
         self.options.validate()?;
 
         let file = dunce::canonicalize(&self.file)?;
         let skip = self.inner.skip(self.options.skip);
 
-        let state = self.state.resolve(self.manager, &file)?;
+        let state = self.state.resolve(self.registry, &file)?;
         let window = self.options.window(state.position, state.file.size, skip);
 
-        PReaderIterator::new(self.config, self.options, state, &window, skip, self.inner)
+        PReaderIterator::new(self.config, self.registry, state, &window, self.inner)
     }
 }

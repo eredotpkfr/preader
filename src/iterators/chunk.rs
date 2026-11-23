@@ -3,8 +3,8 @@ use std::io::{ErrorKind, Read};
 use crate::{
     ChunkIterator, Result,
     constants::DEFAULT_CHUNK_SIZE,
-    enums::skip::Skip,
-    interfaces::{iterator::IteratorRead, skippable::Skippable},
+    enums::skip::SkipPlan,
+    interfaces::{iterator::IteratorRead, skip::Skip},
     types::core::FileReader,
 };
 
@@ -51,31 +51,31 @@ impl IteratorRead for ChunkIterator {
 
     fn read(&mut self) -> Result<Option<&[u8]>> {
         if self.done() {
-            return self.stop();
+            return self.finalize();
         }
 
         let size = self.inner.size;
         let max = self.progress.remaining(self.state.position).min(size as u64) as usize;
 
         if self.inner.drop_partial && max < size {
-            return self.stop();
+            return self.finalize();
         }
 
         let read = self.inner.fill(&mut self.reader, max);
         let filled = self.advance(read)?;
 
         if filled == 0 || (self.inner.drop_partial && filled < size) {
-            return self.stop();
+            return self.finalize();
         }
 
-        self.progress.count();
+        self.progress.tick();
 
         Ok(Some(&self.inner.buffer[..filled]))
     }
 }
 
-impl Skippable for Chunk {
-    fn skip(&self, count: u64) -> Skip {
-        Skip::Bytes(count.saturating_mul(self.size as u64))
+impl Skip for Chunk {
+    fn skip(&self, count: u64) -> SkipPlan {
+        SkipPlan::Bytes(count.saturating_mul(self.size as u64))
     }
 }

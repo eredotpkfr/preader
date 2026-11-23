@@ -13,33 +13,34 @@ macro_rules! pyiterator {
 
         #[::pyo3::pymethods]
         impl $name {
-            fn percent(&self) -> f64 {
-                self.0.state.percent()
-            }
-
             #[getter]
             fn state(&self) -> $crate::State {
                 self.0.state.clone()
+            }
+
+            $($extra)*
+
+            fn percent(&self) -> f64 {
+                self.0.percent()
+            }
+
+            fn save(&mut self) -> $crate::Result<$crate::State> {
+                self.0.save().cloned()
             }
 
             fn __iter__(slf: ::pyo3::PyRef<'_, Self>) -> ::pyo3::PyRef<'_, Self> {
                 slf
             }
 
-            fn __next__(mut slf: ::pyo3::PyRefMut<'_, Self>) -> ::pyo3::PyResult<$output> {
+            fn __next__(mut slf: ::pyo3::PyRefMut<'_, Self>) -> $crate::Result<Option<$output>> {
                 let $py = slf.py();
-                let Some($item) = $crate::IteratorRead::read(&mut slf.0)? else {
-                    return Err(::pyo3::exceptions::PyStopIteration::new_err(()));
-                };
 
-                Ok($convert)
+                Ok($crate::IteratorRead::read(&mut slf.0)?.map(|$item| $convert))
             }
 
             fn __repr__(slf: &::pyo3::Bound<'_, Self>) -> ::pyo3::PyResult<String> {
                 $crate::python::macros::repr::pyrepr!(slf, state, $($field),*)
             }
-
-            $($extra)*
         }
     };
 }

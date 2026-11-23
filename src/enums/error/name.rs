@@ -7,6 +7,4 @@ pub enum NameError {
     Escapes,
     #[error("state name is not valid")]
     Invalid,
-    #[error("state name is an alias of another entry (symlink, case or Unicode)")]
-    Alias,
 }

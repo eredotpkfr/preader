@@ -1,8 +1,5 @@
-import hashlib
-import io
 import itertools
 import math
-import zipfile
 
 from collections.abc import Callable
 from pathlib import Path
@@ -10,83 +7,15 @@ from typing import Any
 
 import pytest
 
-from constants import TEST_DEFAULT_DELIMITER, TEST_STATE_NAME
-from preader import IteratorOptions, PReader
+from cases.roundtrip import ARCHIVES, CONTENTS, FLOWS, TEXTS, WINDOWS
+from common.constants import TEST_CHUNK_SIZE, TEST_DEFAULT_DELIMITER, TEST_STATE_NAME
+from common.rng import seeded_content
+from preader import Config, IteratorOptions, PReader
 
-SEEDS = (1, 2, 3)
-SIZES = (512, 4096, 51_200)
-KINDS = ("random", "text", "zip", "pdf")
-CHUNK_SIZES = (1, 4096)
-BUFFER_CAPACITIES = (1024, 65_536)
+CHUNK_SIZES = [1, 4096]
+BUFFER_CAPACITIES = [1024, Config().buffer_capacity]
 CYCLES = 5
-MAX_WORDS_PER_LINE = 12
-WORDS = (
-    "preader",
-    "iterator",
-    "state",
-    "foo",
-    "bar",
-    "baz",
-    "café",
-    "Ünicode",
-    "日本語",
-    "🦀",
-    "$qux",
-    "`quux`",
-    "a;b",
-    ",",
-)
-
-
-def _seeded_bytes(seed: int, size: int) -> bytes:
-    return hashlib.shake_256(str(seed).encode()).digest(size)
-
-
-def _seeded_text(seed: int, size: int, line_length: int = 40) -> str:
-    line_count = size // line_length
-    stream = iter(_seeded_bytes(seed, line_count * (MAX_WORDS_PER_LINE + 1)))
-
-    def line() -> str:
-        words = next(stream) % (MAX_WORDS_PER_LINE + 1)
-
-        return " ".join(WORDS[next(stream) % len(WORDS)] for _ in range(words))
-
-    return "".join(f"{line()}\n" for _ in range(line_count))
-
-
-def _seeded_zip(
-    seed: int,
-    size: int,
-    member_count: int = 3,
-    timestamp: tuple[int, int, int, int, int, int] = (1980, 1, 1, 0, 0, 0),
-) -> bytes:
-    archive = io.BytesIO()
-
-    with zipfile.ZipFile(archive, "w") as members:
-        for offset in range(member_count):
-            member = zipfile.ZipInfo(f"member-{offset}.bin", timestamp)
-            content = _seeded_bytes(seed + offset, size // member_count)
-            members.writestr(member, content, zipfile.ZIP_DEFLATED)
-
-    return archive.getvalue()
-
-
-def _seeded_pdf(seed: int, size: int) -> bytes:
-    stream = _seeded_bytes(seed, size)
-
-    return b"%PDF-1.7\n1 0 obj\nstream\n" + stream + b"\nendstream\nendobj\n%%EOF\n"
-
-
-def _sized_content(kind: str, seed: int, size: int) -> bytes:
-    match kind:
-        case "random":
-            return _seeded_bytes(seed, size)
-        case "text":
-            return _seeded_text(seed, size).encode()
-        case "pdf":
-            return _seeded_pdf(seed, size)
-        case _:
-            return _seeded_zip(seed, size)
+STREAM_DELIMITERS = {"comma": TEST_DEFAULT_DELIMITER, "newline": b"\n", "null": b"\x00"}
 
 
 def _split_stream(
@@ -99,161 +28,55 @@ def _split_stream(
     return [*kept, tail] if tail else kept
 
 
-CONTENTS = {
-    f"{kind}-{size}b-seed-{seed}": _sized_content(kind, seed, size)
-    for kind in KINDS
-    for size in SIZES
-    for seed in SEEDS
-}
-TEXTS = {
-    name: content.decode()
-    for name, content in CONTENTS.items()
-    if name.startswith("text")
-}
-ARCHIVES = {
-    name: content
-    for name, content in CONTENTS.items()
-    if name.startswith("zip") and name.endswith("seed-1")
-}
-DELIMITERS = {"comma": b",", "newline": b"\n", "null": b"\x00"}
-ITERATORS = {
-    "bytes": lambda reader, path, **options: reader.bytes(path, **options),
-    "chunks": lambda reader, path, **options: reader.chunks(
-        path, chunk_size=7, **options
-    ),
-    "delimiter": lambda reader, path, **options: reader.delimiter(
-        path, delimiter=TEST_DEFAULT_DELIMITER, keep_delimiter=True, **options
-    ),
-    "lines": lambda reader, path, **options: reader.lines(
-        path, keepends=True, **options
-    ),
-}
-
-
-def _flows(*names: str) -> dict[str, tuple[Callable[..., Any], bytes]]:
-    return {
-        f"{name}-{source}": (ITERATORS[name], content)
-        for name in names
-        for source, content in CONTENTS.items()
-        if name != "lines" or source.startswith("text")
-    }
-
-
-FLOWS = _flows(*ITERATORS)
-BINARY = _flows("bytes", "chunks", "delimiter")
-WINDOWS = _flows("bytes", "chunks")
-
-
-@pytest.mark.parametrize(("make_iterator", "content"), BINARY.values(), ids=BINARY)
+@pytest.mark.parametrize(("make_iterator", "kind", "size"), WINDOWS)
 def test_iterators_reproduce_the_content(
     reader: PReader,
     make_file: Callable[..., Path],
+    seed: int,
     make_iterator: Callable[..., Any],
-    content: bytes,
+    kind: str,
+    size: int,
 ) -> None:
+    content = seeded_content(kind, size, seed)
+
     assert b"".join(make_iterator(reader, make_file(content))) == content
 
 
 @pytest.mark.parametrize("chunk_size", CHUNK_SIZES)
-@pytest.mark.parametrize("content", CONTENTS.values(), ids=CONTENTS)
+@pytest.mark.parametrize(("kind", "size"), CONTENTS)
 def test_chunks_reproduce_the_content(
-    reader: PReader, make_file: Callable[..., Path], content: bytes, chunk_size: int
+    reader: PReader,
+    make_file: Callable[..., Path],
+    seed: int,
+    chunk_size: int,
+    kind: str,
+    size: int,
 ) -> None:
+    content = seeded_content(kind, size, seed)
+
     assert b"".join(reader.chunks(make_file(content), chunk_size=chunk_size)) == content
 
 
-@pytest.mark.parametrize("buffer_capacity", BUFFER_CAPACITIES)
-@pytest.mark.parametrize("content", CONTENTS.values(), ids=CONTENTS)
-def test_drop_partial_stops_at_the_last_whole_chunk(
-    make_reader: Callable[..., PReader],
-    make_file: Callable[..., Path],
-    content: bytes,
-    buffer_capacity: int,
+@pytest.mark.parametrize(("kind", "size"), ARCHIVES)
+def test_lines_raises_when_the_content_is_binary(
+    reader: PReader, make_file: Callable[..., Path], seed: int, kind: str, size: int
 ) -> None:
-    reader = make_reader(buffer_capacity=buffer_capacity)
-    chunks = reader.chunks(make_file(content), chunk_size=7, drop_partial=True)
+    path = make_file(seeded_content(kind, size, seed))
 
-    assert b"".join(chunks) == content[: len(content) - len(content) % 7]
-
-
-@pytest.mark.parametrize("buffer_capacity", BUFFER_CAPACITIES)
-@pytest.mark.parametrize("text", TEXTS.values(), ids=TEXTS)
-def test_lines_reproduce_the_text(
-    make_reader: Callable[..., PReader],
-    make_file: Callable[..., Path],
-    text: str,
-    buffer_capacity: int,
-) -> None:
-    reader = make_reader(buffer_capacity=buffer_capacity)
-    path = make_file(text.encode())
-
-    assert "".join(reader.lines(path, keepends=True)) == text
-    assert "".join(reader.lines(path)) == text.replace("\n", "")
-    assert len(list(reader.lines(path))) == text.count("\n")
-
-
-@pytest.mark.parametrize("content", ARCHIVES.values(), ids=ARCHIVES)
-def test_lines_reject_an_archive(
-    reader: PReader, make_file: Callable[..., Path], content: bytes
-) -> None:
     with pytest.raises(ValueError, match="invalid utf-8"):
-        list(reader.lines(make_file(content)))
-
-
-@pytest.mark.parametrize("text", TEXTS.values(), ids=TEXTS)
-def test_skip_empty_drops_the_blank_lines(
-    reader: PReader, make_file: Callable[..., Path], text: str
-) -> None:
-    kept = list(reader.lines(make_file(text.encode()), skip_empty=True))
-
-    assert kept == [line for line in text.splitlines() if line]
-
-
-@pytest.mark.parametrize("buffer_capacity", BUFFER_CAPACITIES)
-@pytest.mark.parametrize("delimiter", DELIMITERS.values(), ids=DELIMITERS)
-@pytest.mark.parametrize("content", CONTENTS.values(), ids=CONTENTS)
-def test_delimiter_splits_like_a_stream(
-    make_reader: Callable[..., PReader],
-    make_file: Callable[..., Path],
-    content: bytes,
-    delimiter: bytes,
-    buffer_capacity: int,
-) -> None:
-    reader = make_reader(buffer_capacity=buffer_capacity)
-    path = make_file(content)
-
-    stripped = list(reader.delimiter(path, delimiter=delimiter))
-    kept = list(reader.delimiter(path, delimiter=delimiter, keep_delimiter=True))
-
-    assert stripped == _split_stream(content, delimiter)
-    assert kept == _split_stream(content, delimiter, keep=True)
-
-
-@pytest.mark.parametrize("content", CONTENTS.values(), ids=CONTENTS)
-def test_delimiter_skip_empty_drops_the_blank_segments(
-    reader: PReader, make_file: Callable[..., Path], content: bytes
-) -> None:
-    kept = list(
-        reader.delimiter(
-            make_file(content), delimiter=TEST_DEFAULT_DELIMITER, skip_empty=True
-        )
-    )
-
-    assert kept == [
-        segment for segment in _split_stream(content, TEST_DEFAULT_DELIMITER) if segment
-    ]
+        list(reader.lines(path))
 
 
 @pytest.mark.parametrize(
     ("text", "encoding", "delimiter"),
     [
-        ("café,鉄", "utf-16-le", b","),
-        ("café,鉄", "utf-16-be", b","),
+        ("café,鉄", "utf-16-le", TEST_DEFAULT_DELIMITER),
+        ("café,鉄", "utf-16-be", TEST_DEFAULT_DELIMITER),
         ("ਊ", "utf-16-le", b"\n"),
     ],
     ids=["little_endian", "big_endian", "newline_inside_a_character"],
 )
-def test_delimiter_splits_utf16_on_bytes(
+def test_segments_split_utf16_on_bytes(
     reader: PReader,
     make_file: Callable[..., Path],
     text: str,
@@ -262,84 +85,198 @@ def test_delimiter_splits_utf16_on_bytes(
 ) -> None:
     content = text.encode(encoding)
 
-    segments = list(reader.delimiter(make_file(content), delimiter=delimiter))
+    segments = list(reader.segments(make_file(content), delimiter=delimiter))
 
     assert segments == _split_stream(content, delimiter)
 
 
-@pytest.mark.parametrize(("make_iterator", "content"), FLOWS.values(), ids=FLOWS)
+@pytest.mark.parametrize(("make_iterator", "kind", "size"), WINDOWS)
+def test_options_window_the_byte_range(
+    reader: PReader,
+    make_file: Callable[..., Path],
+    seed: int,
+    make_iterator: Callable[..., Any],
+    kind: str,
+    size: int,
+) -> None:
+    content = seeded_content(kind, size, seed)
+    options = IteratorOptions(start=100, end=500)
+
+    windowed = make_iterator(reader, make_file(content), options=options)
+
+    assert b"".join(windowed) == content[100:500]
+
+
+@pytest.mark.parametrize(("kind", "size"), CONTENTS)
+def test_segments_skip_empty_drops_the_blank_segments(
+    reader: PReader, make_file: Callable[..., Path], seed: int, kind: str, size: int
+) -> None:
+    content = seeded_content(kind, size, seed)
+
+    kept = list(reader.segments(make_file(content), skip_empty=True))
+    segments = _split_stream(content, TEST_DEFAULT_DELIMITER)
+
+    assert kept == [segment for segment in segments if segment]
+
+
+@pytest.mark.parametrize(("kind", "size"), TEXTS)
+def test_skip_empty_drops_the_blank_lines(
+    reader: PReader, make_file: Callable[..., Path], seed: int, kind: str, size: int
+) -> None:
+    content = seeded_content(kind, size, seed)
+
+    kept = list(reader.lines(make_file(content), skip_empty=True))
+
+    assert kept == [line for line in content.decode().split("\n")[:-1] if line]
+
+
+@pytest.mark.parametrize("buffer_capacity", BUFFER_CAPACITIES)
+@pytest.mark.parametrize(("kind", "size"), CONTENTS)
+def test_drop_partial_stops_at_the_last_whole_chunk(
+    make_reader: Callable[..., PReader],
+    make_file: Callable[..., Path],
+    seed: int,
+    buffer_capacity: int,
+    kind: str,
+    size: int,
+) -> None:
+    content = seeded_content(kind, size, seed)
+
+    reader = make_reader(buffer_capacity=buffer_capacity)
+    iterator = reader.chunks(
+        make_file(content), chunk_size=TEST_CHUNK_SIZE, drop_partial=True
+    )
+    expected = content[: len(content) - len(content) % TEST_CHUNK_SIZE]
+
+    assert b"".join(iterator) == expected
+
+
+@pytest.mark.parametrize("buffer_capacity", BUFFER_CAPACITIES)
+@pytest.mark.parametrize(("kind", "size"), TEXTS)
+def test_lines_reproduce_the_text(
+    make_reader: Callable[..., PReader],
+    make_file: Callable[..., Path],
+    seed: int,
+    buffer_capacity: int,
+    kind: str,
+    size: int,
+) -> None:
+    content = seeded_content(kind, size, seed)
+
+    reader = make_reader(buffer_capacity=buffer_capacity)
+    path = make_file(content)
+    text = content.decode()
+
+    assert "".join(reader.lines(path, keepends=True)) == text
+    assert list(reader.lines(path)) == text.split("\n")[:-1]
+
+
+@pytest.mark.parametrize(("make_iterator", "kind", "size"), FLOWS)
 def test_percent_tracks_the_position(
     reader: PReader,
     make_file: Callable[..., Path],
+    seed: int,
     make_iterator: Callable[..., Any],
-    content: bytes,
+    kind: str,
+    size: int,
 ) -> None:
+    content = seeded_content(kind, size, seed)
+
     iterator = make_iterator(reader, make_file(content))
 
     for _ in iterator:
-        assert iterator.percent() == pytest.approx(
-            iterator.state.position / len(content) * 100
-        )
+        expected = iterator.state.position * 100 / len(content)
+
+        assert iterator.percent() == expected
 
     assert iterator.state.position == len(content)
     assert iterator.percent() == 100.0
 
 
-@pytest.mark.parametrize(("make_iterator", "content"), FLOWS.values(), ids=FLOWS)
-def test_resume_rebuilds_the_file_in_cycles(
-    reader: PReader,
+@pytest.mark.parametrize("buffer_capacity", BUFFER_CAPACITIES)
+@pytest.mark.parametrize(
+    "delimiter", list(STREAM_DELIMITERS.values()), ids=list(STREAM_DELIMITERS)
+)
+@pytest.mark.parametrize(("kind", "size"), CONTENTS)
+def test_segments_split_like_a_stream(
     make_reader: Callable[..., PReader],
     make_file: Callable[..., Path],
-    make_iterator: Callable[..., Any],
-    content: bytes,
+    seed: int,
+    buffer_capacity: int,
+    delimiter: bytes,
+    kind: str,
+    size: int,
 ) -> None:
-    resuming = make_reader(auto_load_state=True, auto_save_state=True)
+    content = seeded_content(kind, size, seed)
+
+    reader = make_reader(buffer_capacity=buffer_capacity)
     path = make_file(content)
-    expected = list(make_iterator(reader, path))
-    cycle = math.ceil(len(expected) / (CYCLES - 1))
 
-    rebuilt = [
-        item
-        for _ in range(CYCLES)
-        for item in itertools.islice(
-            make_iterator(resuming, path, state=TEST_STATE_NAME), cycle
-        )
-    ]
+    stripped = list(reader.segments(path, delimiter=delimiter))
+    kept = list(reader.segments(path, delimiter=delimiter, keep_delimiter=True))
 
-    assert rebuilt == expected
+    assert stripped == _split_stream(content, delimiter)
+    assert kept == _split_stream(content, delimiter, keep=True)
 
 
-@pytest.mark.parametrize("delimiter", DELIMITERS.values(), ids=DELIMITERS)
-@pytest.mark.parametrize("content", CONTENTS.values(), ids=CONTENTS)
-def test_delimiter_windows_cover_the_content_once(
-    reader: PReader, make_file: Callable[..., Path], content: bytes, delimiter: bytes
+@pytest.mark.parametrize(
+    "delimiter", list(STREAM_DELIMITERS.values()), ids=list(STREAM_DELIMITERS)
+)
+@pytest.mark.parametrize(("kind", "size"), CONTENTS)
+def test_segments_windows_cover_the_content_once(
+    reader: PReader,
+    make_file: Callable[..., Path],
+    seed: int,
+    delimiter: bytes,
+    kind: str,
+    size: int,
 ) -> None:
+    content = seeded_content(kind, size, seed)
+
     path = make_file(content)
     cuts = [0, len(content) // 3, len(content) * 2 // 3, len(content)]
 
     segments = [
         segment
         for start, end in itertools.pairwise(cuts)
-        for segment in reader.delimiter(
+        for segment in reader.segments(
             path,
+            options=IteratorOptions(start=start, end=end),
             delimiter=delimiter,
             keep_delimiter=True,
             align_start=start > 0,
-            options=IteratorOptions(start=start, end=end),
         )
     ]
 
     assert b"".join(segments) == content
 
 
-@pytest.mark.parametrize(("make_iterator", "content"), WINDOWS.values(), ids=WINDOWS)
-def test_options_window_the_byte_range(
+@pytest.mark.parametrize(("make_iterator", "kind", "size"), FLOWS)
+def test_resume_rebuilds_the_file_in_cycles(
     reader: PReader,
+    make_reader: Callable[..., PReader],
     make_file: Callable[..., Path],
+    seed: int,
     make_iterator: Callable[..., Any],
-    content: bytes,
+    kind: str,
+    size: int,
 ) -> None:
-    options = IteratorOptions(start=100, end=500)
-    windowed = make_iterator(reader, make_file(content), options=options)
+    autosaving = make_reader(auto_save_state=True)
+    path = make_file(seeded_content(kind, size, seed))
 
-    assert b"".join(windowed) == content[100:500]
+    expected = list(make_iterator(reader, path))
+    cycle = math.ceil(len(expected) / (CYCLES - 1)) + 1
+
+    rebuilt = [
+        item
+        for _ in range(CYCLES)
+        for item in itertools.islice(
+            make_iterator(autosaving, path, state=TEST_STATE_NAME), cycle
+        )
+    ]
+
+    assert rebuilt == [
+        item
+        for index in range(CYCLES)
+        for item in expected[index * (cycle - 1) :][:cycle]
+    ]

@@ -1,8 +1,7 @@
 use std::ops::Range;
 
-use crate::{Result, types::core::FileReader};
-
 pub trait Segmented {
-    fn fill(&mut self, reader: &mut FileReader) -> Result<usize>;
+    fn boundary(&self) -> u8;
+    fn buffer(&mut self) -> &mut Vec<u8>;
     fn body(&self) -> Option<Range<usize>>;
 }
