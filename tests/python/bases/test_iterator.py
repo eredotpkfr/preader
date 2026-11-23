@@ -371,19 +371,6 @@ def test_raises_when_the_state_is_unsaved(
         make_iterator(reader, data_file, state=state)
 
 
-@pytest.mark.parametrize("name", ["foo.bin", "f" * 180 + ".bin"], ids=["short", "long"])
-def test_names_the_state_by_the_path_digest(
-    reader: PReader,
-    make_file: Callable[..., Path],
-    name: str,
-    make_iterator: Callable[..., Any],
-) -> None:
-    path = make_file(b"foo", name=name)
-    digest = hashlib.sha256(os.fsencode(path)).hexdigest()
-
-    assert make_iterator(reader, path).state.name == digest
-
-
 def test_auto_load_state_raises_when_the_state_tracks_a_grown_file(
     make_reader: Callable[..., PReader],
     data_file: Path,
@@ -439,6 +426,19 @@ def test_save_succeeds_after_the_file_is_deleted(
     path = reader.states.path(TEST_STATE_NAME)
 
     assert read_state(path, saved)
+
+
+@pytest.mark.parametrize("name", ["foo.bin", "f" * 180 + ".bin"], ids=["short", "long"])
+def test_names_the_state_by_the_path_digest(
+    reader: PReader,
+    make_file: Callable[..., Path],
+    name: str,
+    make_iterator: Callable[..., Any],
+) -> None:
+    state = make_iterator(reader, make_file(b"foo", name=name)).state
+    digest = hashlib.sha256(os.fsencode(state.file.path)).hexdigest()
+
+    assert state.name == digest
 
 
 def test_auto_load_state_resumes_previous_position(

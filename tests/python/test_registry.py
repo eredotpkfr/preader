@@ -1296,9 +1296,10 @@ def test_lookup_answers_when_the_name_is_invalid(
         reader.states.path(TEST_STATE_NAME).read_text(encoding="utf-8")
     )
     target = reader.states.state_dir.joinpath(*name.split("/"))
-    stray = target.with_name(f"{target.name}{TEST_STATE_FILE_EXTENSION}")
 
-    if stray.is_relative_to(tmp_path):
+    if target.is_relative_to(tmp_path):
+        stray = target.with_name(f"{target.name}{TEST_STATE_FILE_EXTENSION}")
+
         with contextlib.suppress(OSError, ValueError):
             stray.parent.mkdir(parents=True, exist_ok=True)
             stray.write_text(json.dumps({**payload, "name": name}), encoding="utf-8")
