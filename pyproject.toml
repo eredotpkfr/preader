@@ -59,10 +59,12 @@ dev = [
     "pytest-timeout",
     "pytest-xdist",
     "ruff",
+    "tqdm",
+    "types-tqdm",
 ]
 
 [tool.mypy]
-files = ["python/preader", "tests/python"]
+files = ["examples/python", "python/preader", "tests/python"]
 python_version = "3.12"
 strict = true
 
@@ -93,6 +95,7 @@ lines-between-types = 1
 split-on-trailing-comma = false
 
 [tool.ruff.lint.per-file-ignores]
+"examples/python/**" = ["D103", "INP001"]
 "tests/**" = [
     "D1",
     "FBT001",

@@ -82,10 +82,11 @@ impl StateRegistry {
     ///
     /// let dir = tempfile::tempdir()?;
     ///
-    /// let reader = PReader::from(Config {
+    /// let config = Config {
     ///     state_dir: dir.path().join("states"),
     ///     ..Config::default()
-    /// });
+    /// };
+    /// let reader = PReader::from(config);
     ///
     /// assert_eq!(reader.states().state_dir(), dir.path().join("states"));
     /// # Ok::<(), preader::Error>(())
@@ -115,10 +116,11 @@ impl StateRegistry {
     /// let dir = tempfile::tempdir()?;
     /// let file = dir.path().join("data.txt");
     ///
-    /// let reader = PReader::from(Config {
+    /// let config = Config {
     ///     state_dir: dir.path().join("states"),
     ///     ..Config::default()
-    /// });
+    /// };
+    /// let reader = PReader::from(config);
     ///
     /// std::fs::write(&file, "foo\n")?;
     ///
@@ -153,10 +155,11 @@ impl StateRegistry {
     /// let dir = tempfile::tempdir()?;
     /// let file = dir.path().join("data.txt");
     ///
-    /// let reader = PReader::from(Config {
+    /// let config = Config {
     ///     state_dir: dir.path().join("states"),
     ///     ..Config::default()
-    /// });
+    /// };
+    /// let reader = PReader::from(config);
     ///
     /// std::fs::write(&file, "foo\n")?;
     ///
@@ -197,10 +200,11 @@ impl StateRegistry {
     /// let dir = tempfile::tempdir()?;
     /// let file = dir.path().join("data.txt");
     ///
-    /// let reader = PReader::from(Config {
+    /// let config = Config {
     ///     state_dir: dir.path().join("states"),
     ///     ..Config::default()
-    /// });
+    /// };
+    /// let reader = PReader::from(config);
     ///
     /// std::fs::write(&file, "foo\nbar\n")?;
     ///
@@ -227,10 +231,11 @@ impl StateRegistry {
     /// let dir = tempfile::tempdir()?;
     /// let file = dir.path().join("data.txt");
     ///
-    /// let reader = PReader::from(Config {
+    /// let config = Config {
     ///     state_dir: dir.path().join("states"),
     ///     ..Config::default()
-    /// });
+    /// };
+    /// let reader = PReader::from(config);
     ///
     /// std::fs::write(&file, "foo\n")?;
     ///
@@ -261,10 +266,11 @@ impl StateRegistry {
     /// let dir = tempfile::tempdir()?;
     /// let file = dir.path().join("data.txt");
     ///
-    /// let reader = PReader::from(Config {
+    /// let config = Config {
     ///     state_dir: dir.path().join("states"),
     ///     ..Config::default()
-    /// });
+    /// };
+    /// let reader = PReader::from(config);
     ///
     /// std::fs::write(&file, "foo\n")?;
     ///
@@ -291,10 +297,11 @@ impl StateRegistry {
     /// let dir = tempfile::tempdir()?;
     /// let file = dir.path().join("data.txt");
     ///
-    /// let reader = PReader::from(Config {
+    /// let config = Config {
     ///     state_dir: dir.path().join("states"),
     ///     ..Config::default()
-    /// });
+    /// };
+    /// let reader = PReader::from(config);
     ///
     /// std::fs::write(&file, "foo\n")?;
     ///
@@ -324,10 +331,11 @@ impl StateRegistry {
     /// let dir = tempfile::tempdir()?;
     /// let file = dir.path().join("data.txt");
     ///
-    /// let reader = PReader::from(Config {
+    /// let config = Config {
     ///     state_dir: dir.path().join("states"),
     ///     ..Config::default()
-    /// });
+    /// };
+    /// let reader = PReader::from(config);
     ///
     /// std::fs::write(&file, "foo\n")?;
     ///
@@ -355,10 +363,11 @@ impl StateRegistry {
     /// let dir = tempfile::tempdir()?;
     /// let file = dir.path().join("data.txt");
     ///
-    /// let reader = PReader::from(Config {
+    /// let config = Config {
     ///     state_dir: dir.path().join("states"),
     ///     ..Config::default()
-    /// });
+    /// };
+    /// let reader = PReader::from(config);
     ///
     /// std::fs::write(&file, "foo\n")?;
     ///
@@ -389,10 +398,11 @@ impl StateRegistry {
     ///
     /// let dir = tempfile::tempdir()?;
     ///
-    /// let reader = PReader::from(Config {
+    /// let config = Config {
     ///     state_dir: dir.path().join("states"),
     ///     ..Config::default()
-    /// });
+    /// };
+    /// let reader = PReader::from(config);
     ///
     /// let path = reader.states().path("job-1")?;
     ///
@@ -436,10 +446,11 @@ impl StateRegistry {
     /// let dir = tempfile::tempdir()?;
     /// let file = dir.path().join("data.txt");
     ///
-    /// let reader = PReader::from(Config {
+    /// let config = Config {
     ///     state_dir: dir.path().join("states"),
     ///     ..Config::default()
-    /// });
+    /// };
+    /// let reader = PReader::from(config);
     ///
     /// std::fs::write(&file, "foo\nbar\n")?;
     ///
@@ -484,10 +495,11 @@ impl StateRegistry {
     /// let dir = tempfile::tempdir()?;
     /// let file = dir.path().join("data.txt");
     ///
-    /// let reader = PReader::from(Config {
+    /// let config = Config {
     ///     state_dir: dir.path().join("states"),
     ///     ..Config::default()
-    /// });
+    /// };
+    /// let reader = PReader::from(config);
     ///
     /// std::fs::write(&file, "foo\n")?;
     ///
@@ -521,10 +533,11 @@ impl StateRegistry {
     /// let dir = tempfile::tempdir()?;
     /// let file = dir.path().join("data.txt");
     ///
-    /// let reader = PReader::from(Config {
+    /// let config = Config {
     ///     state_dir: dir.path().join("states"),
     ///     ..Config::default()
-    /// });
+    /// };
+    /// let reader = PReader::from(config);
     ///
     /// std::fs::write(&file, "foo\n")?;
     ///
@@ -556,10 +569,11 @@ impl StateRegistry {
     ///
     /// let dir = tempfile::tempdir()?;
     ///
-    /// let reader = PReader::from(Config {
+    /// let config = Config {
     ///     state_dir: dir.path().join("states"),
     ///     ..Config::default()
-    /// });
+    /// };
+    /// let reader = PReader::from(config);
     ///
     /// let path = reader.states().tmp_path("job-1")?;
     ///

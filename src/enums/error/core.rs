@@ -16,10 +16,11 @@ use crate::enums::error::{mismatch::Mismatch, name::NameError};
 ///
 /// let dir = tempfile::tempdir()?;
 ///
-/// let reader = PReader::from(Config {
+/// let config = Config {
 ///     state_dir: dir.path().join("states"),
 ///     ..Config::default()
-/// });
+/// };
+/// let reader = PReader::from(config);
 ///
 /// let result = reader.states().load("job-1");
 ///

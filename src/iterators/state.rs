@@ -74,10 +74,11 @@ impl Iterator for StateIterator {
     /// let dir = tempfile::tempdir()?;
     /// let file = dir.path().join("data.txt");
     ///
-    /// let reader = PReader::from(Config {
+    /// let config = Config {
     ///     state_dir: dir.path().join("states"),
     ///     ..Config::default()
-    /// });
+    /// };
+    /// let reader = PReader::from(config);
     ///
     /// std::fs::write(&file, "foo\n")?;
     ///

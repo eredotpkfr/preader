@@ -2,6 +2,9 @@ SHELL=/bin/bash
 
 BOLD := $(shell tput bold 2>/dev/null)
 CYAN := $(shell tput setaf 6 2>/dev/null)
+DIM := $(shell tput dim 2>/dev/null)
+GREEN := $(shell tput setaf 2 2>/dev/null)
+RED := $(shell tput setaf 1 2>/dev/null)
 RESET := $(shell tput sgr0 2>/dev/null)
 
 TARGETS := \
@@ -27,6 +30,8 @@ TARGETS := \
 	coverage-codecov \
 	coverage-lcov \
 	develop \
+	examples-python \
+	examples-rust \
 	install-cargo-clippy \
 	install-cargo-deny \
 	install-cargo-doc-rs \
@@ -37,9 +42,8 @@ TARGETS := \
 	install-cargo-tools \
 	install-cargo-udeps \
 	install-nightly-toolchain \
+	install-pre-commit \
 	install-pre-commit-hooks \
-	install-pre-commit-linux \
-	install-pre-commit-mac \
 	install-uv-linux \
 	install-uv-mac \
 	live-book \
@@ -59,6 +63,24 @@ TARGETS := \
 	stubtest-allowlist \
 	uv-audit \
 	uv-create-venv
+
+ifneq ($(filter examples-python examples-rust,$(firstword $(MAKECMDGOALS))),)
+EXAMPLE ?= $(filter-out $(TARGETS),$(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS)))
+$(eval $(EXAMPLE):;@:)
+endif
+EXAMPLES_PYTHON := $(or $(EXAMPLE),$(sort $(basename $(notdir $(wildcard examples/python/*.py)))))
+EXAMPLES_RUST := $(or $(EXAMPLE),$(sort $(basename $(notdir $(wildcard examples/rust/*.rs)))))
+
+define run-examples
+	@total=$(words $(3)); index=0; \
+	for example in $(3); do \
+		index=$$((index + 1)); \
+		printf '\n$(BOLD)$(CYAN)▶ [%d/%d] %s$(RESET) $(DIM)examples/$(1)/%s.$(2)$(RESET)\n\n' \
+			"$$index" "$$total" "$$example" "$$example"; \
+		$(4) || { printf '\n$(BOLD)$(RED)✗ %s failed$(RESET)\n' "$$example"; exit 1; }; \
+	done; \
+	printf '\n$(BOLD)$(GREEN)✓ %d $(1) examples passed$(RESET)\n' "$$total"
+endef
 
 .DEFAULT_GOAL := help
 .PHONY: help $(TARGETS)
@@ -116,6 +138,10 @@ coverage coverage-codecov coverage-lcov:
 develop:
 	@uv run python -c "import pathlib, shutil, sysconfig; shutil.rmtree(pathlib.Path(sysconfig.get_paths()['purelib']) / 'preader', ignore_errors=True)"
 	@uv run maturin develop --uv
+examples-python: develop
+	$(call run-examples,python,py,$(EXAMPLES_PYTHON),uv run --no-sync python examples/python/$$example.py)
+examples-rust:
+	$(call run-examples,rust,rs,$(EXAMPLES_RUST),cargo run --quiet --example $$example)
 install-cargo-clippy:
 	@rustup component add clippy
 install-cargo-deny:
@@ -143,13 +169,11 @@ install-cargo-udeps:
 	@cargo install cargo-udeps --locked
 install-nightly-toolchain:
 	@rustup toolchain install nightly
+install-pre-commit:
+	@uv tool install pre-commit
 install-pre-commit-hooks:
 	@pre-commit install --install-hooks
 	@pre-commit install --hook-type commit-msg --install-hooks
-install-pre-commit-linux:
-	@sudo apt install pre-commit
-install-pre-commit-mac:
-	@brew install pre-commit
 install-uv-linux:
 	@curl -LsSf https://astral.sh/uv/install.sh | sh
 install-uv-mac:

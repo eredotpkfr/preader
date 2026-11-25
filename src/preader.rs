@@ -33,10 +33,11 @@ impl From<Config> for PReader {
     /// ```
     /// use preader::{Config, PReader};
     ///
-    /// let reader = PReader::from(Config {
+    /// let config = Config {
     ///     verify_state: false,
     ///     ..Config::default()
-    /// });
+    /// };
+    /// let reader = PReader::from(config);
     ///
     /// assert!(!reader.config().verify_state);
     /// ```
@@ -73,10 +74,11 @@ impl PReader {
     /// ```
     /// use preader::{Config, PReader};
     ///
-    /// let reader = PReader::from(Config {
+    /// let config = Config {
     ///     buffer_capacity: 4096,
     ///     ..Config::default()
-    /// });
+    /// };
+    /// let reader = PReader::from(config);
     ///
     /// assert_eq!(reader.config().buffer_capacity, 4096);
     /// ```
@@ -93,10 +95,11 @@ impl PReader {
     ///
     /// let dir = tempfile::tempdir()?;
     ///
-    /// let reader = PReader::from(Config {
+    /// let config = Config {
     ///     state_dir: dir.path().join("states"),
     ///     ..Config::default()
-    /// });
+    /// };
+    /// let reader = PReader::from(config);
     ///
     /// assert_eq!(reader.states().state_dir(), dir.path().join("states"));
     /// # Ok::<(), preader::Error>(())
@@ -115,10 +118,11 @@ impl PReader {
     /// let dir = tempfile::tempdir()?;
     /// let file = dir.path().join("data.bin");
     ///
-    /// let reader = PReader::from(Config {
+    /// let config = Config {
     ///     state_dir: dir.path().join("states"),
     ///     ..Config::default()
-    /// });
+    /// };
+    /// let reader = PReader::from(config);
     ///
     /// std::fs::write(&file, b"foo")?;
     ///
@@ -145,10 +149,11 @@ impl PReader {
     /// let dir = tempfile::tempdir()?;
     /// let file = dir.path().join("data.bin");
     ///
-    /// let reader = PReader::from(Config {
+    /// let config = Config {
     ///     state_dir: dir.path().join("states"),
     ///     ..Config::default()
-    /// });
+    /// };
+    /// let reader = PReader::from(config);
     ///
     /// std::fs::write(&file, b"foobar")?;
     ///
@@ -175,10 +180,11 @@ impl PReader {
     /// let dir = tempfile::tempdir()?;
     /// let file = dir.path().join("data.txt");
     ///
-    /// let reader = PReader::from(Config {
+    /// let config = Config {
     ///     state_dir: dir.path().join("states"),
     ///     ..Config::default()
-    /// });
+    /// };
+    /// let reader = PReader::from(config);
     ///
     /// std::fs::write(&file, "foo\nbar\n")?;
     ///
@@ -206,10 +212,11 @@ impl PReader {
     /// let dir = tempfile::tempdir()?;
     /// let file = dir.path().join("data.csv");
     ///
-    /// let reader = PReader::from(Config {
+    /// let config = Config {
     ///     state_dir: dir.path().join("states"),
     ///     ..Config::default()
-    /// });
+    /// };
+    /// let reader = PReader::from(config);
     ///
     /// std::fs::write(&file, "foo,bar")?;
     ///

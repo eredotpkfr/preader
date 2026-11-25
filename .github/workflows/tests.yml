@@ -48,6 +48,9 @@ jobs:
       - name: Run cargo doc test
         run: make cargo-doc-test
 
+      - name: Run Rust examples
+        run: make examples-rust
+
   python-pytest:
     runs-on: ${{ matrix.os }}
     permissions:
@@ -81,3 +84,6 @@ jobs:
 
       - name: Run pytest
         run: make pytest
+
+      - name: Run Python examples
+        run: make examples-python
