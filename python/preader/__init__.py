@@ -1,4 +1,4 @@
-"""A Python package that reads a file along with its read percentage."""
+"""A file reader that tracks read percentage and manages read state."""
 
 from . import preader
 from .preader import *  # noqa: F403

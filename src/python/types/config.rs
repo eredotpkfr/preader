@@ -9,6 +9,11 @@ use crate::{
 
 #[pymethods]
 impl Config {
+    /// Creates a configuration from keyword arguments; omitted ones keep their defaults
+    ///
+    /// By default states live in a `preader` directory under the user's cache directory, the read
+    /// buffer holds 64 KiB and `verify_state` is on. Autosave runs every 100 MiB once
+    /// `auto_save_state` is on. Raises `ValueError` when `auto_save_state_bytes` is 0
     #[new]
     #[pyo3(signature = (
         *,
@@ -37,6 +42,7 @@ impl Config {
         }
     }
 
+    /// Returns the class name with every setting
     fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
         pyrepr!(
             slf,

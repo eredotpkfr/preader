@@ -206,6 +206,16 @@ def requires_non_utf8_names(tmp_path_factory: pytest.TempPathFactory) -> None:
 
 
 @pytest.fixture(scope="session")
+def requires_readable_directories(tmp_path_factory: pytest.TempPathFactory) -> None:
+    probe = tmp_path_factory.mktemp("probe")
+
+    try:
+        os.close(os.open(probe, os.O_RDONLY))
+    except OSError:
+        pytest.skip("a directory cannot be opened as a file here")
+
+
+@pytest.fixture(scope="session")
 def requires_enforced_permissions(tmp_path_factory: pytest.TempPathFactory) -> None:
     probe = tmp_path_factory.mktemp("probe")
 

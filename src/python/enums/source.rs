@@ -9,13 +9,20 @@ use pyo3::{
 
 use crate::{State, StateSource};
 
+/// Extracts the `state=` argument of the [`PReader`](crate::PReader) iterator methods
 impl<'a, 'py> FromPyObject<'a, 'py> for StateSource {
+    /// The Python exception raised for an unsupported argument type
     type Error = PyErr;
 
+    /// The type hint `State | str | None` shown in the generated stubs
     #[cfg(feature = "experimental-inspect")]
     const INPUT_TYPE: PyStaticExpr =
         type_hint_union!(State::TYPE_HINT, PyString::TYPE_HINT, PyNone::TYPE_HINT);
 
+    /// Maps `None` to [`Auto`](Self::Auto), a [`State`] to [`Existing`](Self::Existing) and a `str`
+    /// to [`Named`](Self::Named)
+    ///
+    /// Raises `TypeError` for any other type
     fn extract(object: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
         if object.is_none() {
             return Ok(Self::Auto);

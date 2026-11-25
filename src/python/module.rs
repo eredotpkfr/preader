@@ -1,6 +1,7 @@
-/// A Python package that reads a file along with its read percentage.
+/// A file reader that tracks read percentage and manages read state
 #[pyo3::pymodule]
 mod preader {
+    /// The classes and exceptions the `preader` module exports
     #[pymodule_export]
     use crate::{
         Config, FileMetadata, IteratorOptions, PReader, State, StateIterator, StateRegistry,

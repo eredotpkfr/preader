@@ -360,6 +360,23 @@ def test_yields_every_byte_value(
     assert list(iterator) == [content[:45], content[45:]]
 
 
+def test_growth_holds_back_an_unterminated_segment_on_a_later_read(
+    reader: PReader,
+    make_file: Callable[..., Path],
+    consume: Callable[..., Any],
+    append: Callable[[Path, bytes], None],
+) -> None:
+    path = make_file(b"foo,bar")
+    iterator = reader.segments(path)
+
+    next(iterator)
+    append(path, b",baz,")
+    consume(iterator)
+
+    assert list(iterator) == []
+    assert iterator.state.position == 4
+
+
 @pytest.mark.parametrize(
     ("start", "index"), [(0, 0), (12, 2)], ids=["file_start", "item_boundary"]
 )

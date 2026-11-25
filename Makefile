@@ -86,7 +86,7 @@ cargo-doc:
 cargo-doc-rs:
 	@cargo +nightly docs-rs
 cargo-doc-test:
-	@cargo test --doc
+	@cargo test --doc --features testing
 cargo-fix:
 	@uv run cargo fix --all-features --allow-dirty --allow-staged
 cargo-machete:

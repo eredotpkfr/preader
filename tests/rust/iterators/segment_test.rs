@@ -314,6 +314,22 @@ fn delimiter_selects_the_separator(sandbox: Sandbox, #[case] delimiter: u8) {
 }
 
 #[rstest]
+fn growth_holds_back_an_unterminated_segment_on_a_later_read(sandbox: Sandbox) {
+    let path = sandbox.file(b"foo,bar");
+    let mut segments = sandbox.reader().segments(&path).build().unwrap();
+
+    consume(&mut segments, 1);
+
+    sandbox.append(&path, b",baz,");
+
+    drain(&mut segments);
+
+    assert!(items(&mut segments).is_empty());
+
+    assert_eq!(segments.state().position, 4);
+}
+
+#[rstest]
 fn fails_when_a_save_fails_on_a_skipped_item(sandbox: Sandbox) {
     let path = sandbox.file(TEST_SEGMENT_CONTENT);
 

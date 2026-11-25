@@ -657,6 +657,24 @@ fn save_updates_only_the_updated_at(sandbox: Sandbox) {
 }
 
 #[rstest]
+fn verify_fails_when_a_parent_of_the_file_becomes_a_file(sandbox: Sandbox) {
+    let path = sandbox.write("folder/data.bin", b"foo");
+
+    sandbox.saved(&path, TEST_STATE_NAME);
+
+    fs::remove_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(path.parent().unwrap(), b"foo").unwrap();
+
+    assert_err_is!(
+        sandbox.states().load(TEST_STATE_NAME),
+        Error::Mismatch {
+            kind: Mismatch::Missing,
+            ..
+        }
+    );
+}
+
+#[rstest]
 #[case::at_the_window(TEST_WINDOW, TEST_WINDOW, 100, 100, 100.0 * 100.0 / TEST_WINDOW as f64)]
 #[case::past_the_window(TEST_WINDOW + 1, TEST_WINDOW, TEST_WINDOW as u64 + 1, TEST_WINDOW as u64, 100.0)]
 fn resync_accepts_at_the_fingerprint_window(

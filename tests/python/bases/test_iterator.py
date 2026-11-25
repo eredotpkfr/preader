@@ -387,6 +387,21 @@ def test_auto_load_state_raises_when_the_state_tracks_a_grown_file(
         make_iterator(reader, data_file)
 
 
+def test_autosave_on_drop_records_a_start_at_a_threshold_multiple(
+    make_reader: Callable[..., PReader],
+    data_file: Path,
+    make_iterator: Callable[..., Any],
+) -> None:
+    reader = make_reader(auto_save_state=True, auto_save_state_bytes=4)
+    iterator = make_iterator(
+        reader, data_file, state=TEST_STATE_NAME, options=IteratorOptions(start=4)
+    )
+
+    del iterator
+
+    assert reader.states[TEST_STATE_NAME].position == 4
+
+
 @pytest.mark.parametrize("payload", MALFORMED_PAYLOAD_TEXTS)
 def test_auto_load_state_ignores_a_corrupt_state_by_default(
     reader: PReader, data_file: Path, payload: str, make_iterator: Callable[..., Any]
@@ -771,6 +786,23 @@ def test_save_excludes_the_unfinished_item(
     resumed = make_iterator(reader, data_file, state=state)
 
     assert next(resumed) == unfinished
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="a fifo cannot be created here")
+def test_raises_when_the_resumed_file_is_replaced_by_a_fifo_without_verification(
+    make_reader: Callable[..., PReader],
+    data_file: Path,
+    make_iterator: Callable[..., Any],
+) -> None:
+    reader = make_reader(verify_state=False)
+
+    make_iterator(reader, data_file, state=TEST_STATE_NAME).save()
+
+    data_file.unlink()
+    os.mkfifo(data_file)
+
+    with pytest.raises(OSError, match="not a regular file"):
+        make_iterator(reader, data_file, state=TEST_STATE_NAME)
 
 
 def test_raises_when_the_payload_names_another_state(
@@ -1310,6 +1342,29 @@ def test_raises_when_a_save_fails_after_a_truncation(
         next(iterator)
 
 
+def test_drop_saves_a_state_object_at_a_threshold_multiple(
+    reader: PReader,
+    make_reader: Callable[..., PReader],
+    data_file: Path,
+    tmp_path: Path,
+    consume: Callable[..., Any],
+    make_iterator: Callable[..., Any],
+) -> None:
+    iterator = make_iterator(reader, data_file, state=TEST_STATE_NAME)
+    state = consume(iterator, 2).save()
+
+    elsewhere = make_reader(
+        state_dir=tmp_path / "elsewhere",
+        auto_save_state=True,
+        auto_save_state_bytes=state.position,
+    )
+    borrowed = make_iterator(elsewhere, data_file, state=state)
+
+    del borrowed
+
+    assert elsewhere.states[TEST_STATE_NAME].position == state.position
+
+
 def test_resumes_a_named_state_by_default(
     reader: PReader,
     data_file: Path,
@@ -1669,6 +1724,30 @@ def test_save_raises_when_the_state_was_resynced_meanwhile(
     assert reader.states[TEST_STATE_NAME].file.path == moved
 
 
+def test_failed_autosave_leaves_the_unyielded_item_unfinished(
+    reader: PReader,
+    make_reader: Callable[..., PReader],
+    config: Config,
+    data_file: Path,
+    consume: Callable[..., Any],
+    make_iterator: Callable[..., Any],
+) -> None:
+    probe = consume(make_iterator(reader, data_file), 2)
+
+    config.state_dir.write_bytes(b"not a directory")
+
+    saving = make_reader(auto_save_state=True, auto_save_state_bytes=1)
+    iterator = make_iterator(saving, data_file, state=TEST_STATE_NAME)
+
+    next(iterator)
+
+    with pytest.raises(FileExistsError):
+        next(iterator)
+
+    assert list(iterator) == []
+    assert iterator.state.position == probe.state.position
+
+
 @pytest.mark.usefixtures("requires_symlinks")
 def test_raises_when_the_state_name_is_a_directory_alias(
     reader: PReader, config: Config, tmp_file: Path, make_iterator: Callable[..., Any]
@@ -1684,6 +1763,28 @@ def test_raises_when_the_state_name_is_a_directory_alias(
         make_iterator(reader, tmp_file, state=f"alias/{TEST_STATE_NAME}")
 
     assert saved.read_bytes() == before
+
+
+@pytest.mark.usefixtures("requires_readable_directories")
+def test_ends_after_an_os_error_that_reads_nothing(
+    make_reader: Callable[..., PReader],
+    data_file: Path,
+    consume: Callable[..., Any],
+    make_iterator: Callable[..., Any],
+) -> None:
+    reader = make_reader(verify_state=False)
+    state = consume(make_iterator(reader, data_file, state=TEST_STATE_NAME), 2).save()
+
+    data_file.unlink()
+    data_file.mkdir()
+
+    iterator = make_iterator(reader, data_file, state=state)
+
+    with pytest.raises(IsADirectoryError, match="os error"):
+        next(iterator)
+
+    assert list(iterator) == []
+    assert iterator.state.position == state.position
 
 
 def test_recorded_file_size_never_refreshes_after_the_file_grows(
@@ -1817,6 +1918,30 @@ def test_next_keeps_the_saved_timestamps(
 
     assert iterator.state.position > saved.position
     assert iterator.state.timestamps == saved.timestamps
+
+
+def test_failed_autosave_while_skipping_keeps_the_skipped_items_finished(
+    reader: PReader,
+    make_reader: Callable[..., PReader],
+    config: Config,
+    data_file: Path,
+    make_iterator: Callable[..., Any],
+) -> None:
+    options = IteratorOptions(skip=2)
+    probe = make_iterator(reader, data_file, options=options)
+
+    next(probe)
+
+    config.state_dir.write_bytes(b"not a directory")
+
+    saving = make_reader(auto_save_state=True, auto_save_state_bytes=1)
+    iterator = make_iterator(saving, data_file, state=TEST_STATE_NAME, options=options)
+
+    with pytest.raises(FileExistsError):
+        next(iterator)
+
+    assert list(iterator) == []
+    assert iterator.state.position == probe.state.position
 
 
 def test_drop_keeps_a_state_resynced_meanwhile(

@@ -1,9 +1,10 @@
-use std::{assert_matches, fs, io::ErrorKind, iter, ops::Range, time::Duration};
+use std::{assert_matches, fs, io::ErrorKind, iter, num::NonZeroU64, ops::Range, time::Duration};
 #[cfg(unix)]
 use std::{
     env,
     os::unix::fs::{MetadataExt, symlink},
     path::{Component, PathBuf},
+    process::Command,
 };
 
 use preader::{
@@ -602,6 +603,26 @@ fn failed_save_of_a_named_state_keeps_reading(sandbox: Sandbox) {
 }
 
 #[rstest]
+fn autosave_on_drop_records_a_start_at_a_threshold_multiple(
+    sandbox: Sandbox,
+    #[values(Bytes, Chunks, Lines, Segments)] iterator: IteratorKind,
+) {
+    let path = sandbox.file(&shared_content());
+    let reader = sandbox.autosaving(4);
+    let plan = Plan {
+        options: IteratorOptions {
+            start: 4,
+            ..IteratorOptions::default()
+        },
+        ..named(TEST_STATE_NAME)
+    };
+
+    drop(iterator.open(&reader, &path, plan).unwrap());
+
+    assert_eq!(sandbox.states().load(TEST_STATE_NAME).unwrap().position, 4);
+}
+
+#[rstest]
 fn save_succeeds_after_the_file_is_deleted(
     sandbox: Sandbox,
     #[values(Bytes, Chunks, Lines, Segments)] iterator: IteratorKind,
@@ -1100,6 +1121,26 @@ fn accepts_an_unsaved_state_without_verification(
     assert_eq!(resumed.state().position, state.position);
 }
 
+#[cfg(unix)]
+#[rstest]
+fn next_ends_after_an_io_error_that_reads_nothing(
+    sandbox: Sandbox,
+    #[values(Bytes, Chunks, Lines, Segments)] iterator: IteratorKind,
+) {
+    let directory = sandbox.dir_at("folder");
+    let plan = Plan {
+        state: sandbox.state_at(&directory, TEST_READ_FROM).into(),
+        ..Plan::default()
+    };
+    let mut opened = iterator.open(&sandbox.lenient(), &directory, plan).unwrap();
+
+    assert_err_is!(opened.next().unwrap(), Error::Io(_));
+
+    assert!(opened.next().is_none());
+
+    assert_eq!(opened.state().position, TEST_READ_FROM);
+}
+
 #[rstest]
 fn manual_save_does_not_reset_autosave_baseline(sandbox: Sandbox) {
     let path = sandbox.file(TEST_ALPHABET);
@@ -1584,6 +1625,29 @@ fn failed_manual_save_keeps_reading(
     );
 }
 
+#[cfg(unix)]
+#[rstest]
+fn fails_when_the_resumed_file_is_replaced_by_a_fifo_without_verification(
+    sandbox: Sandbox,
+    #[values(Bytes, Chunks, Lines, Segments)] iterator: IteratorKind,
+) {
+    let path = sandbox.file(&shared_content());
+    let reader = sandbox.lenient();
+
+    iterator.open(&reader, &path, named(TEST_STATE_NAME)).unwrap().save().unwrap();
+
+    fs::remove_file(&path).unwrap();
+
+    if !Command::new("mkfifo").arg(&path).status().is_ok_and(|status| status.success()) {
+        return;
+    }
+
+    assert_err_is!(
+        iterator.open(&reader, &path, named(TEST_STATE_NAME)),
+        Error::Io(error) if error.kind() == ErrorKind::InvalidInput
+    );
+}
+
 #[rstest]
 fn position_counts_finished_items(
     sandbox: Sandbox,
@@ -1859,6 +1923,29 @@ fn auto_load_state_fails_when_the_payload_is_incomplete(
 }
 
 #[rstest]
+fn failed_autosave_leaves_the_unyielded_item_unfinished(
+    sandbox: Sandbox,
+    #[values(Bytes, Chunks, Lines, Segments)] iterator: IteratorKind,
+) {
+    let path = sandbox.file(&shared_content());
+    let mut probe = iterator.open(&sandbox.reader(), &path, Plan::default()).unwrap();
+
+    consume(&mut probe, 2);
+
+    sandbox.block_states();
+
+    let reader = sandbox.autosaving(1);
+    let mut opened = iterator.open(&reader, &path, named(TEST_STATE_NAME)).unwrap();
+
+    consume(&mut opened, 1);
+
+    assert!(opened.next().unwrap().is_err());
+    assert!(opened.next().is_none());
+
+    assert_eq!(opened.state().position, probe.state().position);
+}
+
+#[rstest]
 fn skip_beyond_the_item_count_yields_nothing(
     sandbox: Sandbox,
     #[values(Bytes, Chunks, Lines, Segments)] iterator: IteratorKind,
@@ -2096,6 +2183,34 @@ fn fails_when_an_unsaved_state_tracks_a_moved_file(
 }
 
 #[rstest]
+fn drop_saves_a_state_object_at_a_threshold_multiple(
+    sandbox: Sandbox,
+    #[values(Bytes, Chunks, Lines, Segments)] iterator: IteratorKind,
+) {
+    let path = sandbox.file(&shared_content());
+    let mut opened = iterator.open(&sandbox.reader(), &path, named(TEST_STATE_NAME)).unwrap();
+
+    consume(&mut opened, 2);
+
+    let state = opened.save().unwrap().clone();
+    let elsewhere = sandbox.reader_in(
+        "elsewhere",
+        Config {
+            auto_save_state: true,
+            auto_save_state_bytes: NonZeroU64::new(state.position).unwrap(),
+            ..sandbox.config()
+        },
+    );
+
+    drop(iterator.open(&elsewhere, &path, resumed(state.clone())).unwrap());
+
+    assert_eq!(
+        elsewhere.states().load(TEST_STATE_NAME).unwrap().position,
+        state.position
+    );
+}
+
+#[rstest]
 fn iteration_survives_the_file_being_deleted(
     sandbox: Sandbox,
     #[values(Bytes, Chunks, Lines, Segments)] iterator: IteratorKind,
@@ -2313,6 +2428,34 @@ fn save_updates_only_the_updated_at(
     assert_eq!(saved.timestamps.created_at, created_at);
 
     sandbox.payload(&saved);
+}
+
+#[rstest]
+fn failed_autosave_while_skipping_keeps_the_skipped_items_finished(
+    sandbox: Sandbox,
+    #[values(Bytes, Chunks, Lines, Segments)] iterator: IteratorKind,
+) {
+    let path = sandbox.file(&shared_content());
+    let skipping = || Plan {
+        options: IteratorOptions {
+            skip: 2,
+            ..IteratorOptions::default()
+        },
+        ..named(TEST_STATE_NAME)
+    };
+    let mut probe = iterator.open(&sandbox.reader(), &path, skipping()).unwrap();
+
+    consume(&mut probe, 1);
+
+    sandbox.block_states();
+
+    let reader = sandbox.autosaving(1);
+    let mut opened = iterator.open(&reader, &path, skipping()).unwrap();
+
+    assert!(opened.next().unwrap().is_err());
+    assert!(opened.next().is_none());
+
+    assert_eq!(opened.state().position, probe.state().position);
 }
 
 #[rstest]

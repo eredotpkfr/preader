@@ -1,4 +1,55 @@
+//! A file reader that tracks read percentage and manages read state
+//!
+//! A [`PReader`] reads a file as bytes, fixed-size chunks, UTF-8 lines or delimiter-separated
+//! segments through [`PReader::bytes`], [`PReader::chunks`], [`PReader::lines`] and
+//! [`PReader::segments`]. Every iterator carries a [`State`] that records its position and the
+//! file it tracks; saving that state lets a later iterator continue where the previous one
+//! stopped. An item counts as finished once the next one is requested, so a resumed iterator
+//! repeats the item that was unfinished when the state was saved
+//!
+//! States are JSON files in [`Config::state_dir`] and are managed through the [`StateRegistry`]
+//! returned by [`PReader::states`]. A resumed state that tracks another path fails with an
+//! [`Error::Mismatch`], and with [`Config::verify_state`] on (the default) so does one whose file
+//! changed. [`StateRegistry::resync`] accepts a moved or changed file; with verification on, its
+//! fingerprint must still match. Reads stop at the file size recorded in the state, so data
+//! appended to the file is read only after a resync, even with verification off
+//!
+//! # Examples
+//!
+//! ```
+//! use preader::{Config, PReader};
+//!
+//! let dir = tempfile::tempdir()?;
+//! let file = dir.path().join("data.txt");
+//!
+//! let reader = PReader::from(Config {
+//!     state_dir: dir.path().join("states"),
+//!     ..Config::default()
+//! });
+//!
+//! std::fs::write(&file, "foo\nbar\nbaz\n")?;
+//!
+//! let mut lines = reader.lines(&file).state("job-1").build()?;
+//!
+//! lines.next().transpose()?;
+//! lines.next().transpose()?;
+//! lines.save()?;
+//!
+//! let resumed = reader.lines(&file).state("job-1").build()?;
+//! let read = resumed.collect::<preader::Result<Vec<_>>>()?;
+//!
+//! assert_eq!(read, ["bar", "baz"]);
+//! # Ok::<(), preader::Error>(())
+//! ```
+
 #![forbid(unsafe_code)]
+#![doc(test(attr(deny(warnings))))]
+#![warn(
+    missing_docs,
+    clippy::doc_markdown,
+    clippy::missing_errors_doc,
+    clippy::missing_panics_doc
+)]
 
 mod bases;
 mod builders;
@@ -42,6 +93,7 @@ pub use types::{
     time::Timestamps,
 };
 #[cfg(feature = "testing")]
+#[doc(hidden)]
 pub use {
     constants::TMP_FILE_EXTENSION,
     enums::{autosave::AutoSave, skip::SkipPlan},

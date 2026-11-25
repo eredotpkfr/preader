@@ -361,6 +361,22 @@ fn fails_when_a_save_fails_on_a_skipped_item(sandbox: Sandbox) {
 }
 
 #[rstest]
+fn growth_holds_back_an_unterminated_line_on_a_later_read(sandbox: Sandbox) {
+    let path = sandbox.file(b"foo\nbar");
+    let mut lines = sandbox.reader().lines(&path).build().unwrap();
+
+    consume(&mut lines, 1);
+
+    sandbox.append(&path, b"\nbaz\n");
+
+    drain(&mut lines);
+
+    assert!(items(&mut lines).is_empty());
+
+    assert_eq!(lines.state().position, 4);
+}
+
+#[rstest]
 fn position_counts_finished_items(sandbox: Sandbox) {
     let path = sandbox.file(TEST_LINE_CONTENT);
     let mut lines = sandbox.reader().lines(&path).build().unwrap();

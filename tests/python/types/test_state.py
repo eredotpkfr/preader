@@ -532,6 +532,23 @@ def test_resync_keeps_a_position_that_equals_the_size(
     assert resynced.file.size == 100
 
 
+def test_verify_raises_when_a_parent_of_the_file_becomes_a_file(
+    reader: PReader, tmp_path: Path, make_file: Callable[..., Path]
+) -> None:
+    (tmp_path / "folder").mkdir()
+
+    path = make_file(b"foo", name="folder/data.bin")
+
+    reader.bytes(path, state=TEST_STATE_NAME).save()
+
+    path.unlink()
+    path.parent.rmdir()
+    path.parent.write_bytes(b"foo")
+
+    with pytest.raises(StateOutdatedError, match="file is missing"):
+        reader.states[TEST_STATE_NAME]
+
+
 def test_verify_raises_when_the_mtime_changed_within_a_second(
     reader: PReader, tmp_large_file: Path
 ) -> None:
