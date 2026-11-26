@@ -1,7 +1,13 @@
 use rstest::fixture;
-use tempfile::TempDir;
+
+use crate::common::{sandbox::Sandbox, seed::Seed};
 
 #[fixture]
-pub fn tmp_dir() -> TempDir {
-    TempDir::new().unwrap()
+pub fn sandbox() -> Sandbox {
+    Sandbox::default()
+}
+
+#[fixture]
+pub fn seed() -> Seed {
+    Seed::default()
 }

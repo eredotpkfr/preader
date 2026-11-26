@@ -1,14 +1,14 @@
-macro_rules! pyrepr {
-    ($name:literal { $($field:ident = $value:expr),* $(,)? }) => {{
-        let parts: Vec<String> = vec![
-            $({
-                let v = $value.to_string();
-                format!("  {}={}", stringify!($field), $crate::utils::text::indent_lines(&v, 2))
-            }),*
-        ];
-
-        format!("{}(\n{}\n)", $name, parts.join(",\n"))
-    }};
+/// Returns early with `Err($error.into())` when `$condition` is false
+///
+/// The error is converted with [`Into`], so a [`NameError`](crate::NameError) or an
+/// [`io::Error`](std::io::Error) can be returned from a function that returns
+/// [`Result`](crate::Result)
+macro_rules! ensure {
+    ($condition:expr, $error:expr $(,)?) => {
+        if !$condition {
+            return Err($error.into());
+        }
+    };
 }
 
-pub(crate) use pyrepr;
+pub(crate) use ensure;

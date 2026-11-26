@@ -3,7 +3,7 @@ title = "preader"
 authors = ["Erdoğan Yoksul <erdoganyoksul3@gmail.com>"]
 language = "en"
 src = "src"
-description = "A Python package that reads a file along with its read percentage"
+description = "A file reader that tracks read percentage and manages read state"
 
 [rust]
 edition = "2024"

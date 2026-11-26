@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "preader"
-description = "A Python package for reading files with live read-percentage tracking"
+description = "A file reader that tracks read percentage and manages read state"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -19,7 +19,6 @@ keywords = ["file-reader", "resumable", "iterator", "checksum", "progress-tracki
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
-    "Programming Language :: Python :: Implementation :: PyPy",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -40,28 +39,69 @@ changelog = "https://github.com/eredotpkfr/preader/blob/main/CHANGELOG.md"
 issues = "https://github.com/eredotpkfr/preader/issues"
 
 [tool.maturin]
-features = ["pyo3/extension-module"]
-
-[tool.maturin.generate-ci.github.all]
+features = ["extension-module"]
+python-source = "python"
 
 [tool.uv]
 package = false
 
 [dependency-groups]
 dev = [
+    "hypothesis",
     "maturin>=1.15.0,<2.0",
+    "mypy",
+    "pypdf",
     "pytest",
-    "pytest-xdist",
-    "pytest-randomly",
-    "pytest-timeout",
-    "pytest-repeat",
-    "pytest-socket",
     "pytest-icdiff",
+    "pytest-randomly",
+    "pytest-socket",
     "pytest-sugar",
+    "pytest-timeout",
+    "pytest-xdist",
     "ruff",
+    "tqdm",
+    "types-tqdm",
 ]
 
+[tool.mypy]
+files = ["examples/python", "python/preader", "tests/python"]
+python_version = "3.12"
+strict = true
+
 [tool.pytest.ini_options]
-addopts = "-n auto -ra --disable-socket"
+addopts = "-n auto -ra --disable-socket --strict-config --strict-markers"
+filterwarnings = ["error"]
 testpaths = ["tests/python"]
 timeout = 10
+
+[tool.ruff]
+extend-exclude = ["python/preader/preader.pyi"]
+
+[tool.ruff.format]
+skip-magic-trailing-comma = true
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "COM812",
+    "CPY001",
+    "D203",
+    "D213",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["cases", "common", "preader"]
+lines-between-types = 1
+split-on-trailing-comma = false
+
+[tool.ruff.lint.per-file-ignores]
+"examples/python/**" = ["D103", "INP001"]
+"tests/**" = [
+    "D1",
+    "FBT001",
+    "INP001",
+    "PLR0913",
+    "PLR0917",
+    "PLR2004",
+    "S101",
+]

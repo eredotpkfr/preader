@@ -2,15 +2,13 @@
 name = "preader"
 version = "0.1.0"
 edition = "2024"
-description = "A Python package for reading files with live read-percentage tracking"
+description = "A file reader that tracks read percentage and manages read state"
 license = "MIT"
-readme = "README.md"
 repository = "https://github.com/eredotpkfr/preader"
 homepage = "https://www.erdoganyoksul.com/preader/"
-documentation = "https://www.erdoganyoksul.com/preader/"
 keywords = ["file-reader", "resumable", "checksum", "progress", "iterator"]
 categories = ["filesystem"]
-rust-version = "1.97"
+rust-version = "1.98"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
@@ -18,28 +16,105 @@ name = "preader"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-anyhow = "1.0.104"
-chrono = { version = "0.4.45", features = ["serde"] }
-derive_more = { version = "2", default-features = false, features = ["deref", "deref_mut"] }
-dirs = "6.0.0"
+derive_more = { version = "2.1", default-features = false, features = ["from"] }
+dirs = "7.0.0"
+dunce = "1.0.5"
 hex = "0.4.3"
-pyo3 = { version = "0.29.2", features = ["abi3-py312", "chrono"] }
-regex = "1.13.1"
+pyo3 = { version = "0.30.1", features = ["abi3-py312", "time"], optional = true }
+regex = "1.13.2"
 serde = { version = "1.0.229", features = ["derive"] }
-serde_json = { version = "1.0.151", features = ["preserve_order"] }
-sha2 = "0.11.0"
-thiserror = "2.0.20"
-walkdir = "2.5.0"
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+thiserror = "2.0.21"
+time = { version = "0.3.55", features = ["serde"] }
+walkdir = "2.5.1"
+
+[features]
+default = []
+testing = []
+python = ["dep:pyo3", "dep:pyo3-build-config"]
+extension-module = ["python", "pyo3/extension-module"]
+experimental-inspect = ["python", "pyo3/experimental-inspect"]
 
 [build-dependencies]
-pyo3-build-config = "0.29.2"
+pyo3-build-config = { version = "0.30.1", optional = true }
 
 [dev-dependencies]
-rstest = "0.26"
-tempfile = "3"
+rstest = "0.29"
+pdf-writer = "0.15"
+proptest = { version = "1.12", default-features = false, features = ["std"] }
+rstest_reuse = "0.7"
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
+tempfile = "3.27"
+zip = { version = "9.8", default-features = false, features = ["deflate"] }
+pretty_assertions = "1.4"
+shake = "0.1.0"
+log = "0.4.35"
+env_logger = "0.11.12"
+indicatif = "0.18.6"
 
 [profile.release]
 opt-level = 3
 lto = "fat"
 codegen-units = 1
 strip = "symbols"
+
+[[example]]
+name = "quickstart"
+path = "examples/rust/quickstart.rs"
+doc-scrape-examples = true
+
+[[example]]
+name = "byte_iterator"
+path = "examples/rust/byte_iterator.rs"
+doc-scrape-examples = true
+
+[[example]]
+name = "chunk_iterator"
+path = "examples/rust/chunk_iterator.rs"
+doc-scrape-examples = true
+
+[[example]]
+name = "line_iterator"
+path = "examples/rust/line_iterator.rs"
+doc-scrape-examples = true
+
+[[example]]
+name = "segment_iterator"
+path = "examples/rust/segment_iterator.rs"
+doc-scrape-examples = true
+
+[[example]]
+name = "resume"
+path = "examples/rust/resume.rs"
+doc-scrape-examples = true
+
+[[example]]
+name = "autosave"
+path = "examples/rust/autosave.rs"
+doc-scrape-examples = true
+
+[[example]]
+name = "progress_bar"
+path = "examples/rust/progress_bar.rs"
+doc-scrape-examples = true
+
+[[example]]
+name = "window"
+path = "examples/rust/window.rs"
+doc-scrape-examples = true
+
+[[example]]
+name = "registry"
+path = "examples/rust/registry.rs"
+doc-scrape-examples = true
+
+[[example]]
+name = "resync"
+path = "examples/rust/resync.rs"
+doc-scrape-examples = true
+
+[[example]]
+name = "errors"
+path = "examples/rust/errors.rs"
+doc-scrape-examples = true

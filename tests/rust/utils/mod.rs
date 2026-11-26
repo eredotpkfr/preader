@@ -1,3 +1,4 @@
 mod file_test;
+mod hash_test;
 mod path_test;
-mod text_test;
+mod time_test;

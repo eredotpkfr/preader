@@ -1,0 +1,53 @@
+use rstest::rstest;
+
+use crate::common::{constants::TEST_ALPHABET, fixtures::sandbox, funcs::items, sandbox::Sandbox};
+
+#[rstest]
+#[case::kept(false, &[&TEST_ALPHABET[..10], &TEST_ALPHABET[10..20], &TEST_ALPHABET[20..]])]
+#[case::dropped(true, &[&TEST_ALPHABET[..10], &TEST_ALPHABET[10..20]])]
+fn drop_partial_decides_about_the_tail(
+    sandbox: Sandbox,
+    #[case] drop_partial: bool,
+    #[case] expected: &[&[u8]],
+) {
+    let path = sandbox.file(TEST_ALPHABET);
+    let read = items(
+        sandbox
+            .reader()
+            .chunks(&path)
+            .size(10)
+            .drop_partial(drop_partial)
+            .build()
+            .unwrap(),
+    );
+
+    assert_eq!(read, expected);
+}
+
+#[rstest]
+fn default_size_is_one_kibibyte(sandbox: Sandbox) {
+    let path = sandbox.file(&TEST_ALPHABET.repeat(100));
+    let read = items(sandbox.reader().chunks(&path).build().unwrap());
+
+    assert_eq!(read[0].len(), 1024);
+}
+
+#[rstest]
+fn last_size_wins(sandbox: Sandbox) {
+    let path = sandbox.file(TEST_ALPHABET);
+    let read = items(sandbox.reader().chunks(&path).size(2).size(1).build().unwrap());
+
+    assert_eq!(read[0].len(), 1);
+}
+
+#[rstest]
+#[case::single_byte(1, 26)]
+#[case::even_split(13, 2)]
+#[case::uneven_split(10, 3)]
+fn size_sets_the_item_length(sandbox: Sandbox, #[case] size: usize, #[case] expected: usize) {
+    let path = sandbox.file(TEST_ALPHABET);
+    let read = items(sandbox.reader().chunks(&path).size(size).build().unwrap());
+
+    assert_eq!(read.len(), expected);
+    assert_eq!(read[0].len(), size);
+}

@@ -1,0 +1,12 @@
+EMPTY = b""
+LINES = b"line-0\n\nline-1\nline-2\n"
+UNTERMINATED_LINES = b"line-0\n\nline-1\nline-2"
+CRLF_LINES = b"line-0\r\nline-1\r\n"
+BLANK_LINES = b"\n\n\n"
+SEGMENTS = b"seg-0,seg-1,,seg-2,"
+UNTERMINATED_SEGMENTS = b"seg-0,seg-1,,seg-2"
+BLANK_SEGMENTS = b",,,"
+WHOLE_SEGMENT = b"seg-0"
+MISALIGNED_SEGMENTS = b"\na\nb,c\nd,e"
+UTF8_SEGMENTS = "café,日本語,,🦀,鉄".encode()
+ALL_BYTES = bytes(range(256))
